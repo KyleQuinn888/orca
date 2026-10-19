@@ -19,7 +19,6 @@ export function createZcodeModelCatalogProbe(deps: {
     options?: { signal?: AbortSignal; workspacePath?: string }
   ): Promise<AgentModelCatalogSuccess> => {
     const launch = await deps.resolveLaunch()
-    console.info(`[zcode-probe] listing via ${launch.command}`)
     const connection = await openZcodeAppServerConnection({
       command: launch.command,
       args: ['app-server'],
@@ -43,10 +42,6 @@ export function createZcodeModelCatalogProbe(deps: {
         await connection.request('session/close', { sessionId }).catch(() => undefined)
       }
       const efforts = readZcodeSnapshotEfforts(snapshot)
-      const listing = snapshot.settings?.model as { available?: unknown[] } | undefined
-      console.info(
-        `[zcode-probe] snapshot keys=${Object.keys(snapshot.settings ?? {}).join(',')} availableCount=${Array.isArray(listing?.available) ? listing.available.length : 'not-array'}`
-      )
       const models: AgentSessionModelOption[] = readZcodeSnapshotModels(snapshot).map((model) => ({
         id: model.id,
         label: model.label,
@@ -56,13 +51,7 @@ export function createZcodeModelCatalogProbe(deps: {
           label: effort.label
         }))
       }))
-      console.info(`[zcode-probe] listed ${models.length} models`)
       return { models, origin: 'probe' }
-    } catch (error) {
-      console.info(
-        `[zcode-probe] failed: ${error instanceof Error ? error.message : String(error)}`
-      )
-      throw error
     } finally {
       await connection.close()
     }

@@ -136,9 +136,6 @@ export class ZcodeTimelineTranslator {
     const streaming = payload as unknown as ZcodeStreamingPayload
     const kind = asString(streaming.kind)
     const assistantMessageId = asString(streaming.assistantMessageId)
-    console.info(
-      `[zcode-adapter] streaming kind=${String(kind)} id=${String(assistantMessageId)} delta=${String(streaming.delta).slice(0, 30)}`
-    )
     if (kind !== null && STREAMING_TEXT_KINDS.has(kind) && assistantMessageId !== null) {
       if (turnId !== null && kind === 'text_delta') {
         this.lastStreamedByTurn.set(turnId, assistantMessageId)
@@ -228,9 +225,6 @@ export class ZcodeTimelineTranslator {
   ): ProviderTimelineEvent[] {
     const end = payload as unknown as ZcodeTurnEndPayload
     const events: ProviderTimelineEvent[] = []
-    console.info(
-      `[zcode-adapter] turn end state=${state} response=${String(end.response).slice(0, 40)} resultType=${String(end.resultType)}`
-    )
     const response = asString(end.response)
     const turnKey = turnId ?? ''
     // An open stream keeps its row unpublished and its turn looking busy: the

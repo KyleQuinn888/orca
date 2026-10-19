@@ -192,3 +192,31 @@ export function permissionForZcodeMode(mode: string): string | undefined {
   }
   return undefined
 }
+
+/** The snapshot's own slash-command surface, live-verified shape:
+ *  `{name, description?, inputHint?, source?}` per entry. */
+export function readZcodeSnapshotCommands(snapshot: {
+  slashCommands?: unknown
+}): { name: string; description?: string; argumentHint?: string }[] {
+  const commands: { name: string; description?: string; argumentHint?: string }[] = []
+  if (!Array.isArray(snapshot.slashCommands)) {
+    return commands
+  }
+  for (const entry of snapshot.slashCommands) {
+    if (typeof entry !== 'object' || entry === null) {
+      continue
+    }
+    const name = (entry as { name?: unknown }).name
+    if (typeof name !== 'string' || name.length === 0) {
+      continue
+    }
+    const description = (entry as { description?: unknown }).description
+    const hint = (entry as { inputHint?: unknown }).inputHint
+    commands.push({
+      name,
+      ...(typeof description === 'string' && description.length > 0 ? { description } : {}),
+      ...(typeof hint === 'string' && hint.length > 0 ? { argumentHint: hint } : {})
+    })
+  }
+  return commands
+}

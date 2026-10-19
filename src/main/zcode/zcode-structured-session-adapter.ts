@@ -6,7 +6,11 @@
 // follow-up commits of this branch.
 
 import type { AgentSessionProviderHandleLink } from '../../shared/agent-session-provider-handle'
-import type { AgentSessionOptionsResult } from '../../shared/agent-session-wire'
+import {
+  readZcodeCommands,
+  readZcodeLiveOptions,
+  readZcodeRestingOptions
+} from './zcode-structured-options'
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
 import {
   AgentSessionPreSpawnError,
@@ -31,7 +35,7 @@ import { cancelZcodeTurn, compactZcodeTurn, dispatchZcodeTurn } from './zcode-st
 import { ZcodeStructuredLane } from './zcode-structured-lane'
 import { supportsZcodeStructuredLocation } from './zcode-structured-location-support'
 import {
-  permissionForZcodeMode,
+  readZcodeSnapshotCommands,
   readZcodeSnapshotEfforts,
   readZcodeSnapshotEventSeq,
   readZcodeSnapshotModels,
@@ -62,6 +66,8 @@ type ZcodeSession = {
   reportedModels: { id: string; label: string }[]
   /** Each model's reasoning levels from the snapshot. */
   reportedEfforts: Map<string, { value: string; label: string }[]>
+  /** The provider's own slash-command surface from the snapshot. */
+  reportedCommands: { name: string; description?: string; argumentHint?: string }[]
   lane: ZcodeStructuredLane
 }
 
@@ -103,7 +109,6 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
   ): void {
     const session = this.sessions.get(sessionId)
     if (!session || session.connection !== connection) {
-      console.info(`[zcode-adapter] pre-acquire request ${request.method} answered -32601`)
       connection.respondWithError(request.id, -32601, `Method not found: ${request.method}`)
       return
     }
@@ -141,7 +146,6 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     // A re-acquire of the same chat must not keep the previous child's entry:
     // its stale connection would swallow server requests meant for the new one.
     this.sessions.delete(sessionId)
-    console.info(`[zcode-adapter] acquire: opening connection (resume=${launch.resumeSessionId})`)
     let expectedExit = false
     const connection = await openZcodeAppServerConnection(
       launch,
@@ -168,7 +172,6 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       this.deps.spawnImpl ?? spawnProcess
     )
     try {
-      console.info(`[zcode-adapter] acquire: connected pid=${connection.pid}, creating session`)
       const snapshot = (await zcodeSessionLifecycle(
         connection,
         launch,
@@ -178,6 +181,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
         session?: { sessionId?: string }
         settings?: Record<string, unknown>
         runtime?: Record<string, unknown>
+        slashCommands?: unknown
       }
       const providerSessionId = snapshot.session?.sessionId
       if (typeof providerSessionId !== 'string' || !providerSessionId.startsWith('sess_')) {
@@ -208,12 +212,10 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
         reportedOptions: readZcodeSnapshotOptions(snapshot),
         reportedModels: readZcodeSnapshotModels(snapshot),
         reportedEfforts: readZcodeSnapshotEfforts(snapshot),
+        reportedCommands: readZcodeSnapshotCommands(snapshot),
         lane
       }
       lane.seedSeq(readZcodeSnapshotEventSeq(snapshot))
-      console.info(
-        `[zcode-adapter] acquire: snapshot providerSession=${providerSessionId}, subscribing`
-      )
       await connection.request(
         'session/subscribe',
         {
@@ -222,7 +224,6 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
         },
         { timeoutMs: this.deps.requestTimeoutMs ?? 30_000 }
       )
-      console.info('[zcode-adapter] acquire: subscribed, publishing')
       this.sessions.set(sessionId, session)
       const link: AgentSessionProviderHandleLink = {
         // The store's link ids allow [A-Za-z0-9_-] only: no separators like ':'.
@@ -271,38 +272,16 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
   setOption = (input: StructuredAgentSessionSetOptionInput): Promise<void> =>
     setZcodeSessionOption(this.live(input.sessionId), input.key, input.value)
 
-  readOptions = async (input: { sessionId: string; fence: number }) => {
-    const session = this.live(input.sessionId)
-    const result: AgentSessionOptionsResult = {
-      current: {
-        ...session.reportedOptions,
-        ...(session.reportedOptions.mode !== undefined
-          ? { permissionMode: permissionForZcodeMode(session.reportedOptions.mode) }
-          : {})
-      },
-      // The snapshot names the running model but no listing; the current model
-      // rides along as its only option so the picker has something to show.
-      models: []
-    }
-    const model = session.reportedOptions.model
-    if (model !== undefined) {
-      result.models = [{ id: model, label: model, isDefault: true, efforts: [] }]
-    }
-    return result
-  }
+  readOptions = (input: { sessionId: string; fence: number }) =>
+    Promise.resolve(readZcodeLiveOptions(this.live(input.sessionId)))
 
   readAcquisitionOptions = (input: {
     sessionId: string
     fence: number
     priorOptions?: Readonly<Record<string, string>>
-  }) => {
-    const session = this.sessions.get(input.sessionId)
-    if (session) {
-      const options = { ...session.reportedOptions }
-      return Object.keys(options).length > 0 ? options : undefined
-    }
-    return input.priorOptions
-  }
+  }) => readZcodeRestingOptions(this.sessions.get(input.sessionId), input.priorOptions)
+
+  readCommands = (sessionId: string) => readZcodeCommands(this.sessions.get(sessionId))
 
   holdsLiveProviderProcess = (sessionId: string, acquisitionGeneration: string): boolean => {
     const session = this.sessions.get(sessionId)

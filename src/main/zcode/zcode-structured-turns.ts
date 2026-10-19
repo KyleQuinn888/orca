@@ -62,7 +62,6 @@ export async function dispatchZcodeTurn(
   // accepted dispatch with its identity settles the submission through the same
   // journal path codex's turn/start answer takes. Falls back to admitted.
   const armedTurnIdentity = session.lane.armedTurnIdentity()
-  console.info(`[zcode-dispatch] outcome=${armedTurnIdentity !== null ? 'accepted' : 'admitted'}`)
   if (armedTurnIdentity !== null) {
     return { state: 'accepted', providerIdentity: armedTurnIdentity }
   }
