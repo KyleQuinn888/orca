@@ -54,7 +54,9 @@ const AGENT_CHAT_PERMISSION_MODES_BY_AGENT = new Map<string, AgentChatPermission
   ['opencode', ACP_CHAT_PERMISSION_MODES],
   ['opencode2', ACP_CHAT_PERMISSION_MODES],
   ['omp', ACP_CHAT_PERMISSION_MODES],
-  ['antigravity', ANTIGRAVITY_CHAT_PERMISSION_MODES]
+  ['antigravity', ANTIGRAVITY_CHAT_PERMISSION_MODES],
+  // ZCode enforces its own modes over the protocol; Orca relays the choice.
+  ['zcode', ACP_CHAT_PERMISSION_MODES]
 ])
 
 /** The one table of which agents' chats offer which modes; null keeps following Agent Permissions. */

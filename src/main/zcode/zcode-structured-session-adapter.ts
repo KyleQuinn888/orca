@@ -31,6 +31,7 @@ import { cancelZcodeTurn, compactZcodeTurn, dispatchZcodeTurn } from './zcode-st
 import { ZcodeStructuredLane } from './zcode-structured-lane'
 import { supportsZcodeStructuredLocation } from './zcode-structured-location-support'
 import {
+  permissionForZcodeMode,
   readZcodeSnapshotEfforts,
   readZcodeSnapshotEventSeq,
   readZcodeSnapshotModels,
@@ -276,7 +277,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       current: {
         ...session.reportedOptions,
         ...(session.reportedOptions.mode !== undefined
-          ? { permissionMode: session.reportedOptions.mode }
+          ? { permissionMode: permissionForZcodeMode(session.reportedOptions.mode) }
           : {})
       },
       // The snapshot names the running model but no listing; the current model

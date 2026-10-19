@@ -13,7 +13,11 @@ import {
 } from '../acp/acp-structured-launch-resolution'
 import { CODEX_STRUCTURED_AGENT } from '../codex/codex-structured-agent-definition'
 import { ZCODE_STRUCTURED_AGENT } from '../zcode/zcode-structured-agent-definition'
-import { zcodeVersionSupported } from '../zcode/zcode-structured-launch-resolution'
+import {
+  resolveZcodeStructuredInvocation,
+  zcodeVersionSupported
+} from '../zcode/zcode-structured-launch-resolution'
+import { createZcodeModelCatalogProbe } from '../zcode/zcode-model-catalog-probe'
 import { CLAUDE_STRUCTURED_AGENT } from '../claude/claude-structured-agent-definition'
 import { CLAUDE_CLI_CONVERSATIONS } from '../claude/claude-cli-conversations'
 import { CODEX_CLI_CONVERSATIONS } from '../codex/codex-cli-conversations'
@@ -128,10 +132,26 @@ export const STRUCTURED_AGENT_RUNTIME_CATALOG: readonly StructuredAgentRuntimeCa
       // v1 adopts no CLI-recorded conversations; Session History rows still resolve by agent id.
       transcriptImport: null,
       sessionHistory: ZCODE_SESSION_HISTORY,
-      // v1 lists no models away from a session: the acquire snapshot owns what runs.
+      // A one-shot app-server probe lists the account's models; without a listing
+      // the picker's catalog gate also blocks the live options read.
       modelCatalog: () => ({
-        kind: 'unavailable',
-        reason: 'zcode reports its model on the session snapshot'
+        kind: 'probe',
+        probe: createZcodeModelCatalogProbe({
+          resolveLaunch: async () => {
+            const { command, environment } = await resolveZcodeStructuredInvocation({
+              resolveEnvironment: async () => process.env
+            })
+            const env: Record<string, string> = {}
+            for (const [key, value] of Object.entries(environment ?? {})) {
+              if (value !== undefined) {
+                env[key] = value
+              }
+            }
+            return { command, env }
+          }
+        }),
+        // The probe reads the running account's own listing, which names its default.
+        listingNamesConfiguredModel: true
       }),
       supportsLocation: (location) => isNativeLocalLocation(location),
       launchCheck: {

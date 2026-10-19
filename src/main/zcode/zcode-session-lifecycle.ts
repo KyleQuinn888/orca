@@ -146,12 +146,14 @@ export async function setZcodeSessionOption(
     model: () => 'session/setModel',
     effort: () => 'session/setThoughtLevel'
   }
+  // The picker speaks Orca permission modes (ask/full-access); the protocol speaks its own.
+  const mode = key === 'mode' ? (zcodeModeForPermission(value) ?? value) : value
   const params: Record<string, unknown> =
     key === 'mode'
-      ? { mode: value }
+      ? { mode }
       : key === 'model'
-        ? { model: { modelId: value } }
-        : { thoughtLevel: value }
+        ? { model: { modelId: mode } }
+        : { thoughtLevel: mode }
   const method = writes[key]?.(key, params)
   if (method === undefined) {
     throw new Error(`zcode app-server has no session option named ${key}`)
@@ -160,11 +162,33 @@ export async function setZcodeSessionOption(
     sessionId: session.providerSessionId,
     ...params
   })
-  session.reportedOptions = { ...session.reportedOptions, [key]: value }
+  session.reportedOptions = { ...session.reportedOptions, [key]: mode }
 }
 
 /** Where the snapshot's own event stream stands; subscribe replays after it. */
 export function readZcodeSnapshotEventSeq(snapshot: { runtime?: Record<string, unknown> }): number {
   const seq = snapshot.runtime?.eventSeq
   return typeof seq === 'number' && Number.isFinite(seq) && seq >= 0 ? seq : 0
+}
+
+/** Orca permission modes (ask/full-access) to zcode protocol modes. */
+export function zcodeModeForPermission(permission: string): string | undefined {
+  if (permission === 'full-access') {
+    return 'yolo'
+  }
+  if (permission === 'ask') {
+    return 'build'
+  }
+  return undefined
+}
+
+/** Zcode protocol modes to Orca permission modes; absent means no picker state. */
+export function permissionForZcodeMode(mode: string): string | undefined {
+  if (mode === 'yolo' || mode === 'guarded') {
+    return 'full-access'
+  }
+  if (mode === 'build' || mode === 'edit' || mode === 'plan') {
+    return 'ask'
+  }
+  return undefined
 }
