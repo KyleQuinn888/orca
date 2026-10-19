@@ -127,8 +127,12 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     const connection = await openZcodeAppServerConnection(
       launch,
       {
-        onNotification: (method, params) =>
-          this.sessions.get(sessionId)?.lane.notification(method, params),
+        onNotification: (method, params) => {
+          console.info(
+            `[zcode-adapter] notification method=${method} sessionKnown=${this.sessions.has(sessionId)}`
+          )
+          this.sessions.get(sessionId)?.lane.notification(method, params)
+        },
         onServerRequest: (request) => this.handleServerRequest(sessionId, request, connection),
         onExit: (error) => {
           const session = this.sessions.get(sessionId)
