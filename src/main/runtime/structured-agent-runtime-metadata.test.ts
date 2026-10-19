@@ -26,6 +26,7 @@ describe('structured agent metadata without adapter implementations', () => {
       'pi',
       'codex',
       'claude',
+      'zcode',
       'grok',
       'opencode',
       'opencode2',

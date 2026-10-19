@@ -10,6 +10,7 @@ import type { AgentSessionProviderHandleLink } from '../../shared/agent-session-
 import type { AgentSessionOptionsResult } from '../../shared/agent-session-wire'
 import {
   AgentSessionPreSpawnError,
+  AgentSessionPromptUnavailableError,
   type AgentSessionAcquisition,
   type StructuredAgentSessionLifecycleEvent,
   type AgentSessionDispatchOutcome,
@@ -25,6 +26,8 @@ import {
   type ZcodeAppServerConnection
 } from './zcode-app-server-connection'
 import { zcodeProviderHandle } from './zcode-structured-agent-definition'
+import { ZcodeStructuredLane } from './zcode-structured-lane'
+import { zcodeSessionLifecycle } from './zcode-session-lifecycle'
 import type { ZcodeStructuredLaunch } from './zcode-structured-launch-resolution'
 import type {
   ComposedStructuredLaunch,
@@ -44,11 +47,7 @@ type ZcodeSession = {
   ended: boolean
   /** Options the acquire snapshot reported, keyed as Orca reads them. */
   reportedOptions: Readonly<Record<string, string>>
-  /** Interaction requests held for the prompt bridge, by their server request id. */
-  pendingPrompts: Map<
-    string,
-    { kind: 'approval' | 'question'; requestId: number | string; params: unknown }
-  >
+  lane: ZcodeStructuredLane
 }
 
 export type ZcodeStructuredSessionAdapterDeps = {
@@ -65,12 +64,33 @@ export type ZcodeStructuredSessionAdapterDeps = {
 }
 
 const ZCODE_SUBSCRIBE_DELIVERY = 'desktop-continuous'
-const ZCODE_ACQUIRE_TIMEOUT_MS = 60_000
 
 export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdapter {
   private readonly sessions = new Map<string, ZcodeSession>()
 
   constructor(private readonly deps: ZcodeStructuredSessionAdapterDeps) {}
+
+  /** Server requests: interaction requests journal through the lane; everything
+   *  else declines with -32601, which the ZCode Protocol documents as the
+   *  client refusing (runtime preferences fall back to defaults). */
+  private handleServerRequest(
+    sessionId: string,
+    request: { id: number | string; method: string; params: unknown }
+  ): void {
+    const session = this.sessions.get(sessionId)
+    if (!session) {
+      return
+    }
+    if (request.method === 'interaction/requestPermission') {
+      session.lane.permissionRequest(session.connection, request.id, request.params)
+      return
+    }
+    if (request.method === 'interaction/requestUserInput') {
+      session.lane.userInputRequest(request.id, request.params)
+      return
+    }
+    session.connection.respondWithError(request.id, -32601, `Method not found: ${request.method}`)
+  }
 
   acquire = async (input: StructuredAgentSessionAcquireInput): Promise<AgentSessionAcquisition> => {
     const sessionId = input.identity.sessionId
@@ -96,13 +116,14 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     const connection = await openZcodeAppServerConnection(
       launch,
       {
-        onNotification: (method, params) => this.handleNotification(sessionId, method, params),
+        onNotification: (method, params) =>
+          this.sessions.get(sessionId)?.lane.notification(method, params),
         onServerRequest: (request) => this.handleServerRequest(sessionId, request),
         onExit: (error) => {
           const session = this.sessions.get(sessionId)
           if (session) {
             session.ended = true
-            session.pendingPrompts.clear()
+            session.lane.sessionEnded()
           }
           this.deps.onEvent?.({
             type: 'ended',
@@ -117,7 +138,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       this.deps.spawnImpl ?? spawnProcess
     )
     try {
-      const snapshot = (await this.sessionLifecycle(
+      const snapshot = (await zcodeSessionLifecycle(
         connection,
         launch,
         launch.resumeSessionId,
@@ -130,6 +151,12 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       if (typeof providerSessionId !== 'string' || !providerSessionId.startsWith('sess_')) {
         throw new Error('zcode app-server returned a snapshot without a session id')
       }
+      const lane = new ZcodeStructuredLane({
+        events: input.events,
+        sessionId,
+        generation: input.identity.sessionId,
+        providerSessionId
+      })
       const session: ZcodeSession = {
         sessionId,
         providerSessionId,
@@ -139,7 +166,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
         lastEventSeq: 0,
         ended: false,
         reportedOptions: {},
-        pendingPrompts: new Map()
+        lane
       }
       await connection.request(
         'session/subscribe',
@@ -168,74 +195,6 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     }
   }
 
-  /** create-or-resume plus the initial settings read, as one acquire step. */
-  private async sessionLifecycle(
-    connection: ZcodeAppServerConnection,
-    launch: ComposedStructuredLaunch<ZcodeStructuredLaunch>,
-    resumeSessionId: string | null,
-    options: Readonly<Record<string, string>> | undefined
-  ): Promise<unknown> {
-    const timeout = { timeoutMs: ZCODE_ACQUIRE_TIMEOUT_MS }
-    const workspace = {
-      workspacePath: launch.cwd,
-      workspaceKey: launch.cwd.replaceAll('\\', '/').split('/').pop() ?? launch.cwd
-    }
-    const mode = options?.mode ?? 'build'
-    if (resumeSessionId) {
-      return await connection.request(
-        'session/resume',
-        { sessionId: resumeSessionId, workspace },
-        timeout
-      )
-    }
-    return await connection.request('session/create', { workspace, mode }, timeout)
-  }
-
-  /** The transport's notifications; the journal translation lands with dispatch. */
-  private handleNotification(sessionId: string, method: string, params: unknown): void {
-    if (method !== 'session/event' && method !== 'state.updated') {
-      return
-    }
-    const session = this.sessions.get(sessionId)
-    const envelope = params as { seq?: number } | undefined
-    if (session && typeof envelope?.seq === 'number' && envelope.seq > session.lastEventSeq) {
-      session.lastEventSeq = envelope.seq
-    }
-    void sessionId
-  }
-
-  /** Server requests during a turn. Permission and user-input requests are HELD
-   *  for the prompt bridge — auto-answering them would silently allow or deny a
-   *  tool the person never saw; the server times an unanswered request out
-   *  (-32022) before that becomes a hang. Everything else has a safe decline:
-   *  ZCode documents -32601 as "client declines", falling back to defaults. */
-  private handleServerRequest(
-    sessionId: string,
-    request: { id: number | string; method: string; params: unknown }
-  ): void {
-    const session = this.sessions.get(sessionId)
-    if (!session) {
-      return
-    }
-    if (request.method === 'interaction/requestPermission') {
-      session.pendingPrompts.set(String(request.id), {
-        kind: 'approval',
-        requestId: request.id,
-        params: request.params
-      })
-      return
-    }
-    if (request.method === 'interaction/requestUserInput') {
-      session.pendingPrompts.set(String(request.id), {
-        kind: 'question',
-        requestId: request.id,
-        params: request.params
-      })
-      return
-    }
-    session.connection.respondWithError(request.id, -32601, `Method not found: ${request.method}`)
-  }
-
   async dispatch(input: {
     sessionId: string
     clientMessageId: string
@@ -255,8 +214,20 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       { sessionId: session.providerSessionId, content: text },
       { timeoutMs: this.deps.requestTimeoutMs ?? 30_000 }
     )
+    session.lane.inputAccepted(input.clientMessageId, input.requestedAt ?? Date.now())
     // The send's acceptance is the admission; turn.started settles the rest.
     return { state: 'admitted' }
+  }
+
+  /** The compaction receipt; the turn it opens ends from the event stream. */
+  compact: StructuredAgentSessionAdapter['compact'] = async (input) => {
+    const session = this.live(input.sessionId)
+    await session.connection.request(
+      'session/compact',
+      { sessionId: session.providerSessionId },
+      { timeoutMs: this.deps.requestTimeoutMs ?? 30_000 }
+    )
+    return { state: 'accepted', providerIdentity: null }
   }
 
   cancelTurn = async (input: { sessionId: string; turnId?: string; fence: number }) => {
@@ -265,13 +236,18 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     return { cancelled: true }
   }
 
-  answerPrompt = async (input: {
-    sessionId: string
-    itemId: string
-    kind: 'approval' | 'question'
-  }): Promise<void> => {
-    this.live(input.sessionId)
-    throw new Error('zcode prompt answering lands with the prompt bridge')
+  answerPrompt: StructuredAgentSessionAdapter['answerPrompt'] = async (input) => {
+    const session = this.live(input.sessionId)
+    // v1 bridge: the journal row id the host names is matched by elimination —
+    // exactly one held request answers, two at once is refused until the lane
+    // keeps the row ids the identity scheme mints.
+    const held = [...session.lane.pendingPrompts.values()]
+    if (held.length !== 1) {
+      throw new AgentSessionPromptUnavailableError(input.itemId)
+    }
+    await input.commit()
+    session.lane.pendingPrompts.clear()
+    session.connection.respond(held[0].requestId, session.lane.answerFor(held[0], input.response))
   }
 
   async setOption(input: StructuredAgentSessionSetOptionInput): Promise<void> {

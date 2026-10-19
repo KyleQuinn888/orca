@@ -65,14 +65,15 @@ const ACQUIRE_BASE = {
 function composedLaunch(
   overrides: Partial<ZcodeStructuredLaunch> = {}
 ): ComposedStructuredLaunch<ZcodeStructuredLaunch> {
+  const { envToDelete, ...rest } = overrides
   return {
     command: process.execPath,
     args: ['-e', FAKE_ZCODE_APP_SERVER],
     cwd: process.cwd(),
     env: {},
-    envToDelete: [],
+    envToDelete: [...(envToDelete ?? [])],
     resumeSessionId: null,
-    ...overrides
+    ...rest
   }
 }
 
