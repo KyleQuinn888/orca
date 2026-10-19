@@ -13,6 +13,8 @@ import { providerTimelineSink } from '../native-chat/agent-session-timeline/prov
 import { createProviderTimelineAssembler } from '../native-chat/agent-session-timeline/provider-timeline-assembler'
 import type { ProviderTimelineEvent } from '../native-chat/agent-session-timeline/provider-timeline-event'
 import { ZcodeTimelineTranslator } from './zcode-timeline-translator'
+
+const RETRY_MS = 250
 import type { ZcodeAppServerConnection } from './zcode-app-server-connection'
 
 /** What a held interaction request needs to be answered over the transport. */
@@ -33,6 +35,11 @@ export class ZcodeStructuredLane {
   readonly assembler: ReturnType<typeof createProviderTimelineAssembler>
   /** Interaction requests held for the person, by their server request id. */
   readonly pendingPrompts = new Map<string, ZcodeHeldPrompt>()
+  /** The highest session/event seq applied; a re-delivered envelope drops. */
+  private lastSeq = 0
+  /** Events the sink refused under backpressure, re-applied until admitted. */
+  private readonly retry: ProviderTimelineEvent[] = []
+  private retryTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(input: {
     events: StructuredAgentSessionEventSink | undefined
@@ -53,11 +60,17 @@ export class ZcodeStructuredLane {
 
   /** One transport notification; session/event envelopes carry the conversation. */
   notification(method: string, params: unknown): void {
+    if (method !== 'session/event' && method !== 'state.updated') {
+      return
+    }
     if (method === 'session/event') {
       const envelope = params as { type?: unknown; seq?: unknown }
-      console.info(
-        `[zcode-adapter] event type=${String(envelope.type)} seq=${String(envelope.seq)}`
-      )
+      if (typeof envelope.seq === 'number') {
+        if (envelope.seq <= this.lastSeq) {
+          return
+        }
+        this.lastSeq = envelope.seq
+      }
       this.applyAll(this.translator.translate(params as never))
       return
     }
@@ -142,12 +155,24 @@ export class ZcodeStructuredLane {
   private applyAll(events: readonly ProviderTimelineEvent[]): void {
     for (const event of events) {
       const applied = this.assembler.apply(event)
-      if (!('admission' in applied) || !applied.admission.accepted) {
-        console.info(
-          `[zcode-adapter] timeline refused: ${event.type} ${JSON.stringify(applied).slice(0, 160)}`
-        )
+      if ('admission' in applied && !applied.admission.accepted) {
+        // A refused turn.end would leave the row running and the clock ticking
+        // until the child dies: hold it and re-apply once the sink drains.
+        this.retry.push(event)
+        this.scheduleRetry()
       }
     }
+  }
+
+  private scheduleRetry(): void {
+    if (this.retryTimer !== null) {
+      return
+    }
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = null
+      const held = this.retry.splice(0)
+      this.applyAll(held)
+    }, RETRY_MS)
   }
 }
 

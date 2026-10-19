@@ -98,7 +98,9 @@ export class ZcodeTimelineTranslator {
     const type = asString(envelope.type)
     const payload = asRecord(envelope.payload) ?? {}
     const turnId = asString(envelope.turnId)
-    const at = asNumber(envelope.timestamp) ?? 0
+    // A missing timestamp must not zero the turn's anchor: readTiming rejects
+    // startedAt <= 0 as untimed and the settled duration never lands.
+    const at = asNumber(envelope.timestamp) ?? Date.now()
     const join = turnId === null ? {} : { join: { turn: turnId } }
     switch (type) {
       case null:

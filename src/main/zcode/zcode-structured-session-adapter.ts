@@ -5,7 +5,6 @@
 // The remaining turn surface (dispatch, cancel, prompts, options) lands in the
 // follow-up commits of this branch.
 
-import type { AgentJournalMessageItem } from '../../shared/agent-session-journal-types'
 import type { AgentSessionProviderHandleLink } from '../../shared/agent-session-provider-handle'
 import type { AgentSessionOptionsResult } from '../../shared/agent-session-wire'
 import {
@@ -27,6 +26,7 @@ import {
   type ZcodeAppServerConnection
 } from './zcode-app-server-connection'
 import { zcodeProviderHandle } from './zcode-structured-agent-definition'
+import { cancelZcodeTurn, compactZcodeTurn, dispatchZcodeTurn } from './zcode-structured-turns'
 import { ZcodeStructuredLane } from './zcode-structured-lane'
 import { supportsZcodeStructuredLocation } from './zcode-structured-location-support'
 import { zcodeSessionLifecycle } from './zcode-session-lifecycle'
@@ -127,12 +127,8 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     const connection = await openZcodeAppServerConnection(
       launch,
       {
-        onNotification: (method, params) => {
-          console.info(
-            `[zcode-adapter] notification method=${method} sessionKnown=${this.sessions.has(sessionId)}`
-          )
-          this.sessions.get(sessionId)?.lane.notification(method, params)
-        },
+        onNotification: (method, params) =>
+          this.sessions.get(sessionId)?.lane.notification(method, params),
         onServerRequest: (request) => this.handleServerRequest(sessionId, request, connection),
         onExit: (error) => {
           const session = this.sessions.get(sessionId)
@@ -218,47 +214,16 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     }
   }
 
-  async dispatch(input: {
-    sessionId: string
-    clientMessageId: string
-    body: AgentJournalMessageItem
-    fence: number
-    requestedAt?: number
-    beforeDispatch?: () => Promise<void>
-  }): Promise<AgentSessionDispatchOutcome> {
-    console.info(`[zcode-adapter] dispatch: sessionId=${input.sessionId}`)
-    const session = this.live(input.sessionId)
-    await input.beforeDispatch?.()
-    const text = input.body.blocks
-      .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
-      .map((block) => block.text)
-      .join('\n')
-    await session.connection.request(
-      'session/send',
-      { sessionId: session.providerSessionId, content: text },
-      { timeoutMs: this.deps.requestTimeoutMs ?? 30_000 }
-    )
-    session.lane.inputAccepted(input.clientMessageId, input.requestedAt ?? Date.now())
-    // The send's acceptance is the admission; turn.started settles the rest.
-    return { state: 'admitted' }
-  }
+  dispatch = (
+    input: Parameters<typeof dispatchZcodeTurn>[1]
+  ): Promise<AgentSessionDispatchOutcome> =>
+    dispatchZcodeTurn(this.live(input.sessionId), input, this.deps.requestTimeoutMs ?? 30_000)
 
-  /** The compaction receipt; the turn it opens ends from the event stream. */
-  compact: StructuredAgentSessionAdapter['compact'] = async (input) => {
-    const session = this.live(input.sessionId)
-    await session.connection.request(
-      'session/compact',
-      { sessionId: session.providerSessionId },
-      { timeoutMs: this.deps.requestTimeoutMs ?? 30_000 }
-    )
-    return { state: 'accepted', providerIdentity: null }
-  }
+  compact: StructuredAgentSessionAdapter['compact'] = async (input) =>
+    compactZcodeTurn(this.live(input.sessionId), this.deps.requestTimeoutMs ?? 30_000)
 
-  cancelTurn = async (input: { sessionId: string; turnId?: string; fence: number }) => {
-    const session = this.live(input.sessionId)
-    await session.connection.request('session/stop', { sessionId: session.providerSessionId })
-    return { cancelled: true }
-  }
+  cancelTurn = (input: { sessionId: string; turnId?: string; fence: number }) =>
+    cancelZcodeTurn(this.live(input.sessionId))
 
   answerPrompt: StructuredAgentSessionAdapter['answerPrompt'] = async (input) => {
     const session = this.live(input.sessionId)
@@ -305,7 +270,12 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     )
   }
 
-  holdsDispatch = (sessionId: string): boolean => this.sessions.has(sessionId)
+  /** True while the child runs a turn; a pinned-true answer would never let the
+   *  host's idle sweep stop an idle zcode child. */
+  holdsDispatch = (sessionId: string): boolean => {
+    const session = this.sessions.get(sessionId)
+    return session !== undefined && !session.ended && session.lane.assembler.openTurnId !== null
+  }
 
   closeSession = async (sessionId: string): Promise<boolean> => {
     const session = this.sessions.get(sessionId)
