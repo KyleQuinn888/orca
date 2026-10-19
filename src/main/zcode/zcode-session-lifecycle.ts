@@ -58,9 +58,9 @@ export function readZcodeSnapshotModels(snapshot: {
   settings?: Record<string, unknown>
 }): { id: string; label: string }[] {
   const settings = snapshot.settings
-  const available = readCurrent(settings?.model) as
-    | { available?: unknown; current?: { modelId?: string } }
-    | undefined
+  // `settings.model` IS the container ({available, current, lastUsed}); unwrapping
+  // `.current` here would lose the listing.
+  const available = settings?.model as { available?: unknown } | undefined
   const listing = Array.isArray(available?.available) ? (available?.available ?? []) : []
   const models: { id: string; label: string }[] = []
   for (const entry of listing) {
@@ -88,7 +88,7 @@ export function readZcodeSnapshotEfforts(snapshot: {
   settings?: Record<string, unknown>
 }): Map<string, { value: string; label: string }[]> {
   const settings = snapshot.settings
-  const available = readCurrent(settings?.model) as { available?: unknown } | undefined
+  const available = settings?.model as { available?: unknown } | undefined
   const efforts = new Map<string, { value: string; label: string }[]>()
   const listing = Array.isArray(available?.available) ? (available?.available ?? []) : []
   for (const entry of listing) {

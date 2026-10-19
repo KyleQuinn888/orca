@@ -43,6 +43,10 @@ export function createZcodeModelCatalogProbe(deps: {
         await connection.request('session/close', { sessionId }).catch(() => undefined)
       }
       const efforts = readZcodeSnapshotEfforts(snapshot)
+      const listing = snapshot.settings?.model as { available?: unknown[] } | undefined
+      console.info(
+        `[zcode-probe] snapshot keys=${Object.keys(snapshot.settings ?? {}).join(',')} availableCount=${Array.isArray(listing?.available) ? listing.available.length : 'not-array'}`
+      )
       const models: AgentSessionModelOption[] = readZcodeSnapshotModels(snapshot).map((model) => ({
         id: model.id,
         label: model.label,
