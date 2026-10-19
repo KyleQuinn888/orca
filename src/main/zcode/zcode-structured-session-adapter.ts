@@ -82,7 +82,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     connection: ZcodeAppServerConnection
   ): void {
     const session = this.sessions.get(sessionId)
-    if (!session) {
+    if (!session || session.connection !== connection) {
       console.info(`[zcode-adapter] pre-acquire request ${request.method} answered -32601`)
       connection.respondWithError(request.id, -32601, `Method not found: ${request.method}`)
       return
@@ -118,6 +118,9 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       'zcode-app-server',
       this.deps.readProcessStartTime
     )
+    // A re-acquire of the same chat must not keep the previous child's entry:
+    // its stale connection would swallow server requests meant for the new one.
+    this.sessions.delete(sessionId)
     console.info(`[zcode-adapter] acquire: opening connection (resume=${launch.resumeSessionId})`)
     let expectedExit = false
     const connection = await openZcodeAppServerConnection(
