@@ -1309,6 +1309,7 @@
           "worktree"
         ],
         "terminalRowFields": [
+          "customTitle",
           "id",
           "incarnationId",
           "isActive",
