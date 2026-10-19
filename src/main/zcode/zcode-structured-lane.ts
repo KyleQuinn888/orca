@@ -49,6 +49,15 @@ export class ZcodeStructuredLane {
   readonly pendingPrompts = new Map<string, ZcodeHeldPrompt>()
   /** The highest session/event seq applied; a re-delivered envelope drops. */
   private lastSeq = 0
+
+  /** The resume snapshot's own event position: subscribe replays everything
+   *  after it, and the replayed turn.started of the live turn re-opens it,
+   *  superseding the running row into a revision conflict. */
+  seedSeq(seq: number): void {
+    if (seq > this.lastSeq) {
+      this.lastSeq = seq
+    }
+  }
   /** Events the sink refused under backpressure, re-applied until admitted. */
   private readonly retry: ProviderTimelineEvent[] = []
   private retryTimer: ReturnType<typeof setTimeout> | null = null

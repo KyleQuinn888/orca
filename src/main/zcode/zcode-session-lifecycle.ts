@@ -120,3 +120,9 @@ export async function setZcodeSessionOption(
   })
   session.reportedOptions = { ...session.reportedOptions, [key]: value }
 }
+
+/** Where the snapshot's own event stream stands; subscribe replays after it. */
+export function readZcodeSnapshotEventSeq(snapshot: { runtime?: Record<string, unknown> }): number {
+  const seq = snapshot.runtime?.eventSeq
+  return typeof seq === 'number' && Number.isFinite(seq) && seq >= 0 ? seq : 0
+}

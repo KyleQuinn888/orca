@@ -31,6 +31,7 @@ import { cancelZcodeTurn, compactZcodeTurn, dispatchZcodeTurn } from './zcode-st
 import { ZcodeStructuredLane } from './zcode-structured-lane'
 import { supportsZcodeStructuredLocation } from './zcode-structured-location-support'
 import {
+  readZcodeSnapshotEventSeq,
   readZcodeSnapshotModels,
   readZcodeSnapshotOptions,
   setZcodeSessionOption,
@@ -204,6 +205,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
         reportedModels: readZcodeSnapshotModels(snapshot),
         lane
       }
+      lane.seedSeq(readZcodeSnapshotEventSeq(snapshot))
       console.info(
         `[zcode-adapter] acquire: snapshot providerSession=${providerSessionId}, subscribing`
       )
