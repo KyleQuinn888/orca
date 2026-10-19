@@ -54,6 +54,10 @@ export class ZcodeStructuredLane {
   /** One transport notification; session/event envelopes carry the conversation. */
   notification(method: string, params: unknown): void {
     if (method === 'session/event') {
+      const envelope = params as { type?: unknown; seq?: unknown }
+      console.info(
+        `[zcode-adapter] event type=${String(envelope.type)} seq=${String(envelope.seq)}`
+      )
       this.applyAll(this.translator.translate(params as never))
       return
     }
@@ -137,7 +141,12 @@ export class ZcodeStructuredLane {
 
   private applyAll(events: readonly ProviderTimelineEvent[]): void {
     for (const event of events) {
-      this.assembler.apply(event)
+      const applied = this.assembler.apply(event)
+      if (!('admission' in applied) || !applied.admission.accepted) {
+        console.info(
+          `[zcode-adapter] timeline refused: ${event.type} ${JSON.stringify(applied).slice(0, 160)}`
+        )
+      }
     }
   }
 }
