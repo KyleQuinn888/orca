@@ -119,7 +119,17 @@ describe('Zcode behind the real structured-session host', () => {
       await vi.waitFor(
         async () => {
           const messages = await rig.messages()
+          // The reply is its own row, and the reasoning row survived as its own.
           expect(messages.join('\n')).toContain('hello back')
+          expect(messages.join('\n')).toContain('thinking hard')
+          // The turn settles with the provider's verdict: the working clock stops.
+          const turns = (
+            await rig.host.history({ sessionId: SESSION, direction: 'tail' })
+          ).page.items.filter((row) => row.body.kind === 'turn')
+          expect(turns.length).toBeGreaterThan(0)
+          const turn = turns.at(-1)?.body as { state: string; outcome?: string } | undefined
+          expect(turn?.state).toBe('completed')
+          expect(turn?.outcome).toBe('success')
         },
         { timeout: 10_000 }
       )
