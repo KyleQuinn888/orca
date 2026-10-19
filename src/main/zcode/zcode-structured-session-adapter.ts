@@ -196,7 +196,8 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       console.info('[zcode-adapter] acquire: subscribed, publishing')
       this.sessions.set(sessionId, session)
       const link: AgentSessionProviderHandleLink = {
-        linkId: `${providerSessionId}:${input.fence}`,
+        // The store's link ids allow [A-Za-z0-9_-] only: no separators like ':'.
+        linkId: randomUUID(),
         handle: zcodeProviderHandle(providerSessionId),
         origin: launch.resumeSessionId ? 'resumed' : 'created',
         mintedAtFence: input.fence,
