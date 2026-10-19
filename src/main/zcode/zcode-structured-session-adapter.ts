@@ -83,9 +83,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
   ): void {
     const session = this.sessions.get(sessionId)
     if (!session) {
-      // Pre-acquire requests (runtime preferences during session/create) must be
-      // answered, not dropped: ZCode fails its own request after 15s and the
-      // create with it.
+      console.info(`[zcode-adapter] pre-acquire request ${request.method} answered -32601`)
       connection.respondWithError(request.id, -32601, `Method not found: ${request.method}`)
       return
     }
@@ -120,6 +118,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       'zcode-app-server',
       this.deps.readProcessStartTime
     )
+    console.info(`[zcode-adapter] acquire: opening connection (resume=${launch.resumeSessionId})`)
     let expectedExit = false
     const connection = await openZcodeAppServerConnection(
       launch,
@@ -146,6 +145,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       this.deps.spawnImpl ?? spawnProcess
     )
     try {
+      console.info(`[zcode-adapter] acquire: connected pid=${connection.pid}, creating session`)
       const snapshot = (await zcodeSessionLifecycle(
         connection,
         launch,
@@ -176,6 +176,9 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
         reportedOptions: {},
         lane
       }
+      console.info(
+        `[zcode-adapter] acquire: snapshot providerSession=${providerSessionId}, subscribing`
+      )
       await connection.request(
         'session/subscribe',
         {
@@ -184,6 +187,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
         },
         { timeoutMs: this.deps.requestTimeoutMs ?? 30_000 }
       )
+      console.info('[zcode-adapter] acquire: subscribed, publishing')
       this.sessions.set(sessionId, session)
       const link: AgentSessionProviderHandleLink = {
         linkId: `${providerSessionId}:${input.fence}`,
@@ -211,6 +215,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     requestedAt?: number
     beforeDispatch?: () => Promise<void>
   }): Promise<AgentSessionDispatchOutcome> {
+    console.info(`[zcode-adapter] dispatch: sessionId=${input.sessionId}`)
     const session = this.live(input.sessionId)
     await input.beforeDispatch?.()
     const text = input.body.blocks
