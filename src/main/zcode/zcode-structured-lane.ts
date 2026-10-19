@@ -85,6 +85,8 @@ export class ZcodeStructuredLane {
       providerSessionId: string
     }
   ) {
+    this.sessionId = input.sessionId
+    this.namespace = input.providerSessionId
     this.identity = createLegacyProviderTimelineIdentityScheme({
       agent: 'zcode',
       sessionId: input.sessionId
