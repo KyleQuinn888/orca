@@ -8,7 +8,7 @@
 import { agentSessionProviderHandleChainHead } from '../../shared/agent-session-provider-handle'
 import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
 import type { resolveCliCommand } from '../../shared/node-cli-command-resolution'
-import { isStableCliVersionOnLine, probeAgentCliVersion } from '../agent-cli-version-probe'
+import { probeAgentCliVersion } from '../agent-cli-version-probe'
 import {
   resolveAgainAfterRefreshOnMissingProgram,
   resolveStructuredAgentCommand
@@ -76,17 +76,32 @@ async function readZcodeStructuredInvocation(
   return { command, environment }
 }
 
-// `zcode --version` prints the runtime version (0.16.9 at the protocol's
-// session/subscribe + desktop-continuous delivery), not the npm package's.
-const ZCODE_RPC_RELEASE_LINES = [{ major: 0, floor: '0.16.9' }] as const
+// `zcode --version` prints `zcode-app-cli 3.15.3-36` (the npm package's version,
+// build-suffixed) before its runtime line, and the probe reads the first semver.
+// ZCode's `-NN` is a build number, not a prerelease, so the shared stable-line
+// gate would refuse every release; the floor is the oldest package that speaks
+// session/subscribe with desktop-continuous delivery.
+const ZCODE_MIN_APP_CLI_VERSION = { major: 3, minor: 14, patch: 5 } as const
+
+function zcodeVersionReached(version: string): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version)
+  if (!match) {
+    return false
+  }
+  const [major, minor, patch] = [Number(match[1]), Number(match[2]), Number(match[3])]
+  const floor = ZCODE_MIN_APP_CLI_VERSION
+  return (
+    major > floor.major ||
+    (major === floor.major &&
+      (minor > floor.minor || (minor === floor.minor && patch >= floor.patch)))
+  )
+}
 
 export function zcodeVersionSupported(
   launch: { command: string; cwd: string; env: Record<string, string> },
   probe: typeof probeAgentCliVersion = probeAgentCliVersion
 ): Promise<boolean> {
-  return probe({ program: launch.command, cwd: launch.cwd, env: launch.env }, (version) =>
-    ZCODE_RPC_RELEASE_LINES.some((line) => isStableCliVersionOnLine(version, line))
-  )
+  return probe({ program: launch.command, cwd: launch.cwd, env: launch.env }, zcodeVersionReached)
 }
 
 /** ZCode's part of a launch: its binary and the account home; the workspace
