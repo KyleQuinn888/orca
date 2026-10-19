@@ -30,7 +30,11 @@ import { zcodeProviderHandle } from './zcode-structured-agent-definition'
 import { cancelZcodeTurn, compactZcodeTurn, dispatchZcodeTurn } from './zcode-structured-turns'
 import { ZcodeStructuredLane } from './zcode-structured-lane'
 import { supportsZcodeStructuredLocation } from './zcode-structured-location-support'
-import { zcodeSessionLifecycle } from './zcode-session-lifecycle'
+import {
+  readZcodeSnapshotOptions,
+  setZcodeSessionOption,
+  zcodeSessionLifecycle
+} from './zcode-session-lifecycle'
 import type { ZcodeStructuredLaunch } from './zcode-structured-launch-resolution'
 import type {
   ComposedStructuredLaunch,
@@ -49,7 +53,7 @@ type ZcodeSession = {
   lastEventSeq: number
   ended: boolean
   /** Options the acquire snapshot reported, keyed as Orca reads them. */
-  reportedOptions: Readonly<Record<string, string>>
+  reportedOptions: Record<string, string>
   lane: ZcodeStructuredLane
 }
 
@@ -165,6 +169,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       )) as {
         session?: { sessionId?: string }
         settings?: Record<string, unknown>
+        runtime?: Record<string, unknown>
       }
       const providerSessionId = snapshot.session?.sessionId
       if (typeof providerSessionId !== 'string' || !providerSessionId.startsWith('sess_')) {
@@ -192,7 +197,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
         fence: input.fence,
         lastEventSeq: 0,
         ended: false,
-        reportedOptions: {},
+        reportedOptions: readZcodeSnapshotOptions(snapshot),
         lane
       }
       console.info(
@@ -252,26 +257,35 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     session.connection.respond(held[0].requestId, session.lane.answerFor(held[0], input.response))
   }
 
-  async setOption(input: StructuredAgentSessionSetOptionInput): Promise<void> {
-    const session = this.live(input.sessionId)
-    if (input.key === 'mode') {
-      await session.connection.request('session/setMode', {
-        sessionId: session.providerSessionId,
-        mode: input.value
-      })
-      return
-    }
-    throw new Error(`zcode app-server has no session option named ${input.key}`)
-  }
+  setOption = (input: StructuredAgentSessionSetOptionInput): Promise<void> =>
+    setZcodeSessionOption(this.live(input.sessionId), input.key, input.value)
 
   readOptions = async (input: { sessionId: string; fence: number }) => {
     const session = this.live(input.sessionId)
     const result: AgentSessionOptionsResult = {
       current: { ...session.reportedOptions },
-      // The zcode snapshot names no model listing yet; the catalog probe owns discovery.
+      // The snapshot names the running model but no listing; the current model
+      // rides along as its only option so the picker has something to show.
       models: []
     }
+    const model = session.reportedOptions.model
+    if (model !== undefined) {
+      result.models = [{ id: model, label: model, isDefault: true, efforts: [] }]
+    }
     return result
+  }
+
+  readAcquisitionOptions = (input: {
+    sessionId: string
+    fence: number
+    priorOptions?: Readonly<Record<string, string>>
+  }) => {
+    const session = this.sessions.get(input.sessionId)
+    if (session) {
+      const options = { ...session.reportedOptions }
+      return Object.keys(options).length > 0 ? options : undefined
+    }
+    return input.priorOptions
   }
 
   holdsLiveProviderProcess = (sessionId: string, acquisitionGeneration: string): boolean => {
