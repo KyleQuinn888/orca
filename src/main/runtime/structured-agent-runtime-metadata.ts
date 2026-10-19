@@ -1,4 +1,9 @@
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { agentSessionAccountHome } from '../../shared/agent-session-account-home'
+import { isNativeLocalLocation } from '../../shared/execution-host'
+import { resolveStructuredAgentCommand } from '../native-chat/structured-agent-command-resolution'
+import { ZCODE_SESSION_HISTORY } from '../native-chat/zcode-cli-conversations'
 import { applyStructuredCodexWorkspaceTrust } from '../agent-workspace-trust-spawn'
 import { ACP_LAUNCH_SPECS, type AcpLaunchSpec } from '../acp/acp-launch-specs'
 import { acpStructuredAgentDefinition } from '../acp/acp-structured-agent-definitions'
@@ -7,6 +12,8 @@ import {
   resolveAcpLaunchCommand
 } from '../acp/acp-structured-launch-resolution'
 import { CODEX_STRUCTURED_AGENT } from '../codex/codex-structured-agent-definition'
+import { ZCODE_STRUCTURED_AGENT } from '../zcode/zcode-structured-agent-definition'
+import { zcodeVersionSupported } from '../zcode/zcode-structured-launch-resolution'
 import { CLAUDE_STRUCTURED_AGENT } from '../claude/claude-structured-agent-definition'
 import { CLAUDE_CLI_CONVERSATIONS } from '../claude/claude-cli-conversations'
 import { CODEX_CLI_CONVERSATIONS } from '../codex/codex-cli-conversations'
@@ -30,7 +37,7 @@ import type {
 } from './structured-agent-runtime-registration-types'
 
 export type StructuredAgentRuntimeCatalogEntry =
-  | { kind: 'pi' | 'codex' | 'claude'; metadata: StructuredAgentRuntimeMetadata }
+  | { kind: 'pi' | 'codex' | 'claude' | 'zcode'; metadata: StructuredAgentRuntimeMetadata }
   | { kind: 'acp'; metadata: StructuredAgentRuntimeMetadata; spec: AcpLaunchSpec }
 
 function acpMetadata(spec: AcpLaunchSpec): StructuredAgentRuntimeMetadata {
@@ -111,6 +118,35 @@ export const STRUCTURED_AGENT_RUNTIME_CATALOG: readonly StructuredAgentRuntimeCa
             wslDistro: location?.wslDistro ?? null,
             getClaudeConfigDirectory: services.getClaudeConfigDirectory
           })
+        )
+    }
+  },
+  {
+    kind: 'zcode',
+    metadata: {
+      definition: ZCODE_STRUCTURED_AGENT,
+      // v1 adopts no CLI-recorded conversations; Session History rows still resolve by agent id.
+      transcriptImport: null,
+      sessionHistory: ZCODE_SESSION_HISTORY,
+      // v1 lists no models away from a session: the acquire snapshot owns what runs.
+      modelCatalog: () => ({
+        kind: 'unavailable',
+        reason: 'zcode reports its model on the session snapshot'
+      }),
+      supportsLocation: (location) => isNativeLocalLocation(location),
+      launchCheck: {
+        resolveLaunch: (shellEnv, commandSettings) => ({
+          command: resolveStructuredAgentCommand('zcode', commandSettings, {
+            pathEnv: shellEnv.PATH ?? shellEnv.Path ?? null
+          }),
+          env: shellEnv
+        }),
+        supportsVersion: zcodeVersionSupported
+      },
+      resolveAccountHome: async ({ launchEnv }) =>
+        agentSessionAccountHome(
+          ZCODE_STRUCTURED_AGENT,
+          launchEnv.ZCODE_STORAGE_DIR?.trim() || join(homedir(), '.zcode')
         )
     }
   },

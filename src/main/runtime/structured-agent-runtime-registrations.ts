@@ -3,8 +3,11 @@ import { codexStructuredLaunchPart } from '../codex/codex-structured-launch-reso
 import { claudeStructuredLaunchPart } from '../claude/claude-structured-launch-resolution'
 import { createClaudeCommandCatalogProbe } from '../claude/claude-command-catalog-probe'
 import { CodexStructuredSessionAdapter } from '../codex/codex-structured-session-adapter'
+import { ZcodeStructuredSessionAdapter } from '../zcode/zcode-structured-session-adapter'
+import { zcodeStructuredLaunchPart } from '../zcode/zcode-structured-launch-resolution'
 import { CODEX_STRUCTURED_AGENT } from '../codex/codex-structured-agent-definition'
 import { CLAUDE_STRUCTURED_AGENT } from '../claude/claude-structured-agent-definition'
+import { ZCODE_STRUCTURED_AGENT } from '../zcode/zcode-structured-agent-definition'
 import { agentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import { agentSessionAttachmentStoreRoot } from '../native-chat/agent-session-attachments/agent-session-attachment-references'
 import { replayJournal } from '../native-chat/agent-session-journal/journal-open'
@@ -112,6 +115,20 @@ function createClaudeAdapter(
   })
 }
 
+function createZcodeAdapter(context: StructuredAgentAdapterContext): StructuredAgentRuntimeAdapter {
+  const { deps } = context
+  return new ZcodeStructuredSessionAdapter({
+    resolveLaunch: composeStructuredLaunch(
+      ZCODE_STRUCTURED_AGENT,
+      structuredAgentLaunchSources(context),
+      zcodeStructuredLaunchPart({
+        resolveLaunchArgs: () => deps.resolveLaunchArgs('zcode')
+      })
+    ),
+    ...(deps.readProcessStartTime ? { readProcessStartTime: deps.readProcessStartTime } : {})
+  })
+}
+
 function createAcpAdapter(
   spec: AcpLaunchSpec
 ): StructuredAgentRuntimeRegistration['createAdapter'] {
@@ -159,6 +176,8 @@ function registrationWithAdapter(
       return Object.assign(entry.metadata, { createAdapter: createCodexAdapter })
     case 'claude':
       return Object.assign(entry.metadata, { createAdapter: createClaudeAdapter })
+    case 'zcode':
+      return Object.assign(entry.metadata, { createAdapter: createZcodeAdapter })
     case 'acp':
       return Object.assign(entry.metadata, { createAdapter: createAcpAdapter(entry.spec) })
   }

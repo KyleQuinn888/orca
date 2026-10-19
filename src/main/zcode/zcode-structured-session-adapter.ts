@@ -57,8 +57,6 @@ export type ZcodeStructuredSessionAdapterDeps = {
   spawnImpl?: PipedProcessSpawner
   readProcessStartTime?: (pid: number) => Promise<number | null>
   requestTimeoutMs?: number
-  logger?: { warn: (message: string) => void }
-  onEvent?: (event: { type: string; sessionId: string }) => void
 }
 
 const ZCODE_SUBSCRIBE_DELIVERY = 'desktop-continuous'
@@ -187,7 +185,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     if (session && typeof envelope?.seq === 'number' && envelope.seq > session.lastEventSeq) {
       session.lastEventSeq = envelope.seq
     }
-    this.deps.onEvent?.({ type: method, sessionId })
+    void sessionId
   }
 
   /** Server requests the acquire relies on defaults for; permission prompts land with dispatch. */
@@ -289,6 +287,10 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
   disposeSession = async (sessionId: string): Promise<boolean> => this.closeSession(sessionId)
   acknowledgeSessionRelease = (sessionId: string): void => {
     this.sessions.delete(sessionId)
+  }
+
+  closeAll = async (): Promise<void> => {
+    await Promise.all([...this.sessions.keys()].map((sessionId) => this.closeSession(sessionId)))
   }
 
   private live(sessionId: string): ZcodeSession {
