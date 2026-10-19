@@ -19850,6 +19850,8 @@
       "chatTitle": "Discussions Antigravity",
       "chatDescription": "Les discussions utilisent leur propre connexion Antigravity, distincte de votre compte agy ci-dessus. Connectez-vous une seule fois sur cet appareil.",
       "chatSignIn": "Se connecter",
+      "chatSignInInfoLabel": "À propos de la connexion Antigravity",
+      "chatSignInInfo": "Les chats Antigravity ont leur propre connexion. Se connecter à la CLI agy ne vous connecte pas ici.",
       "chatChangeAccount": "Changer de compte",
       "chatRetry": "Réessayer la connexion",
       "chatCancel": "Annuler",

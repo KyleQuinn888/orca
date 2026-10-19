@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, useSyncExternalStore } from 'react'
-import { Check, Copy } from 'lucide-react'
+import { Check, Copy, Info } from 'lucide-react'
 import { translate } from '@/i18n/i18n'
 import { useClipboardTextCopyFeedback } from '@/hooks/use-clipboard-text-copy-feedback'
 import {
@@ -202,6 +202,26 @@ export function PastedAddressForm(props: {
   )
 }
 
+/** Beside the sign-in button: users expect their agy CLI login to carry over to chats. */
+export function AntigravityChatSignInInfo(): React.JSX.Element {
+  const label = translate('accounts.antigravity.chatSignInInfoLabel', 'About Antigravity sign-in')
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button size="icon-xs" variant="ghost" aria-label={label}>
+          <Info className="text-muted-foreground" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={4} className="max-w-xs">
+        {translate(
+          'accounts.antigravity.chatSignInInfo',
+          "Antigravity chats have their own sign-in. Signing in to the agy CLI doesn't sign you in here."
+        )}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
 /** One host's chat sign-in as both Settings layouts show it. `signedOut` is the line for a host
  *  that answered it is not signed in. */
 export function useAntigravityChatSignInControls(props: {
@@ -319,15 +339,18 @@ export function AntigravityChatSignInRow(props: {
             </Button>
           </div>
         ) : (
-          <Button
-            size="xs"
-            // Signed in, the button only switches account, so it steps back from the primary.
-            variant={signIn.action === 'changeAccount' ? 'outline' : 'default'}
-            disabled={signIn.signInDisabled}
-            onClick={signIn.start}
-          >
-            {signIn.actionLabel}
-          </Button>
+          <div className="flex shrink-0 items-center gap-1">
+            <AntigravityChatSignInInfo />
+            <Button
+              size="xs"
+              // Signed in, the button only switches account, so it steps back from the primary.
+              variant={signIn.action === 'changeAccount' ? 'outline' : 'default'}
+              disabled={signIn.signInDisabled}
+              onClick={signIn.start}
+            >
+              {signIn.actionLabel}
+            </Button>
+          </div>
         )}
       </div>
       {url && <PastedAddressForm pending={signIn.pending} send={signIn.send} />}

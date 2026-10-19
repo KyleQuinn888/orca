@@ -19850,6 +19850,8 @@
       "chatTitle": "Antigravity 聊天",
       "chatDescription": "聊天使用自己的 Antigravity 登录，与上方的 agy 帐户分开。在此设备上登录一次即可。",
       "chatSignIn": "登录",
+      "chatSignInInfoLabel": "关于 Antigravity 登录",
+      "chatSignInInfo": "Antigravity 聊天有单独的登录。登录 agy CLI 不会在这里登录。",
       "chatChangeAccount": "更换帐户",
       "chatRetry": "重试登录",
       "chatCancel": "取消",

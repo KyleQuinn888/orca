@@ -5,6 +5,7 @@ import type { RuntimeClientTarget } from '../../../../shared/runtime-client-targ
 import { LoadingSpinner } from '../LoadingSpinner'
 import { Button } from '../ui/button'
 import {
+  AntigravityChatSignInInfo,
   PastedAddressForm,
   antigravityChatSignInBlocked,
   useAntigravityChatSignInControls
@@ -76,15 +77,18 @@ export function AntigravityProviderSignInArea(props: {
             </Button>
           </>
         ) : (
-          <Button
-            size="xs"
-            // Signed in, the button only switches account, so it steps back from the primary.
-            variant={signIn.action === 'changeAccount' ? 'ghost' : 'default'}
-            disabled={signIn.signInDisabled}
-            onClick={signIn.start}
-          >
-            {signIn.actionLabel}
-          </Button>
+          <>
+            <AntigravityChatSignInInfo />
+            <Button
+              size="xs"
+              // Signed in, the button only switches account, so it steps back from the primary.
+              variant={signIn.action === 'changeAccount' ? 'ghost' : 'default'}
+              disabled={signIn.signInDisabled}
+              onClick={signIn.start}
+            >
+              {signIn.actionLabel}
+            </Button>
+          </>
         )}
       </div>
       {url && <PastedAddressForm pending={signIn.pending} send={signIn.send} />}

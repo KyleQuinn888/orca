@@ -20063,6 +20063,8 @@
       "chatTitle": "Antigravity chats",
       "chatDescription": "Chats use their own Antigravity sign-in, separate from your agy account above. Sign in once on this device.",
       "chatSignIn": "Sign in",
+      "chatSignInInfoLabel": "About Antigravity sign-in",
+      "chatSignInInfo": "Antigravity chats have their own sign-in. Signing in to the agy CLI doesn't sign you in here.",
       "chatChangeAccount": "Change account",
       "chatRetry": "Retry sign-in",
       "chatCancel": "Cancel",

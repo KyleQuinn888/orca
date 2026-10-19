@@ -19693,6 +19693,8 @@
       "chatTitle": "Chats de Antigravity",
       "chatDescription": "Los chats usan su propio inicio de sesión de Antigravity, independiente de tu cuenta de agy de arriba. Inicia sesión una vez en este dispositivo.",
       "chatSignIn": "Iniciar sesión",
+      "chatSignInInfoLabel": "Acerca del inicio de sesión de Antigravity",
+      "chatSignInInfo": "Los chats de Antigravity tienen su propio inicio de sesión. Iniciar sesión en la CLI de agy no inicia sesión aquí.",
       "chatChangeAccount": "Cambiar de cuenta",
       "chatRetry": "Reintentar inicio de sesión",
       "chatCancel": "Cancelar",

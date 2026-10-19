@@ -19850,6 +19850,8 @@
       "chatTitle": "Antigravity チャット",
       "chatDescription": "チャットは上の agy アカウントとは別の、独自の Antigravity サインインを使用します。このデバイスで一度サインインしてください。",
       "chatSignIn": "サインイン",
+      "chatSignInInfoLabel": "Antigravity のサインインについて",
+      "chatSignInInfo": "Antigravity チャットには専用のサインインがあります。agy CLI にサインインしても、ここではサインインされません。",
       "chatChangeAccount": "アカウントを変更",
       "chatRetry": "サインインを再試行",
       "chatCancel": "キャンセル",
