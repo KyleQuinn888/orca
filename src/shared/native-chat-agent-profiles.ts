@@ -45,6 +45,10 @@ const NATIVE_CHAT_AGENT_PROFILES: Partial<Record<AgentType, NativeChatAgentProfi
     skillSourceOwner: 'claude',
     expandsSlashCommandsFromText: true
   },
+  zcode: {
+    skillPrefix: '$',
+    skillSourceOwner: 'zcode'
+  },
   openclaude: {
     skillPrefix: '/',
     skillSourceOwner: 'claude',
