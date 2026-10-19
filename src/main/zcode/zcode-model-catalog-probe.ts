@@ -19,6 +19,7 @@ export function createZcodeModelCatalogProbe(deps: {
     options?: { signal?: AbortSignal; workspacePath?: string }
   ): Promise<AgentModelCatalogSuccess> => {
     const launch = await deps.resolveLaunch()
+    console.info(`[zcode-probe] listing via ${launch.command}`)
     const connection = await openZcodeAppServerConnection({
       command: launch.command,
       args: ['app-server'],
@@ -51,7 +52,13 @@ export function createZcodeModelCatalogProbe(deps: {
           label: effort.label
         }))
       }))
+      console.info(`[zcode-probe] listed ${models.length} models`)
       return { models, origin: 'probe' }
+    } catch (error) {
+      console.info(
+        `[zcode-probe] failed: ${error instanceof Error ? error.message : String(error)}`
+      )
+      throw error
     } finally {
       await connection.close()
     }
