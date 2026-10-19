@@ -20,6 +20,7 @@ import {
 } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { providerSpawnedProcessIdentity } from '../provider-process/provider-spawned-process-identity'
 import type { PipedProcessSpawner } from '@orca/process-host/process-spec'
+import { randomUUID } from 'node:crypto'
 import { spawnProcess } from '@orca/process-host'
 import {
   openZcodeAppServerConnection,
@@ -172,7 +173,9 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
         sessionId,
         providerSessionId,
         connection,
-        acquisitionGeneration: input.identity.sessionId,
+        // Host-local identity for THIS child: unique per acquisition, even when
+        // the durable fence (the session id) is reused by a re-acquire.
+        acquisitionGeneration: randomUUID(),
         fence: input.fence,
         lastEventSeq: 0,
         ended: false,
