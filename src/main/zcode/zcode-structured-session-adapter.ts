@@ -27,6 +27,7 @@ import {
 } from './zcode-app-server-connection'
 import { zcodeProviderHandle } from './zcode-structured-agent-definition'
 import { ZcodeStructuredLane } from './zcode-structured-lane'
+import { supportsZcodeStructuredLocation } from './zcode-structured-location-support'
 import { zcodeSessionLifecycle } from './zcode-session-lifecycle'
 import type { ZcodeStructuredLaunch } from './zcode-structured-launch-resolution'
 import type {
@@ -66,6 +67,8 @@ export type ZcodeStructuredSessionAdapterDeps = {
 const ZCODE_SUBSCRIBE_DELIVERY = 'desktop-continuous'
 
 export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdapter {
+  supportsLocation = supportsZcodeStructuredLocation
+
   private readonly sessions = new Map<string, ZcodeSession>()
 
   constructor(private readonly deps: ZcodeStructuredSessionAdapterDeps) {}
