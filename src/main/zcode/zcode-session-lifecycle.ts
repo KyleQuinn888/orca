@@ -61,22 +61,64 @@ export function readZcodeSnapshotModels(snapshot: {
   const available = readCurrent(settings?.model) as
     | { available?: unknown; current?: { modelId?: string } }
     | undefined
-  const current = available?.current?.modelId
   const listing = Array.isArray(available?.available) ? (available?.available ?? []) : []
   const models: { id: string; label: string }[] = []
   for (const entry of listing) {
     if (typeof entry !== 'object' || entry === null) {
       continue
     }
-    const id = (entry as { modelId?: unknown }).modelId ?? (entry as { id?: unknown }).id
+    // Entries carry `{ref: {providerId, modelId}, label}` — the id lives in ref.
+    const ref = (entry as { ref?: { modelId?: unknown } }).ref
+    const id =
+      (ref && typeof ref.modelId === 'string' && ref.modelId.length > 0
+        ? ref.modelId
+        : undefined) ??
+      (entry as { modelId?: unknown }).modelId ??
+      (entry as { id?: unknown }).id
     const label = (entry as { label?: unknown }).label ?? (entry as { name?: unknown }).name
     if (typeof id === 'string' && id.length > 0) {
       models.push({ id, label: typeof label === 'string' && label.length > 0 ? label : id })
-    } else if (typeof label === 'string' && label.length > 0 && label === current) {
-      models.push({ id: label, label })
     }
   }
   return models
+}
+
+/** Each model's reasoning levels as Orca effort choices. */
+export function readZcodeSnapshotEfforts(snapshot: {
+  settings?: Record<string, unknown>
+}): Map<string, { value: string; label: string }[]> {
+  const settings = snapshot.settings
+  const available = readCurrent(settings?.model) as { available?: unknown } | undefined
+  const efforts = new Map<string, { value: string; label: string }[]>()
+  const listing = Array.isArray(available?.available) ? (available?.available ?? []) : []
+  for (const entry of listing) {
+    if (typeof entry !== 'object' || entry === null) {
+      continue
+    }
+    const modelId = (entry as { ref?: { modelId?: unknown } }).ref?.modelId
+    if (typeof modelId !== 'string' || modelId.length === 0) {
+      continue
+    }
+    const levels = (entry as { reasoning?: { levels?: unknown } }).reasoning?.levels
+    if (!Array.isArray(levels)) {
+      continue
+    }
+    const choices: { value: string; label: string }[] = []
+    for (const level of levels) {
+      if (typeof level !== 'object' || level === null) {
+        continue
+      }
+      const value = (level as { value?: unknown }).value
+      const label = (level as { label?: unknown }).label
+      if (typeof value === 'string' && value.length > 0) {
+        choices.push({ value, label: typeof label === 'string' ? label : value })
+      }
+    }
+    if (choices.length > 0) {
+      efforts.set(modelId, choices)
+    }
+  }
+  return efforts
 }
 
 function readCurrent(value: unknown): unknown {

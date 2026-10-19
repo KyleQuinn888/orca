@@ -31,6 +31,7 @@ import { cancelZcodeTurn, compactZcodeTurn, dispatchZcodeTurn } from './zcode-st
 import { ZcodeStructuredLane } from './zcode-structured-lane'
 import { supportsZcodeStructuredLocation } from './zcode-structured-location-support'
 import {
+  readZcodeSnapshotEfforts,
   readZcodeSnapshotEventSeq,
   readZcodeSnapshotModels,
   readZcodeSnapshotOptions,
@@ -58,6 +59,8 @@ type ZcodeSession = {
   reportedOptions: Record<string, string>
   /** The provider's own model listing from the snapshot. */
   reportedModels: { id: string; label: string }[]
+  /** Each model's reasoning levels from the snapshot. */
+  reportedEfforts: Map<string, { value: string; label: string }[]>
   lane: ZcodeStructuredLane
 }
 
@@ -203,6 +206,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
         ended: false,
         reportedOptions: readZcodeSnapshotOptions(snapshot),
         reportedModels: readZcodeSnapshotModels(snapshot),
+        reportedEfforts: readZcodeSnapshotEfforts(snapshot),
         lane
       }
       lane.seedSeq(readZcodeSnapshotEventSeq(snapshot))
@@ -269,7 +273,12 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
   readOptions = async (input: { sessionId: string; fence: number }) => {
     const session = this.live(input.sessionId)
     const result: AgentSessionOptionsResult = {
-      current: { ...session.reportedOptions },
+      current: {
+        ...session.reportedOptions,
+        ...(session.reportedOptions.mode !== undefined
+          ? { permissionMode: session.reportedOptions.mode }
+          : {})
+      },
       // The snapshot names the running model but no listing; the current model
       // rides along as its only option so the picker has something to show.
       models: []
