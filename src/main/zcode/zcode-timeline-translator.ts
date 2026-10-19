@@ -87,6 +87,8 @@ export class ZcodeTimelineTranslator {
   /** The last assistantMessageId that streamed text, per turn: turn.completed's
    *  response closes it, or an anonymous stream when nothing streamed. */
   private readonly lastStreamedByTurn = new Map<string, string>()
+  /** The reasoning row still streaming into a turn: its close keeps what streamed. */
+  private readonly reasoningStreamByTurn = new Map<string, string>()
 
   constructor(
     private readonly onDrop?: (reason: string, envelope: ZcodeSessionEventEnvelope) => void
@@ -229,6 +231,13 @@ export class ZcodeTimelineTranslator {
     )
     const response = asString(end.response)
     const turnKey = turnId ?? ''
+    // An open stream keeps its row unpublished and its turn looking busy: the
+    // reasoning stream closes with what it streamed, whatever ended the turn.
+    const reasoningStream = this.reasoningStreamByTurn.get(turnKey)
+    if (reasoningStream !== undefined) {
+      this.reasoningStreamByTurn.delete(turnKey)
+      events.push({ type: 'text.close', item: { id: reasoningStream }, ...join })
+    }
     if (state === 'completed' && response !== null) {
       const streamed = this.lastStreamedByTurn.get(turnKey)
       if (streamed !== undefined) {
