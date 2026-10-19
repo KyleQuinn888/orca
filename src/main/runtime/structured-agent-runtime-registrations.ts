@@ -119,7 +119,7 @@ function createClaudeAdapter(
 }
 
 function createZcodeAdapter(context: StructuredAgentAdapterContext): StructuredAgentRuntimeAdapter {
-  const { deps } = context
+  const { deps, followUps, host } = context
   return new ZcodeStructuredSessionAdapter({
     resolveLaunch: withSupportedZcodeCli(
       composeStructuredLaunch(
@@ -131,6 +131,12 @@ function createZcodeAdapter(context: StructuredAgentAdapterContext): StructuredA
       )
     ),
     ...(deps.readProcessStartTime ? { readProcessStartTime: deps.readProcessStartTime } : {}),
+    onDispatchSettledLate: (settlement) => {
+      console.info(`[zcode-factory] settle session=${settlement.sessionId} host=${host() !== null}`)
+      followUps.onDispatchSettledLate(settlement)
+    },
+    // What the live child holds changed with no row: every reader re-derives current work.
+    onWorkChanged: (sessionId) => queueMicrotask(() => host()?.publishWorkChanged(sessionId)),
     onEvent: (event) => {
       // Every exit, expected or not: the host ends that child's record.
       if (event.type === 'ended') {
