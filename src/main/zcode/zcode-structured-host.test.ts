@@ -46,9 +46,12 @@ const FAKE_ZCODE_APP_SERVER = String.raw`
     }
     if (message.method === 'session/send') {
       const s = message.params.sessionId
-      send({ method: 'session/event', params: { type: 'turn.started', turnId: 'turn_1', sessionId: s, seq: 1, timestamp: Date.now(), payload: { input: message.params.content } } })
-      send({ method: 'session/event', params: { type: 'model.streaming', turnId: 'turn_1', sessionId: s, seq: 2, timestamp: Date.now(), payload: { assistantMessageId: 'msg_reply', delta: 'hello back', kind: 'text_delta' } } })
-      send({ method: 'session/event', params: { type: 'turn.completed', turnId: 'turn_1', sessionId: s, seq: 3, timestamp: Date.now(), payload: { response: 'hello back', resultType: 'success', duration: 5 } } })
+      const ts = Date.now()
+      send({ method: 'session/event', params: { type: 'turn.started', turnId: 'turn_1', sessionId: s, seq: 1, timestamp: ts, payload: { input: message.params.content } } })
+      // The real protocol streams reasoning and reply under ONE message id.
+      send({ method: 'session/event', params: { type: 'model.streaming', turnId: 'turn_1', sessionId: s, seq: 2, timestamp: ts, payload: { assistantMessageId: 'msg_reply', delta: 'thinking hard', kind: 'reasoning_delta' } } })
+      send({ method: 'session/event', params: { type: 'model.streaming', turnId: 'turn_1', sessionId: s, seq: 3, timestamp: ts, payload: { assistantMessageId: 'msg_reply', delta: 'hello back', kind: 'text_delta' } } })
+      send({ method: 'session/event', params: { type: 'turn.completed', turnId: 'turn_1', sessionId: s, seq: 4, timestamp: ts, payload: { response: 'hello back', resultType: 'success', duration: 5 } } })
       return send({ id: message.id, result: { accepted: true } })
     }
     if (message.method === 'session/stop') {

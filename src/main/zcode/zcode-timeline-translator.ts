@@ -139,11 +139,17 @@ export class ZcodeTimelineTranslator {
       if (turnId !== null && kind === 'text_delta') {
         this.lastStreamedByTurn.set(turnId, assistantMessageId)
       }
+      // Reasoning and reply stream under ONE provider message id; the timeline
+      // keys rows by item id, so the reasoning channel takes its own derived id
+      // or the two merge into one thinking block that never reads as the reply.
+      const channel = kind === 'text_delta' ? 'assistant' : 'reasoning'
+      const itemId =
+        channel === 'assistant' ? assistantMessageId : `${assistantMessageId}-reasoning`
       return [
         {
           type: 'text.delta',
-          item: { id: assistantMessageId },
-          channel: kind === 'text_delta' ? 'assistant' : 'reasoning',
+          item: { id: itemId },
+          channel,
           text: asString(streaming.delta) ?? '',
           ...join
         }
