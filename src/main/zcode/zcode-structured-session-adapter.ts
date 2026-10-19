@@ -78,10 +78,15 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
    *  client refusing (runtime preferences fall back to defaults). */
   private handleServerRequest(
     sessionId: string,
-    request: { id: number | string; method: string; params: unknown }
+    request: { id: number | string; method: string; params: unknown },
+    connection: ZcodeAppServerConnection
   ): void {
     const session = this.sessions.get(sessionId)
     if (!session) {
+      // Pre-acquire requests (runtime preferences during session/create) must be
+      // answered, not dropped: ZCode fails its own request after 15s and the
+      // create with it.
+      connection.respondWithError(request.id, -32601, `Method not found: ${request.method}`)
       return
     }
     if (request.method === 'interaction/requestPermission') {
@@ -121,7 +126,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       {
         onNotification: (method, params) =>
           this.sessions.get(sessionId)?.lane.notification(method, params),
-        onServerRequest: (request) => this.handleServerRequest(sessionId, request),
+        onServerRequest: (request) => this.handleServerRequest(sessionId, request, connection),
         onExit: (error) => {
           const session = this.sessions.get(sessionId)
           if (session) {
