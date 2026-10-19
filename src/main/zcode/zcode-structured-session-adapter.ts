@@ -31,6 +31,7 @@ import { cancelZcodeTurn, compactZcodeTurn, dispatchZcodeTurn } from './zcode-st
 import { ZcodeStructuredLane } from './zcode-structured-lane'
 import { supportsZcodeStructuredLocation } from './zcode-structured-location-support'
 import {
+  readZcodeSnapshotModels,
   readZcodeSnapshotOptions,
   setZcodeSessionOption,
   zcodeSessionLifecycle
@@ -54,6 +55,8 @@ type ZcodeSession = {
   ended: boolean
   /** Options the acquire snapshot reported, keyed as Orca reads them. */
   reportedOptions: Record<string, string>
+  /** The provider's own model listing from the snapshot. */
+  reportedModels: { id: string; label: string }[]
   lane: ZcodeStructuredLane
 }
 
@@ -198,6 +201,7 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
         lastEventSeq: 0,
         ended: false,
         reportedOptions: readZcodeSnapshotOptions(snapshot),
+        reportedModels: readZcodeSnapshotModels(snapshot),
         lane
       }
       console.info(

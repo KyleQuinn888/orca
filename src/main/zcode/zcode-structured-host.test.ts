@@ -159,6 +159,15 @@ describe('Zcode behind the real structured-session host', () => {
           const turn = turns.at(-1)?.body as { state: string; outcome?: string } | undefined
           expect(turn?.state).toBe('completed')
           expect(turn?.outcome).toBe('success')
+          // The working clock stops: no running turn, no owed send, status idle.
+          await vi.waitFor(
+            () => {
+              const summary = rig.host.readStatusSummary(SESSION)
+              console.info('[zcode-status]', JSON.stringify(summary).slice(0, 200))
+              expect(summary?.status).not.toBe('working')
+            },
+            { timeout: 10_000 }
+          )
         },
         { timeout: 10_000 }
       )

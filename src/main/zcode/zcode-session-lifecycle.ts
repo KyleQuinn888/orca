@@ -30,33 +30,63 @@ export async function zcodeSessionLifecycle(
   return await connection.request('session/create', { workspace, mode }, timeout)
 }
 
-/** What the acquire snapshot says the session runs with, keyed as Orca reads options. */
+/** What the acquire snapshot says the session runs with, keyed as Orca reads options.
+ *  Live-verified paths: `settings.mode.current`, `settings.model.current.modelId`,
+ *  `settings.thoughtLevel.current`, `settings.permission.mode`. */
 export function readZcodeSnapshotOptions(snapshot: {
   settings?: Record<string, unknown>
-  runtime?: Record<string, unknown>
 }): Readonly<Record<string, string>> {
   const options: Record<string, string> = {}
-  const mode = snapshot.settings?.mode ?? snapshot.runtime?.mode
-  if (typeof mode === 'string' && mode.length > 0) {
+  const settings = snapshot.settings
+  const mode = readCurrent(settings?.mode) ?? readCurrent(settings?.permission)
+  if (typeof mode === 'string') {
     options.mode = mode
   }
-  const runtime = snapshot.runtime
-  const model =
-    typeof runtime === 'object' && runtime !== null
-      ? (runtime.modelId ?? (runtime.model as { modelId?: string } | undefined)?.modelId)
-      : undefined
-  if (typeof model === 'string' && model.length > 0) {
-    options.model = model
+  const model = readCurrent(settings?.model) as { modelId?: string } | undefined
+  if (typeof model?.modelId === 'string' && model.modelId.length > 0) {
+    options.model = model.modelId
   }
-  const effort =
-    typeof runtime === 'object' && runtime !== null
-      ? (runtime.reasoningLevel ??
-        (runtime.options as { reasoningLevel?: string } | undefined)?.reasoningLevel)
-      : undefined
-  if (typeof effort === 'string' && effort.length > 0) {
+  const effort = readCurrent(settings?.thoughtLevel)
+  if (typeof effort === 'string') {
     options.effort = effort
   }
   return options
+}
+
+/** The provider's model listing as Orca picker options, `{modelId, label}` each. */
+export function readZcodeSnapshotModels(snapshot: {
+  settings?: Record<string, unknown>
+}): { id: string; label: string }[] {
+  const settings = snapshot.settings
+  const available = readCurrent(settings?.model) as
+    | { available?: unknown; current?: { modelId?: string } }
+    | undefined
+  const current = available?.current?.modelId
+  const listing = Array.isArray(available?.available) ? (available?.available ?? []) : []
+  const models: { id: string; label: string }[] = []
+  for (const entry of listing) {
+    if (typeof entry !== 'object' || entry === null) {
+      continue
+    }
+    const id = (entry as { modelId?: unknown }).modelId ?? (entry as { id?: unknown }).id
+    const label = (entry as { label?: unknown }).label ?? (entry as { name?: unknown }).name
+    if (typeof id === 'string' && id.length > 0) {
+      models.push({ id, label: typeof label === 'string' && label.length > 0 ? label : id })
+    } else if (typeof label === 'string' && label.length > 0 && label === current) {
+      models.push({ id: label, label })
+    }
+  }
+  return models
+}
+
+function readCurrent(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return value
+  }
+  if (typeof value === 'object' && value !== null && 'current' in value) {
+    return (value as { current: unknown }).current
+  }
+  return undefined
 }
 
 /** One option write over the protocol, mirrored into the session's reported options. */
