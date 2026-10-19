@@ -13,7 +13,11 @@ import {
   resolveAgainAfterRefreshOnMissingProgram,
   resolveStructuredAgentCommand
 } from '../native-chat/structured-agent-command-resolution'
-import type { StructuredAgentLaunchPartResolver } from '../runtime/structured-agent-launch-composition'
+import type {
+  StructuredAgentLaunchPartResolver,
+  StructuredAgentLaunchResolver
+} from '../runtime/structured-agent-launch-composition'
+import type { ProviderProcessLaunch } from '../provider-process/provider-process-launch'
 import type { ZcodeAppServerLaunch } from './zcode-app-server-connection'
 
 export type ZcodeStructuredLaunch = ZcodeAppServerLaunch & {
@@ -128,4 +132,17 @@ function compactEnv(env: NodeJS.ProcessEnv | undefined): Record<string, string> 
     }
   }
   return compacted
+}
+
+/** Check every acquired child against the same launch the app-server will use. */
+export function withSupportedZcodeCli<L extends ProviderProcessLaunch>(
+  resolveLaunch: StructuredAgentLaunchResolver<L>
+): StructuredAgentLaunchResolver<L> {
+  return async (request) => {
+    const launch = await resolveLaunch(request)
+    if (!(await zcodeVersionSupported({ ...launch, env: launch.env }))) {
+      throw new Error('zcode CLI 0.16.9+ with app-server support is required')
+    }
+    return launch
+  }
 }

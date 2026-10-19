@@ -46,6 +46,10 @@ export function isZcodeAppServerRequestError(error: unknown): error is ZcodeAppS
   return error instanceof Error && error.name === 'ZcodeAppServerRequestError'
 }
 
+export function isZcodeAppServerUnsupportedError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'ZcodeAppServerUnsupportedError'
+}
+
 export type ZcodeAppServerRpc = {
   /** `timeoutMs` bounds one call, so a caller can drop it and go on. */
   request: (

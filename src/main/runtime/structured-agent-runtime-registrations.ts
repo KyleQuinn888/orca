@@ -4,7 +4,10 @@ import { claudeStructuredLaunchPart } from '../claude/claude-structured-launch-r
 import { createClaudeCommandCatalogProbe } from '../claude/claude-command-catalog-probe'
 import { CodexStructuredSessionAdapter } from '../codex/codex-structured-session-adapter'
 import { ZcodeStructuredSessionAdapter } from '../zcode/zcode-structured-session-adapter'
-import { zcodeStructuredLaunchPart } from '../zcode/zcode-structured-launch-resolution'
+import {
+  withSupportedZcodeCli,
+  zcodeStructuredLaunchPart
+} from '../zcode/zcode-structured-launch-resolution'
 import { CODEX_STRUCTURED_AGENT } from '../codex/codex-structured-agent-definition'
 import { CLAUDE_STRUCTURED_AGENT } from '../claude/claude-structured-agent-definition'
 import { ZCODE_STRUCTURED_AGENT } from '../zcode/zcode-structured-agent-definition'
@@ -118,14 +121,22 @@ function createClaudeAdapter(
 function createZcodeAdapter(context: StructuredAgentAdapterContext): StructuredAgentRuntimeAdapter {
   const { deps } = context
   return new ZcodeStructuredSessionAdapter({
-    resolveLaunch: composeStructuredLaunch(
-      ZCODE_STRUCTURED_AGENT,
-      structuredAgentLaunchSources(context),
-      zcodeStructuredLaunchPart({
-        resolveLaunchArgs: () => deps.resolveLaunchArgs('zcode')
-      })
+    resolveLaunch: withSupportedZcodeCli(
+      composeStructuredLaunch(
+        ZCODE_STRUCTURED_AGENT,
+        structuredAgentLaunchSources(context),
+        zcodeStructuredLaunchPart({
+          resolveLaunchArgs: () => deps.resolveLaunchArgs('zcode')
+        })
+      )
     ),
-    ...(deps.readProcessStartTime ? { readProcessStartTime: deps.readProcessStartTime } : {})
+    ...(deps.readProcessStartTime ? { readProcessStartTime: deps.readProcessStartTime } : {}),
+    onEvent: (event) => {
+      // Every exit, expected or not: the host ends that child's record.
+      if (event.type === 'ended') {
+        context.deliverLifecycle(event)
+      }
+    }
   })
 }
 

@@ -11,6 +11,7 @@ import type { AgentSessionOptionsResult } from '../../shared/agent-session-wire'
 import {
   AgentSessionPreSpawnError,
   type AgentSessionAcquisition,
+  type StructuredAgentSessionLifecycleEvent,
   type AgentSessionDispatchOutcome,
   type StructuredAgentSessionAdapter,
   type StructuredAgentSessionAcquireInput,
@@ -24,10 +25,7 @@ import {
   type ZcodeAppServerConnection
 } from './zcode-app-server-connection'
 import { zcodeProviderHandle } from './zcode-structured-agent-definition'
-import {
-  zcodeVersionSupported,
-  type ZcodeStructuredLaunch
-} from './zcode-structured-launch-resolution'
+import type { ZcodeStructuredLaunch } from './zcode-structured-launch-resolution'
 import type {
   ComposedStructuredLaunch,
   StructuredLaunchRequest
@@ -46,6 +44,11 @@ type ZcodeSession = {
   ended: boolean
   /** Options the acquire snapshot reported, keyed as Orca reads them. */
   reportedOptions: Readonly<Record<string, string>>
+  /** Interaction requests held for the prompt bridge, by their server request id. */
+  pendingPrompts: Map<
+    string,
+    { kind: 'approval' | 'question'; requestId: number | string; params: unknown }
+  >
 }
 
 export type ZcodeStructuredSessionAdapterDeps = {
@@ -57,6 +60,8 @@ export type ZcodeStructuredSessionAdapterDeps = {
   spawnImpl?: PipedProcessSpawner
   readProcessStartTime?: (pid: number) => Promise<number | null>
   requestTimeoutMs?: number
+  /** Lifecycle events for the host ('ended' when the child dies). */
+  onEvent?: (event: StructuredAgentSessionLifecycleEvent) => void
 }
 
 const ZCODE_SUBSCRIBE_DELIVERY = 'desktop-continuous'
@@ -78,12 +83,6 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       .catch((error: unknown) => {
         throw new AgentSessionPreSpawnError(error)
       })
-    if (!(await zcodeVersionSupported(launch))) {
-      throw new AgentSessionPreSpawnError(
-        new Error('zcode CLI 0.16.9+ with app-server support is required'),
-        { reason: 'runtimeNotInstalled' }
-      )
-    }
     const identity = providerSpawnedProcessIdentity(
       {
         identity: input.identity,
@@ -93,11 +92,27 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       'zcode-app-server',
       this.deps.readProcessStartTime
     )
+    let expectedExit = false
     const connection = await openZcodeAppServerConnection(
       launch,
       {
         onNotification: (method, params) => this.handleNotification(sessionId, method, params),
-        onServerRequest: (request) => this.handleServerRequest(sessionId, request)
+        onServerRequest: (request) => this.handleServerRequest(sessionId, request),
+        onExit: (error) => {
+          const session = this.sessions.get(sessionId)
+          if (session) {
+            session.ended = true
+            session.pendingPrompts.clear()
+          }
+          this.deps.onEvent?.({
+            type: 'ended',
+            sessionId,
+            reason: error.message,
+            cause: expectedExit ? 'requested-close' : 'unexpected-exit',
+            fence: session?.fence ?? 0,
+            acquisitionGeneration: session?.acquisitionGeneration ?? sessionId
+          })
+        }
       },
       this.deps.spawnImpl ?? spawnProcess
     )
@@ -123,7 +138,8 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
         fence: input.fence,
         lastEventSeq: 0,
         ended: false,
-        reportedOptions: {}
+        reportedOptions: {},
+        pendingPrompts: new Map()
       }
       await connection.request(
         'session/subscribe',
@@ -188,15 +204,33 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     void sessionId
   }
 
-  /** Server requests the acquire relies on defaults for; permission prompts land with dispatch. */
+  /** Server requests during a turn. Permission and user-input requests are HELD
+   *  for the prompt bridge — auto-answering them would silently allow or deny a
+   *  tool the person never saw; the server times an unanswered request out
+   *  (-32022) before that becomes a hang. Everything else has a safe decline:
+   *  ZCode documents -32601 as "client declines", falling back to defaults. */
   private handleServerRequest(
     sessionId: string,
     request: { id: number | string; method: string; params: unknown }
   ): void {
     const session = this.sessions.get(sessionId)
-    // requestRuntimePreferences and MCP auth already fell back through the
-    // dispatcher's -32601 default; nothing else asks before a turn runs.
     if (!session) {
+      return
+    }
+    if (request.method === 'interaction/requestPermission') {
+      session.pendingPrompts.set(String(request.id), {
+        kind: 'approval',
+        requestId: request.id,
+        params: request.params
+      })
+      return
+    }
+    if (request.method === 'interaction/requestUserInput') {
+      session.pendingPrompts.set(String(request.id), {
+        kind: 'question',
+        requestId: request.id,
+        params: request.params
+      })
       return
     }
     session.connection.respondWithError(request.id, -32601, `Method not found: ${request.method}`)
@@ -280,7 +314,8 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     }
     this.sessions.delete(sessionId)
     session.ended = true
-    return await session.connection.close()
+    const closed = await session.connection.close()
+    return closed
   }
 
   forceCloseSession = async (sessionId: string): Promise<boolean> => this.closeSession(sessionId)
