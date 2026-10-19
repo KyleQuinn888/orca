@@ -222,6 +222,7 @@ export class ZcodeStructuredLane {
           key: { source: 'provider', value: this.armedTurn }
         })
         this.settledTurn = this.armedTurn
+        console.info(`[zcode-settle] firing: turn=${this.armedTurn} send=${this.armedSend}`)
         this.onDispatchSettled({
           sessionId: this.sessionId,
           clientMessageId: this.armedSend,

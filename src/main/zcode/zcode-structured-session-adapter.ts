@@ -7,6 +7,7 @@
 
 import type { AgentSessionProviderHandleLink } from '../../shared/agent-session-provider-handle'
 import type { AgentSessionOptionsResult } from '../../shared/agent-session-wire'
+import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
 import {
   AgentSessionPreSpawnError,
   AgentSessionPromptUnavailableError,
@@ -64,11 +65,9 @@ export type ZcodeStructuredSessionAdapterDeps = {
   /** Lifecycle events for the host ('ended' when the child dies). */
   onEvent?: (event: StructuredAgentSessionLifecycleEvent) => void
   /** The provider settled a dispatch after its request returned. */
-  onDispatchSettledLate?: (settlement: {
-    sessionId: string
-    clientMessageId: string
-    providerIdentity: unknown
-  }) => void
+  onDispatchSettledLate?: (
+    settlement: Parameters<StructuredAgentSessionHost['settleLateDispatch']>[0]
+  ) => void
   /** Held sends changed with no row: every reader re-derives current work. */
   onWorkChanged?: (sessionId: string) => void
 }
