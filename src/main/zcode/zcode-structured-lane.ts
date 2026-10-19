@@ -11,6 +11,7 @@ import type { StructuredAgentSessionEventSink } from '../native-chat/agent-sessi
 import type { ProviderTimelineSink } from '../native-chat/agent-session-timeline/provider-timeline-plan'
 import { providerTimelineSink } from '../native-chat/agent-session-timeline/provider-timeline-plan'
 import { createProviderTimelineAssembler } from '../native-chat/agent-session-timeline/provider-timeline-assembler'
+import { createLegacyProviderTimelineIdentityScheme } from '../native-chat/agent-session-timeline/provider-timeline-identity'
 import type { ProviderTimelineEvent } from '../native-chat/agent-session-timeline/provider-timeline-event'
 import { ZcodeTimelineTranslator } from './zcode-timeline-translator'
 
@@ -30,6 +31,17 @@ const NO_TIMELINE_EVENT_SINK = {
   setActivity: () => {}
 } as never as StructuredAgentSessionEventSink
 
+export type ZcodeDispatchSettlement = {
+  sessionId: string
+  clientMessageId: string
+  providerIdentity: {
+    provider: 'legacy'
+    agent: string
+    sessionId: string
+    recordId: string
+  }
+}
+
 export class ZcodeStructuredLane {
   readonly translator = new ZcodeTimelineTranslator()
   readonly assembler: ReturnType<typeof createProviderTimelineAssembler>
@@ -40,13 +52,43 @@ export class ZcodeStructuredLane {
   /** Events the sink refused under backpressure, re-applied until admitted. */
   private readonly retry: ProviderTimelineEvent[] = []
   private retryTimer: ReturnType<typeof setTimeout> | null = null
+  /** The send whose turn has not ended; its dispatch settles when the turn does. */
+  private armedSend: string | null = null
+  /** The provider turn id the armed send opened into. */
+  private armedTurn: string | null = null
+  /** A fast turn can start AND end before session/send's reply returns: the
+   *  dispatch still in flight needs the identity of the turn that already ran. */
+  private settledTurn: string | null = null
 
-  constructor(input: {
-    events: StructuredAgentSessionEventSink | undefined
-    sessionId: string
-    generation: string
-    providerSessionId: string
-  }) {
+  /** The journal identity of the turn the armed send opened (or that already
+   *  settled under it, when the whole turn raced the send's reply). */
+  armedTurnIdentity(): ZcodeDispatchSettlement['providerIdentity'] | null {
+    const turn = this.armedTurn ?? this.settledTurn
+    if (turn === null) {
+      return null
+    }
+    return this.identity.turn({
+      namespace: this.namespace,
+      key: { source: 'provider', value: turn }
+    }) as ZcodeDispatchSettlement['providerIdentity']
+  }
+  private readonly identity: ReturnType<typeof createLegacyProviderTimelineIdentityScheme>
+  private namespace = ''
+  private sessionId = ''
+
+  constructor(
+    private readonly onDispatchSettled: ((settlement: ZcodeDispatchSettlement) => void) | undefined,
+    input: {
+      events: StructuredAgentSessionEventSink | undefined
+      sessionId: string
+      generation: string
+      providerSessionId: string
+    }
+  ) {
+    this.identity = createLegacyProviderTimelineIdentityScheme({
+      agent: 'zcode',
+      sessionId: input.sessionId
+    })
     const sink = (providerTimelineSink(input.events ?? NO_TIMELINE_EVENT_SINK) ??
       noTimelineSink()) as ProviderTimelineSink
     this.assembler = createProviderTimelineAssembler({
@@ -121,6 +163,8 @@ export class ZcodeStructuredLane {
 
   /** Orca's send reached the provider. */
   inputAccepted(clientMessageId: string, requestedAt: number): void {
+    this.armedSend = clientMessageId
+    this.settledTurn = null
     this.assembler.apply({ type: 'input.accepted', clientMessageId, requestedAt })
   }
 
@@ -154,14 +198,42 @@ export class ZcodeStructuredLane {
 
   private applyAll(events: readonly ProviderTimelineEvent[]): void {
     for (const event of events) {
+      if (event.type === 'turn.open' && event.turn !== undefined) {
+        this.armedTurn = event.turn
+      }
       const applied = this.assembler.apply(event)
       if ('admission' in applied && !applied.admission.accepted) {
         // A refused turn.end would leave the row running and the clock ticking
         // until the child dies: hold it and re-apply once the sink drains.
         this.retry.push(event)
         this.scheduleRetry()
+        continue
+      }
+      // The dispatch the armed send opened settles with its turn's end: the
+      // journal row alone never releases the chat's working state.
+      if (
+        event.type === 'turn.end' &&
+        this.armedSend !== null &&
+        this.armedTurn !== null &&
+        this.onDispatchSettled !== undefined
+      ) {
+        const identity = this.identity.turn({
+          namespace: this.namespace,
+          key: { source: 'provider', value: this.armedTurn }
+        })
+        this.settledTurn = this.armedTurn
+        this.onDispatchSettled({
+          sessionId: this.sessionId,
+          clientMessageId: this.armedSend,
+          providerIdentity: identity as ZcodeDispatchSettlement['providerIdentity']
+        })
+        this.armedSend = null
+        this.armedTurn = null
       }
     }
+    // The coalescing window holds streamed text until flushed: without this the
+    // reasoning and reply rows never land and the client never hears the turn.
+    this.assembler.flush()
   }
 
   private scheduleRetry(): void {

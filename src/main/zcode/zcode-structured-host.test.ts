@@ -85,7 +85,9 @@ async function openZcodeHostRig() {
   const adapter = new ZcodeStructuredSessionAdapter({
     resolveLaunch: async () => launch,
     readProcessStartTime: async () => 1_700_000_000_000,
-    onEvent: (event) => void hosted.host?.handleAdapterEvent(event)
+    onEvent: (event) => void hosted.host?.handleAdapterEvent(event),
+    onWorkChanged: (sessionId) => hosted.host?.publishWorkChanged(sessionId),
+    onDispatchSettledLate: (settlement) => void hosted.host?.settleLateDispatch(settlement as never)
   })
   const host = new StructuredAgentSessionHost({
     agents: new StructuredAgentRegistry([{ definition: ZCODE_STRUCTURED_AGENT, adapter }]),
@@ -108,6 +110,33 @@ async function openZcodeHostRig() {
 }
 
 describe('Zcode behind the real structured-session host', () => {
+  it('publishes the settled turn to subscribers (the renderer path)', async () => {
+    const rig = await openZcodeHostRig()
+    const seenTurnEnds: unknown[] = []
+    const unsubscribe = rig.host.subscribeTurnCompletions({
+      id: 'zcode-test',
+      emit: (event) => {
+        seenTurnEnds.push(event)
+      }
+    })
+    try {
+      await expect(rig.host.attach(CALLER, attachParams())).resolves.toMatchObject({ ok: true })
+      await rig.host.send(CALLER, {
+        envelope: envelope('agentSession.send', { body: hello }),
+        body: hello
+      })
+      await vi.waitFor(
+        () => {
+          expect(seenTurnEnds.length).toBeGreaterThan(0)
+        },
+        { timeout: 10_000 }
+      )
+    } finally {
+      unsubscribe()
+      await rig.host.close(SESSION, 'user-close')
+    }
+  })
+
   it('attaches and delivers a send end to end', async () => {
     const rig = await openZcodeHostRig()
     try {

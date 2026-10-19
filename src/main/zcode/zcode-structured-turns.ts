@@ -57,7 +57,14 @@ export async function dispatchZcodeTurn(
     }
     throw error
   }
-  // The send's acceptance is the admission; turn.started settles the rest.
+  // turn.started arrives while the send's reply is in flight (the record reader
+  // delivers it first), so the turn the send opened is usually known here: an
+  // accepted dispatch with its identity settles the submission through the same
+  // journal path codex's turn/start answer takes. Falls back to admitted.
+  const armedTurnIdentity = session.lane.armedTurnIdentity()
+  if (armedTurnIdentity !== null) {
+    return { state: 'accepted', providerIdentity: armedTurnIdentity }
+  }
   return { state: 'admitted' }
 }
 

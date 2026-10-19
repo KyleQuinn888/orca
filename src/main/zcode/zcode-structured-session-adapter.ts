@@ -63,6 +63,14 @@ export type ZcodeStructuredSessionAdapterDeps = {
   requestTimeoutMs?: number
   /** Lifecycle events for the host ('ended' when the child dies). */
   onEvent?: (event: StructuredAgentSessionLifecycleEvent) => void
+  /** The provider settled a dispatch after its request returned. */
+  onDispatchSettledLate?: (settlement: {
+    sessionId: string
+    clientMessageId: string
+    providerIdentity: unknown
+  }) => void
+  /** Held sends changed with no row: every reader re-derives current work. */
+  onWorkChanged?: (sessionId: string) => void
 }
 
 const ZCODE_SUBSCRIBE_DELIVERY = 'desktop-continuous'
@@ -163,12 +171,18 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       if (typeof providerSessionId !== 'string' || !providerSessionId.startsWith('sess_')) {
         throw new Error('zcode app-server returned a snapshot without a session id')
       }
-      const lane = new ZcodeStructuredLane({
-        events: input.events,
-        sessionId,
-        generation: input.identity.sessionId,
-        providerSessionId
-      })
+      const lane = new ZcodeStructuredLane(
+        (settlement) => {
+          void this.deps.onDispatchSettledLate?.(settlement)
+          queueMicrotask(() => this.deps.onWorkChanged?.(settlement.sessionId))
+        },
+        {
+          events: input.events,
+          sessionId,
+          generation: input.identity.sessionId,
+          providerSessionId
+        }
+      )
       const session: ZcodeSession = {
         sessionId,
         providerSessionId,
