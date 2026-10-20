@@ -9,11 +9,7 @@ import type {
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../shared/runtime-types'
 import type { RuntimeLeafRecord } from '../runtime-terminal-state-records'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
-import {
-  composeMainTerminalSurfaces,
-  TerminalSurfaceIndex,
-  type MainTerminalSurfaces
-} from '../terminal/surface/terminal-surface-index'
+import { mainTerminalSurfaces } from '../terminal/surface/main-terminal-surfaces'
 
 /** The runtime indexes graph tabs by bare id, so duplicate ids cannot be routed safely. */
 function assertUniqueRuntimeGraphTabIds(tabs: readonly RuntimeSyncedTab[]): void {
@@ -29,66 +25,6 @@ function assertUniqueRuntimeGraphTabIds(tabs: readonly RuntimeSyncedTab[]): void
 export abstract class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAttachWindow {
   declare protected terminalGroupGridSizes?: RuntimeSyncWindowGraph['terminalGroupGridSizes']
   declare protected singleGroupWorkspaceGridSize?: RuntimeSyncWindowGraph['singleGroupWorkspaceGridSize']
-
-  /** Layout-owner builds: main's terminal tabs and panes; null in a window-owned build. */
-  protected readonly terminalSurfaceIndex = ORCA_LAYOUT_OWNER_IS_MAIN
-    ? new TerminalSurfaceIndex({
-        store: () => this.store,
-        homeHostId: (key) => this.tryGetWorkspaceSessionHostIdForWorktree(key),
-        generatedTitlesEnabled: () => this.store?.getSettings?.().tabAutoGenerateTitle === true,
-        onChanged: () => this.scheduleMainTerminalSurfaces()
-      })
-    : null
-
-  /** The window's last graph: its mount facts and the panes of workspaces main does not own. */
-  private lastWindowGraph: { windowId: number; graph: RuntimeSyncWindowGraph } | null = null
-  private mainTerminalSurfacesScheduled = false
-  /** The main surfaces the last installed graph carried. */
-  private installedMainSurfaces: MainTerminalSurfaces | null = null
-
-  private withMainTerminalSurfaces(graph: RuntimeSyncWindowGraph): RuntimeSyncWindowGraph {
-    if (!this.terminalSurfaceIndex) {
-      return graph
-    }
-    this.terminalSurfaceIndex.start()
-    this.installedMainSurfaces = this.terminalSurfaceIndex.surfaces()
-    return composeMainTerminalSurfaces(graph, this.installedMainSurfaces)
-  }
-
-  /** A Store write may have changed main's panes; they are installed once per task. */
-  private scheduleMainTerminalSurfaces(): void {
-    if (this.mainTerminalSurfacesScheduled) {
-      return
-    }
-    this.mainTerminalSurfacesScheduled = true
-    queueMicrotask(() => {
-      this.mainTerminalSurfacesScheduled = false
-      this.republishMainTerminalSurfaces()
-    })
-  }
-
-  /** Installs main's panes under the current graph authority, with the window's last mount facts. */
-  protected republishMainTerminalSurfaces(opts: { force?: boolean } = {}): void {
-    if (
-      !this.terminalSurfaceIndex ||
-      this.graphStatus !== 'ready' ||
-      this.authoritativeWindowId === null ||
-      (!opts.force && this.terminalSurfaceIndex.surfaces() === this.installedMainSurfaces)
-    ) {
-      return
-    }
-    const windowGraph =
-      this.lastWindowGraph?.windowId === this.authoritativeWindowId
-        ? this.lastWindowGraph.graph
-        : { tabs: [], leaves: [] }
-    // Only the terminal list: the window's session rows and grid sizes were taken when it sent them.
-    const { tabs, leaves, mountedLeaves } = windowGraph
-    this.applyRuntimeGraph(
-      this.authoritativeWindowId,
-      this.withMainTerminalSurfaces({ tabs, leaves, mountedLeaves }),
-      undefined
-    )
-  }
 
   // Why: a remounting pane publishes its leaf with no PTY until its transport reattaches the same
   // session. Dropping it re-minted the handle every paired client was typing into (#23759).
@@ -153,18 +89,17 @@ export abstract class OrcaRuntimeWithSyncWindowGraph extends OrcaRuntimeWithAtta
     }
     // Switch point: main's own panes stand in for the window's list of a workspace main owns.
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
-      this.lastWindowGraph = { windowId, graph }
-      return this.applyRuntimeGraph(windowId, this.withMainTerminalSurfaces(graph), rendererGeneration)
+      graph = mainTerminalSurfaces(this, () => ({
+        store: () => this.store,
+        homeHostId: (key) => this.tryGetWorkspaceSessionHostIdForWorktree(key),
+        readyGraphPublisher: () =>
+          this.graphStatus === 'ready' ? this.authoritativeWindowId : null,
+        publish: (publisher, next) => {
+          this.syncWindowGraph(publisher, next)
+        }
+      })).withMainSurfaces(windowId, graph)
     }
-    return this.applyRuntimeGraph(windowId, graph, rendererGeneration)
-  }
 
-  /** Installs a graph's tabs and leaves, once its publisher is known to hold graph authority. */
-  protected applyRuntimeGraph(
-    windowId: number,
-    graph: RuntimeSyncWindowGraph,
-    rendererGeneration: string | null | undefined
-  ): RuntimeSyncWindowGraphResult {
     if (graph.terminalGroupGridSizes) {
       // Merged, not replaced: a group in a worktree the window is not showing keeps its last size.
       this.terminalGroupGridSizes = {

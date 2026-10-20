@@ -2,6 +2,7 @@ import type { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree as Re
 import { OrcaRuntimeWithHasTerminalsForWorktree } from './session-graph-reload-lifecycle'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../shared/runtime-types'
 import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import { startedMainTerminalSurfaces } from '../terminal/surface/main-terminal-surfaces'
 import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
 import {
   assertFolderWorkspacePathUsable,
@@ -61,7 +62,7 @@ export abstract class OrcaRuntimeWithTransitionGraphReloadToTerminalState extend
     // Switch point: main holds every pane it owns, so it takes the graph back from any window.
     return (
       windowId !== HEADLESS_RUNTIME_WINDOW_ID &&
-      (this.headlessGraphFallbackAvailable || ORCA_LAYOUT_OWNER_IS_MAIN)
+      (ORCA_LAYOUT_OWNER_IS_MAIN || this.headlessGraphFallbackAvailable)
     )
   }
 
@@ -82,7 +83,7 @@ export abstract class OrcaRuntimeWithTransitionGraphReloadToTerminalState extend
     this.markSessionTabsInventoryPublished()
     if (ORCA_LAYOUT_OWNER_IS_MAIN) {
       this.headlessGraphFallbackAvailable = true
-      this.republishMainTerminalSurfaces({ force: true })
+      startedMainTerminalSurfaces(this)?.republish({ force: true })
     }
   }
 
