@@ -84,7 +84,12 @@ describe('terminal replies from main (switch on)', () => {
 
     const listed = await runtime.listTerminals(`id:${TEST_WORKTREE_ID}`)
     expect(
-      listed.terminals.map(({ tabId, leafId, orphaned, title }) => ({ tabId, leafId, orphaned, title }))
+      listed.terminals.map(({ tabId, leafId, orphaned, title }) => ({
+        tabId,
+        leafId,
+        orphaned,
+        title
+      }))
     ).toEqual(
       [HEADLESS_LEAF_ID, HEADLESS_SECOND_LEAF_ID].map((leafId) => ({
         tabId: SURFACE_TAB_ID,

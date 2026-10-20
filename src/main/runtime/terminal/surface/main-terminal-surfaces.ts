@@ -14,7 +14,10 @@ import {
 export type MainTerminalSurfacesHost = {
   store: () => Pick<
     RuntimeStore,
-    'getWorkspaceSession' | 'getWorkspaceSessionHostIds' | 'onWorkspaceSessionWritten' | 'getSettings'
+    | 'getWorkspaceSession'
+    | 'getWorkspaceSessionHostIds'
+    | 'onWorkspaceSessionWritten'
+    | 'getSettings'
   > | null
   homeHostId: (key: string) => ExecutionHostId | null
   /** The graph authority now, when its graph is ready; null otherwise. */

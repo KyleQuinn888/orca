@@ -101,7 +101,7 @@ export class TerminalSurfaceIndex {
     const hostIds = (store?.getWorkspaceSessionHostIds?.() ?? []).filter(
       (hostId) => parseExecutionHostId(hostId)?.kind !== 'runtime'
     )
-    for (const hostId of [...this.loaded.keys()]) {
+    for (const hostId of this.loaded.keys()) {
       if (!hostIds.includes(hostId)) {
         this.loaded.delete(hostId)
       }
@@ -112,7 +112,10 @@ export class TerminalSurfaceIndex {
       }
       const session = store?.getWorkspaceSession?.(hostId)
       if (session) {
-        this.loaded.set(hostId, loadWorkspaceLayoutWithoutReport(hostId, session, nameBasedLoadContext()))
+        this.loaded.set(
+          hostId,
+          loadWorkspaceLayoutWithoutReport(hostId, session, nameBasedLoadContext())
+        )
       } else {
         this.loaded.delete(hostId)
       }
@@ -122,9 +125,7 @@ export class TerminalSurfaceIndex {
     for (const [hostId, loaded] of this.loaded) {
       // Only the owning partition's copy counts; a stray copy elsewhere is not a second pane.
       const workspaces = Object.fromEntries(
-        Object.entries(loaded.layout.workspaces).filter(
-          ([key]) => this.homeOf(key) === hostId
-        )
+        Object.entries(loaded.layout.workspaces).filter(([key]) => this.homeOf(key) === hostId)
       )
       for (const workspace of Object.values(workspaces)) {
         worktreeIds.add(workspace.worktreeId)

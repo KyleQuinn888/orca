@@ -37,9 +37,7 @@
       }
     ],
     "hostScope": {
-      "hostIds": [
-        "local"
-      ],
+      "hostIds": ["local"],
       "omittedHostIds": []
     },
     "topologyRevisions": {
