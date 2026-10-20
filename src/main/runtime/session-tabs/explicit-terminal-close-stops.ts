@@ -7,6 +7,10 @@ import type { RuntimePtyTabCloseAuthority } from '../runtime-terminal-state-reco
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import { errorMessage } from '../../../shared/error-message'
 import type { ResolvedWorktree } from '../runtime-worktree-path-identity'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
+import type { LayoutApplyReply } from '../../../shared/workspace-layout/workspace-layout-command-types'
+import type { WindowLayoutCommand } from '../runtime-layout-apply'
+import { closeMainOwnedPaneByHandle } from './main-handle-close'
 import {
   closePairedHostLeafFirst,
   isTerminalTabPinnedInSession
@@ -19,6 +23,7 @@ const NO_STOP: ExplicitCloseStop = { stopped: false }
 
 export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRuntimeWithFocusTerminal {
   protected abstract getResolvedWorktreeMap(): Promise<Map<string, ResolvedWorktree>>
+  abstract applyLayoutCommand(command: WindowLayoutCommand): Promise<LayoutApplyReply>
   protected abstract refreshPtyWorktreeRecordsFromController(
     resolvedWorktrees: ResolvedWorktree[],
     targetWorktreeId?: string | null,
@@ -133,6 +138,25 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
   }
 
   async closeTerminal(handle: string): Promise<RuntimeTerminalClose> {
+    // Switch point: a pane main owns closes in main's layout, whatever the window lists.
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      const mainClose = await closeMainOwnedPaneByHandle(
+        {
+          runtime: this,
+          livePty: () => this.getLivePtyForHandle(handle)?.pty ?? null,
+          liveLeaf: () => this.getLiveLeafForHandle(handle).leaf,
+          applyLayoutCommand: (command) => this.applyLayoutCommand(command),
+          stop: (ptyIds, addressed) => this.stopExplicitlyClosedTabPtys(ptyIds, addressed),
+          describe: (...args) => this.describeTerminalClose(...args)
+        },
+        handle,
+        false
+      )
+      if (mainClose) {
+        this.claudeAgentTeams.removeTeamForLeaderHandle(handle)
+        return mainClose
+      }
+    }
     const pty = this.getLivePtyForHandle(handle)
     this.claudeAgentTeams.removeTeamForLeaderHandle(handle)
     if (pty) {
@@ -281,6 +305,25 @@ export abstract class OrcaRuntimeWithStopExplicitlyClosedTabPtys extends OrcaRun
   }
 
   async closeTerminalTab(handle: string): Promise<RuntimeTerminalClose> {
+    // Switch point: a pane main owns closes in main's layout, whatever the window lists.
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      const mainClose = await closeMainOwnedPaneByHandle(
+        {
+          runtime: this,
+          livePty: () => this.getLivePtyForHandle(handle)?.pty ?? null,
+          liveLeaf: () => this.getLiveLeafForHandle(handle).leaf,
+          applyLayoutCommand: (command) => this.applyLayoutCommand(command),
+          stop: (ptyIds, addressed) => this.stopExplicitlyClosedTabPtys(ptyIds, addressed),
+          describe: (...args) => this.describeTerminalClose(...args)
+        },
+        handle,
+        true
+      )
+      if (mainClose) {
+        this.claudeAgentTeams.removeTeamForLeaderHandle(handle)
+        return mainClose
+      }
+    }
     const pty = this.getLivePtyForHandle(handle)
     if (pty) {
       const closeAuthority: RuntimePtyTabCloseAuthority = {

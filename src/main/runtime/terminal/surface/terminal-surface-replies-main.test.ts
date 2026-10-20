@@ -130,4 +130,33 @@ describe('terminal replies from main (switch on)', () => {
     const listed = await runtime.listTerminals(`id:${TEST_WORKTREE_ID}`)
     expect(listed.terminals.map((terminal) => terminal.ptyId)).toEqual(['pty-a', 'pty-b', 'pty-c'])
   })
+
+  it('close a tab by a pane handle in main, with no session row from the window', async () => {
+    const { runtime, store, killed } = surfaceRuntime()
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [], mountedLeaves: MOUNTED })
+    const listed = await runtime.listTerminals(`id:${TEST_WORKTREE_ID}`)
+    const second = listed.terminals.find((terminal) => terminal.ptyId === 'pty-b')!
+
+    await expect(runtime.closeTerminalTab(second.handle)).resolves.toMatchObject({
+      tabId: SURFACE_TAB_ID,
+      closeMode: 'tab'
+    })
+    expect(store.getSession().tabsByWorktree[TEST_WORKTREE_ID] ?? []).toEqual([])
+    expect(killed.toSorted()).toEqual(['pty-a', 'pty-b'])
+  })
+
+  it('close one pane of a split by its handle in main, leaving its sibling', async () => {
+    const { runtime, store, killed } = surfaceRuntime()
+    runtime.attachWindow(1)
+    runtime.syncWindowGraph(1, { tabs: [], leaves: [], mountedLeaves: MOUNTED })
+    const listed = await runtime.listTerminals(`id:${TEST_WORKTREE_ID}`)
+    const second = listed.terminals.find((terminal) => terminal.ptyId === 'pty-b')!
+
+    await runtime.closeTerminal(second.handle)
+
+    const layout = store.getSession().terminalLayoutsByTabId[SURFACE_TAB_ID]
+    expect(layout?.root).toEqual({ type: 'leaf', leafId: HEADLESS_LEAF_ID })
+    expect(killed).toEqual(['pty-b'])
+  })
 })

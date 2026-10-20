@@ -14,6 +14,9 @@ import {
 } from '../../orca-runtime-test-fixtures.spec'
 import type { RuntimeSyncWindowGraph, RuntimeTerminalShow } from '../../../../shared/runtime-types'
 import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
+import type { ExecutionHostId } from '../../../../shared/execution-host'
+import type { LayoutCommand } from '../../../../shared/workspace-layout/workspace-layout-command-types'
+import { applyCommandToSession } from '../../../persistence/terminal-topology/terminal-pane-admission'
 
 export const SURFACE_TAB_ID = '44444444-4444-4444-8444-444444444444'
 export const SURFACE_PTYS = { [HEADLESS_LEAF_ID]: 'pty-a', [HEADLESS_SECOND_LEAF_ID]: 'pty-b' }
@@ -24,6 +27,8 @@ type Runtime = InstanceType<typeof OrcaRuntimeService>
 export function surfaceRuntime(): {
   runtime: Runtime
   store: ReturnType<typeof makeRuntimeStoreWithWorkspaceSession>
+  /** Every terminal the runtime asked the PTY host to stop. */
+  killed: string[]
   /** Writes the session the way the Store does: then tells its write listeners. */
   setSession: (next: WorkspaceSessionState) => void
 } {
@@ -51,19 +56,37 @@ export function surfaceRuntime(): {
   )
   // The Store's write notice, which main's terminal list follows.
   const written = new Set<(hostId: string | null) => void>()
+  const setSession = (next: WorkspaceSessionState): void => {
+    harness.setSession(next)
+    for (const listener of written) {
+      listener('local')
+    }
+  }
   const runtimeStore = {
     ...harness.runtimeStore,
     getWorkspaceSessionHostIds: () => ['local'],
     onWorkspaceSessionWritten: (listener: (hostId: string | null) => void) => {
       written.add(listener)
       return () => written.delete(listener)
+    },
+    // Main's own layout change, as the Store applies it.
+    applyLayoutCommand: async (command: LayoutCommand, hostIds: readonly ExecutionHostId[]) => {
+      const change = applyCommandToSession(hostIds[0]!, harness.getSession(), command)
+      if (change.session) {
+        setSession(change.session)
+      }
+      return change.value
     }
   }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared runtime spec fixture store implements every method these paths call.
   const runtime = new OrcaRuntimeService(runtimeStore as never)
+  const killed: string[] = []
   runtime.setPtyController({
     write: () => true,
-    kill: () => true,
+    kill: (ptyId: string) => {
+      killed.push(ptyId)
+      return true
+    },
     getForegroundProcess: async () => null,
     listProcesses: vi.fn(async () =>
       Object.values(SURFACE_PTYS).map((id) => ({ id, cwd: TEST_WORKTREE_PATH, title: 'sh' }))
@@ -74,13 +97,9 @@ export function surfaceRuntime(): {
   }
   return {
     runtime,
+    killed,
     store: harness,
-    setSession: (next) => {
-      harness.setSession(next)
-      for (const listener of written) {
-        listener('local')
-      }
-    }
+    setSession
   }
 }
 

@@ -51,6 +51,25 @@ class MainSurfacePublisher {
     return composeMainTerminalSurfaces(graph, this.installed)
   }
 
+  /** The pane main's layout binds a terminal to, read fresh; null when no pane main owns holds it. */
+  findPaneForPty(ptyId: string): { worktreeId: string; tabId: string; leafId: string } | null {
+    const pane = this.index.surfaces().leaves.find((leaf) => leaf.ptyId === ptyId)
+    return pane ? { worktreeId: pane.worktreeId, tabId: pane.tabId, leafId: pane.leafId } : null
+  }
+
+  /** Whether main lists the workspace's terminals. */
+  ownsWorkspace(worktreeId: string): boolean {
+    return this.index.surfaces().worktreeIds.has(worktreeId)
+  }
+
+  /** Every pane of a tab main owns, in pane order. */
+  panesOfTab(tabId: string): { leafId: string; ptyId: string | null }[] {
+    return this.index
+      .surfaces()
+      .leaves.filter((leaf) => leaf.tabId === tabId)
+      .map(({ leafId, ptyId }) => ({ leafId, ptyId }))
+  }
+
   /** Installs main's panes under the current authority, with that publisher's last mount facts. */
   republish(opts: { force?: boolean } = {}): void {
     const windowId = this.host.readyGraphPublisher()
