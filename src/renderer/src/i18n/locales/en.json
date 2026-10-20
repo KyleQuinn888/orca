@@ -2357,6 +2357,8 @@
         "851017590d": "Add Linear access",
         "228b25028f": "Browse and start work on your assigned Linear issues directly from here.",
         "6d56559467": "Connect your Linear account",
+        "linearLoginUnreadableTitle": "Reconnect Linear",
+        "linearLoginUnreadableBody": "Unable to read saved Linear login. Reconnect it in Settings.",
         "eee68073b2": "Open in Jira",
         "9497f2787c": "Start workspace",
         "eba87f2edb": "No Jira issues found",
@@ -3116,6 +3118,7 @@
               "93e1f6bfca": "Loading",
               "98730088a6": ". Search or open Linear for the full set.",
               "06b887d622": "Showing first",
+              "linearLoginUnreadable": "Unable to read saved Linear login. Reconnect it in Settings.",
               "2c4b1c2c08": "number",
               "f2cc1e0ff6": "Linear / Projects",
               "906b5e4cb8": "Linear / Projects / {{value0}}",
@@ -14781,7 +14784,9 @@
             "jiraMode": "Jira",
             "jiraSelectBindFailed": "Couldn’t link this Jira issue. Pick the matching site or reconnect Jira, then try again.",
             "emoji": "Emoji",
-            "loadingLinearIssue": "Loading Linear issue…"
+            "loadingLinearIssue": "Loading Linear issue…",
+            "linearLoginUnreadableTitle": "Reconnect Linear",
+            "linearLoginUnreadableBody": "Unable to read saved Linear login. Reconnect it in Settings."
           },
           "ProjectCombobox": {
             "empty": "No projects match your search.",
@@ -18076,6 +18081,16 @@
           "confirmLink": "Open link",
           "cancel": "Cancel",
           "launchFailed": "Couldn't open an app for this {{scheme}} link. It may not be installed."
+        },
+        "httpAuth": {
+          "title": "Sign in",
+          "description": "{{origin}} is asking for a username and password.",
+          "insecure": "Your connection to this site isn't private.",
+          "retry": "That username or password didn't work.",
+          "username": "Username",
+          "password": "Password",
+          "confirm": "Sign in",
+          "cancel": "Cancel"
         }
       },
       "HostedReviewUnlinkMenuItem": {

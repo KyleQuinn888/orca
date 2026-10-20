@@ -2237,6 +2237,8 @@
         "851017590d": "Ajouter l'accès Linear",
         "228b25028f": "Parcourez vos tickets Linear assignés et démarrez le travail directement depuis ici.",
         "6d56559467": "Connectez votre compte Linear",
+        "linearLoginUnreadableTitle": "Reconnectez Linear",
+        "linearLoginUnreadableBody": "Impossible de lire la connexion Linear enregistrée. Reconnectez-la dans les réglages.",
         "eee68073b2": "Ouvrir dans Jira",
         "9497f2787c": "Démarrer l'espace de travail",
         "eba87f2edb": "Aucun ticket Jira trouvé",
@@ -2996,6 +2998,7 @@
               "93e1f6bfca": "Chargement",
               "98730088a6": ". Recherchez ou ouvrez Linear pour voir l'ensemble complet.",
               "06b887d622": "Affichage des premières",
+              "linearLoginUnreadable": "Impossible de lire la connexion Linear enregistrée. Reconnectez-la dans les réglages.",
               "2c4b1c2c08": "nombre",
               "f2cc1e0ff6": "Linear / Projets",
               "906b5e4cb8": "Linear / Projets / {{value0}}",
@@ -14613,7 +14616,9 @@
             "jiraMode": "Jira",
             "jiraSelectBindFailed": "Impossible d'associer cette issue Jira. Sélectionnez le site correspondant ou reconnectez Jira, puis réessayez.",
             "emoji": "Émoji",
-            "loadingLinearIssue": "Chargement de l'issue Linear…"
+            "loadingLinearIssue": "Chargement de l'issue Linear…",
+            "linearLoginUnreadableTitle": "Reconnectez Linear",
+            "linearLoginUnreadableBody": "Impossible de lire la connexion Linear enregistrée. Reconnectez-la dans les réglages."
           },
           "ProjectCombobox": {
             "empty": "Aucun projet ne correspond à votre recherche.",

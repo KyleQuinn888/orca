@@ -7,7 +7,7 @@ import { resolveOwnerWithLegacyFallback } from './worktree-runtime-owner'
 import { namedHostForOwnerRef, runtimeEnvironmentIdUnlessTwin } from './resolve-owner'
 import type { WorktreeRuntimeOwnerState } from './worktree-runtime-owner-state'
 import {
-  resolveStrictWorktreeOperationRouteResultForHost,
+  resolveWorktreeOperationRouteResultForHost,
   resolveWorktreeOperationRouteResult,
   type WorktreeOperationRouteResolution
 } from './worktree-operation-route'
@@ -128,7 +128,7 @@ function resolveGitWorktreeRoute(
 ): WorktreeOperationRouteResolution {
   const hostId = namedHostForOwnerRef(state, { workspaceId: worktreeId })
   return hostId
-    ? resolveStrictWorktreeOperationRouteResultForHost(state, worktreeId, hostId)
+    ? resolveWorktreeOperationRouteResultForHost(state, worktreeId, hostId)
     : resolveWorktreeOperationRouteResult(state, worktreeId)
 }
 

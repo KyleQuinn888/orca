@@ -2129,6 +2129,8 @@
         "851017590d": "Linear アクセスを追加",
         "228b25028f": "ここから直接、割り当てられた Linear Issue を参照して作業を開始できます。",
         "6d56559467": "Linear アカウントを接続する",
+        "linearLoginUnreadableTitle": "Linear を再接続",
+        "linearLoginUnreadableBody": "保存された Linear のログイン情報を読み取れません。設定で再接続してください。",
         "eee68073b2": "Jira で開く",
         "9497f2787c": "ワークスペースを開始",
         "eba87f2edb": "Jira Issue が見つかりません",
@@ -2888,6 +2890,7 @@
               "93e1f6bfca": "読み込み中",
               "98730088a6": "。フルセットについては、Linear を検索するか開きます。",
               "06b887d622": "最初に表示しています",
+              "linearLoginUnreadable": "保存された Linear のログイン情報を読み取れません。設定で再接続してください。",
               "2c4b1c2c08": "番号",
               "f2cc1e0ff6": "Linear / プロジェクト",
               "906b5e4cb8": "Linear / プロジェクト / {{value0}}",
@@ -14496,7 +14499,9 @@
             "jiraMode": "Jira",
             "jiraSelectBindFailed": "この Jira Issue をリンクできませんでした。該当するサイトを選択するか Jira に再接続してから、もう一度お試しください。",
             "emoji": "絵文字",
-            "loadingLinearIssue": "Linear Issue を読み込み中…"
+            "loadingLinearIssue": "Linear Issue を読み込み中…",
+            "linearLoginUnreadableTitle": "Linear を再接続",
+            "linearLoginUnreadableBody": "保存された Linear のログイン情報を読み取れません。設定で再接続してください。"
           },
           "ProjectCombobox": {
             "empty": "検索条件に一致するプロジェクトはありません。",

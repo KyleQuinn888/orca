@@ -23,7 +23,7 @@ import {
 import type { ExecutionHostOwnerMatch } from '../../../shared/worktree-execution-host-resolution'
 import {
   getFloatingWorkspaceOperationRoute,
-  resolveStrictWorktreeOperationRouteResultForHost,
+  resolveWorktreeOperationRouteResultForHost,
   resolveWorktreeOperationRouteResult,
   type WorktreeOperationRouteResolution,
   type WorktreeOperationRouteState
@@ -107,7 +107,7 @@ function resolveRoute(
   // Why strict: rival servers proxying the same `ssh:t` must not read as a directly dialed target.
   const match = toOwnerMatch(
     hostId
-      ? resolveStrictWorktreeOperationRouteResultForHost(state, ref.workspaceId, hostId)
+      ? resolveWorktreeOperationRouteResultForHost(state, ref.workspaceId, hostId)
       : resolveWorktreeOperationRouteResult(state, ref.workspaceId)
   )
   return match.kind === 'resolved'

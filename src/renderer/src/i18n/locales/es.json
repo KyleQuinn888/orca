@@ -2128,6 +2128,8 @@
         "851017590d": "Agregar acceso Linear",
         "228b25028f": "Explora y empieza a trabajar en tus issues asignados de Linear directamente desde aquí.",
         "6d56559467": "Conecta tu cuenta Linear",
+        "linearLoginUnreadableTitle": "Vuelve a conectar Linear",
+        "linearLoginUnreadableBody": "No se puede leer el inicio de sesión guardado de Linear. Vuelve a conectarlo en Configuración.",
         "eee68073b2": "Abrir en Jira",
         "9497f2787c": "Iniciar espacio de trabajo",
         "eba87f2edb": "No se encontraron issues de Jira",
@@ -2887,6 +2889,7 @@
               "93e1f6bfca": "Cargando",
               "98730088a6": ". Busca o abre Linear para ver el conjunto completo.",
               "06b887d622": "Mostrando primero",
+              "linearLoginUnreadable": "No se puede leer el inicio de sesión guardado de Linear. Vuelve a conectarlo en Configuración.",
               "2c4b1c2c08": "número",
               "f2cc1e0ff6": "Linear / Proyectos",
               "906b5e4cb8": "Linear / Proyectos / {{value0}}",
@@ -14491,7 +14494,9 @@
             "jiraMode": "Jira",
             "jiraSelectBindFailed": "Couldn’t link this Jira issue. Pick the matching site or reconnect Jira, then try again.",
             "emoji": "Emoji",
-            "loadingLinearIssue": "Cargando problema Linear..."
+            "loadingLinearIssue": "Cargando problema Linear...",
+            "linearLoginUnreadableTitle": "Vuelve a conectar Linear",
+            "linearLoginUnreadableBody": "No se puede leer el inicio de sesión guardado de Linear. Vuelve a conectarlo en Configuración."
           },
           "ProjectCombobox": {
             "empty": "Ningún proyecto coincide con tu búsqueda.",

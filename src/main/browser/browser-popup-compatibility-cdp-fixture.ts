@@ -7,7 +7,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { chromium, type Browser, type Page } from 'playwright'
-import { afterAll, afterEach, beforeAll, beforeEach, expect, vi } from 'vitest'
+import { afterAll, afterEach, beforeAll, expect, vi } from 'vitest'
 import { build as buildVite } from 'vite'
 import { waitForBrowserCdpEndpoint } from './browser-session-ua-cdp-collector'
 import { popupFixtureHtml } from './browser-popup-compatibility-page-fixture'
@@ -104,8 +104,8 @@ async function reservePort(): Promise<number> {
   return address.port
 }
 
-async function waitForFixture(predicate: () => boolean): Promise<void> {
-  const deadline = Date.now() + 20_000
+async function waitForFixture(predicate: () => boolean, timeoutMs = 20_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs
   while (!predicate()) {
     if (Date.now() > deadline) {
       throw new Error(`Popup fixture did not become ready: ${stderr}`)
@@ -209,19 +209,18 @@ beforeAll(async () => {
       throw new Error('Missing guest page')
     }
     pages.set(name, page)
-  }
-}, 60_000)
-
-beforeEach(async () => {
-  for (const page of pages.values()) {
-    if (!stopFrameCaptures.has(page)) {
-      stopFrameCaptures.set(
-        page,
-        await startHiddenRendererFrameCapture(page, (hasFrame) => expect.poll(hasFrame).toBe(true))
+    // A fresh runner's first launch can take tens of seconds to start Chromium's GPU process, and
+    // no hidden page paints until it does; charge that to startup, not the first test's poll.
+    stopFrameCaptures.set(
+      page,
+      await startHiddenRendererFrameCapture(page, (hasFrame) =>
+        waitForFixture(hasFrame, 45_000).catch((error: unknown) => {
+          throw new Error(`No first frame for ${name}`, { cause: error })
+        })
       )
-    }
+    )
   }
-})
+}, 90_000)
 
 afterEach(async () => {
   const route = pages.get('route')

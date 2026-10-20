@@ -54,6 +54,20 @@ export function managedTunnelAccess(
     : null
 }
 
+/** The build's environment is still the same pairing, with an SSH tunnel it may use. */
+export function managedTunnelStillPaired(
+  built: KnownRuntimeEnvironment,
+  current: KnownRuntimeEnvironment | null,
+  target: SshTarget | null | undefined,
+  expected: ManagedTunnelExpectation
+): boolean {
+  return (
+    current?.runtimeId === built.runtimeId &&
+    (current.pairingRevision ?? current.createdAt) === (built.pairingRevision ?? built.createdAt) &&
+    managedTunnelAccess(current, target, expected) !== null
+  )
+}
+
 /** The SSH target and transport a managed environment's tunnel must use, or why it cannot. */
 export function resolveManagedTunnelBinding(
   environment: KnownRuntimeEnvironment,

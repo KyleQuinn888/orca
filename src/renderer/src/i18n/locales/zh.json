@@ -2129,6 +2129,8 @@
         "851017590d": "添加 Linear 访问",
         "228b25028f": "直接从这里浏览并开始处理分配给您的 Linear 议题。",
         "6d56559467": "连接您的 Linear 账户",
+        "linearLoginUnreadableTitle": "重新连接 Linear",
+        "linearLoginUnreadableBody": "无法读取已保存的 Linear 登录信息。请在设置中重新连接。",
         "eee68073b2": "在 Jira 中打开",
         "9497f2787c": "启动工作区",
         "eba87f2edb": "未发现 Jira 议题",
@@ -2888,6 +2890,7 @@
               "93e1f6bfca": "加载中",
               "98730088a6": "。在 Linear 中搜索或打开以查看完整列表。",
               "06b887d622": "首先显示",
+              "linearLoginUnreadable": "无法读取已保存的 Linear 登录信息。请在设置中重新连接。",
               "2c4b1c2c08": "数字",
               "f2cc1e0ff6": "Linear/项目",
               "906b5e4cb8": "Linear/项目/{{value0}}",
@@ -14496,7 +14499,9 @@
             "jiraMode": "Jira",
             "jiraSelectBindFailed": "无法关联此 Jira 议题。请选择匹配的站点或重新连接 Jira，然后重试。",
             "emoji": "Emoji",
-            "loadingLinearIssue": "正在加载 Linear 议题..."
+            "loadingLinearIssue": "正在加载 Linear 议题...",
+            "linearLoginUnreadableTitle": "重新连接 Linear",
+            "linearLoginUnreadableBody": "无法读取已保存的 Linear 登录信息。请在设置中重新连接。"
           },
           "ProjectCombobox": {
             "empty": "没有匹配搜索的项目。",

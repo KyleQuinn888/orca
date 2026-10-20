@@ -2129,6 +2129,8 @@
         "851017590d": "Linear 액세스 추가",
         "228b25028f": "여기에서 직접 할당된 Linear 이슈를 찾아보고 작업을 시작하세요.",
         "6d56559467": "Linear 계정 연결",
+        "linearLoginUnreadableTitle": "Linear 다시 연결",
+        "linearLoginUnreadableBody": "저장된 Linear 로그인을 읽을 수 없습니다. 설정에서 다시 연결하세요.",
         "eee68073b2": "Jira에서 열기",
         "9497f2787c": "워크스페이스 시작",
         "eba87f2edb": "Jira 이슈가 발견되지 않았습니다.",
@@ -2888,6 +2890,7 @@
               "93e1f6bfca": "로드 중",
               "98730088a6": ". 전체 세트를 보려면 Linear를 검색하거나 엽니다.",
               "06b887d622": "처음 표시",
+              "linearLoginUnreadable": "저장된 Linear 로그인을 읽을 수 없습니다. 설정에서 다시 연결하세요.",
               "2c4b1c2c08": "숫자",
               "f2cc1e0ff6": "Linear / 프로젝트",
               "906b5e4cb8": "Linear / 프로젝트 / {{value0}}",
@@ -14496,7 +14499,9 @@
             "jiraMode": "Jira",
             "jiraSelectBindFailed": "Couldn’t link this Jira issue. Pick the matching site or reconnect Jira, then try again.",
             "emoji": "Emoji",
-            "loadingLinearIssue": "Linear 문제 로드 중…"
+            "loadingLinearIssue": "Linear 문제 로드 중…",
+            "linearLoginUnreadableTitle": "Linear 다시 연결",
+            "linearLoginUnreadableBody": "저장된 Linear 로그인을 읽을 수 없습니다. 설정에서 다시 연결하세요."
           },
           "ProjectCombobox": {
             "empty": "검색과 일치하는 프로젝트가 없습니다.",

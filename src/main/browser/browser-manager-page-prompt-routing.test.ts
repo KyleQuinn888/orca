@@ -42,7 +42,8 @@ vi.mock('./popup-origin-bar-window', () => ({
 }))
 
 import { browserManager } from './browser-manager'
-import { respondToBrowserExternalAppRequest } from './browser-external-app-launch'
+import { respondToBrowserPagePrompt } from './browser-page-prompts'
+import { handleBrowserGuestLogin } from './browser-http-auth-prompt'
 import {
   rendererWebContentsId,
   resetBrowserManagerMocks,
@@ -59,7 +60,7 @@ const {
   shellOpenExternalMock
 } = browserMocks
 
-describe('browserManager open-app prompt routing', () => {
+describe('browserManager page prompt routing', () => {
   beforeEach(() => {
     resetBrowserManagerMocks(browserMocks)
     resetBrowserManagerState()
@@ -80,7 +81,13 @@ describe('browserManager open-app prompt routing', () => {
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
     }
-    const renderer = { id: rendererWebContentsId, isDestroyed: () => false, send: rendererSendMock }
+    const renderer = {
+      id: rendererWebContentsId,
+      isDestroyed: () => false,
+      send: rendererSendMock,
+      on: vi.fn(),
+      off: vi.fn()
+    }
     shellOpenExternalMock.mockResolvedValue(undefined)
     webContentsFromIdMock.mockImplementation((id: number) =>
       id === guest.id ? guest : id === rendererWebContentsId ? renderer : null
@@ -93,12 +100,12 @@ describe('browserManager open-app prompt routing', () => {
     })
     const prompts = (): { requestId: string; scheme: string; origin: string | null }[] =>
       rendererSendMock.mock.calls
-        .filter(([channel]) => channel === 'browser:external-app-requested')
-        .map(([, request]) => request)
+        .filter(([channel]) => channel === 'browser:page-prompt-requested')
+        .map(([, request]) => ({ requestId: request.requestId, ...request.details }))
     const answerLatest = (open: boolean): void => {
-      respondToBrowserExternalAppRequest(webContentsFromIdMock(rendererWebContentsId), {
+      void respondToBrowserPagePrompt(webContentsFromIdMock(rendererWebContentsId), {
         requestId: prompts().at(-1)!.requestId,
-        open
+        answer: open ? true : null
       })
     }
     const untrustedFrame = { url: 'https://untrusted.example/ad', isDestroyed: () => false }
@@ -164,7 +171,13 @@ describe('browserManager open-app prompt routing', () => {
       off: guestOffMock,
       openDevTools: guestOpenDevToolsMock
     }
-    const renderer = { id: rendererWebContentsId, isDestroyed: () => false, send: rendererSendMock }
+    const renderer = {
+      id: rendererWebContentsId,
+      isDestroyed: () => false,
+      send: rendererSendMock,
+      on: vi.fn(),
+      off: vi.fn()
+    }
     webContentsFromIdMock.mockImplementation((id: number) =>
       id === guest.id ? guest : id === rendererWebContentsId ? renderer : null
     )
@@ -177,14 +190,82 @@ describe('browserManager open-app prompt routing', () => {
     const willNavigate = guestOnMock.mock.calls.find(([event]) => event === 'will-navigate')?.[1]
     willNavigate({ preventDefault: vi.fn(), initiator: null }, 'zoommtg://zoom.us/join?confno=1')
     const requestId = rendererSendMock.mock.calls.find(
-      ([channel]) => channel === 'browser:external-app-requested'
+      ([channel]) => channel === 'browser:page-prompt-requested'
     )?.[1].requestId
     expect(requestId).toEqual(expect.any(String))
 
     browserManager.unregisterGuest('browser-2')
 
-    expect(rendererSendMock).toHaveBeenCalledWith('browser:external-app-request-closed', {
+    expect(rendererSendMock).toHaveBeenCalledWith('browser:page-prompt-closed', {
       requestId
     })
+  })
+
+  it("asks for a new tab's first sign-in once its window registers the tab", async () => {
+    const rendererSendMock = vi.fn()
+    const guest = {
+      id: 109,
+      isDestroyed: vi.fn(() => false),
+      getType: vi.fn(() => 'webview'),
+      getURL: vi.fn(() => ''),
+      setBackgroundThrottling: guestSetBackgroundThrottlingMock,
+      setWindowOpenHandler: guestSetWindowOpenHandlerMock,
+      on: guestOnMock,
+      prependListener: vi.fn(),
+      once: vi.fn(),
+      off: guestOffMock,
+      openDevTools: guestOpenDevToolsMock
+    }
+    const renderer = {
+      id: rendererWebContentsId,
+      isDestroyed: () => false,
+      send: rendererSendMock,
+      on: vi.fn(),
+      off: vi.fn()
+    }
+    webContentsFromIdMock.mockImplementation((id: number) =>
+      id === guest.id ? guest : id === rendererWebContentsId ? renderer : null
+    )
+    // The webview attaches and starts loading before the renderer registers it.
+    browserManager.attachGuestPolicies(webContentsFromIdMock(guest.id))
+    const event = { preventDefault: vi.fn() }
+    const callback = vi.fn()
+    handleBrowserGuestLogin(
+      event,
+      webContentsFromIdMock(guest.id),
+      {
+        url: 'https://staging.acme.com/',
+        pid: 1,
+        isRequestForNavigation: true,
+        firstAuthAttempt: true
+      },
+      { isProxy: false, scheme: 'basic', host: 'staging.acme.com', port: 443, realm: 'Staging' },
+      callback
+    )
+    // Electron must not cancel the challenge while the tab has no window to ask in yet.
+    expect(event.preventDefault).toHaveBeenCalled()
+    expect(rendererSendMock).not.toHaveBeenCalledWith(
+      'browser:page-prompt-requested',
+      expect.anything()
+    )
+
+    browserManager.registerGuest({
+      browserPageId: 'browser-3',
+      webContentsId: guest.id,
+      rendererWebContentsId
+    })
+
+    const request = rendererSendMock.mock.calls.find(
+      ([channel]) => channel === 'browser:page-prompt-requested'
+    )?.[1]
+    expect(request).toMatchObject({
+      kind: 'http-auth',
+      details: { origin: 'https://staging.acme.com' }
+    })
+    await respondToBrowserPagePrompt(webContentsFromIdMock(rendererWebContentsId), {
+      requestId: request.requestId,
+      answer: { username: 'qa', password: 'hunter2' }
+    })
+    expect(callback).toHaveBeenCalledWith('qa', 'hunter2')
   })
 })
