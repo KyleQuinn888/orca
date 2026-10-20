@@ -54,6 +54,22 @@ describe('AgentTransitionDetector', () => {
     }
   })
 
+  it('moves a pane to done at a session boundary without naming a finish', () => {
+    const h = createHarness()
+    h.detector.attach(h.server)
+    ingest(h.server, { state: 'working' })
+    h.changes.length = 0
+    h.server.ingestTerminalStatus({
+      paneKey: PANE,
+      tabId: 'tab-a',
+      worktreeId: WT,
+      payload: { state: 'done', prompt: 'task', agentType: 'codex', sessionBoundary: true }
+    })
+    expect(h.changes).toEqual([
+      expect.objectContaining({ kind: 'moved', from: 'working', to: 'done', transition: null })
+    ])
+  })
+
   it('names the pane and its host-qualified workspace: local, SSH host, folder', () => {
     const h = createHarness()
     h.detector.attach(h.server)

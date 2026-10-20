@@ -25,6 +25,8 @@ export type WindowPaneDetach = {
   ptyId: string | null
   /** The new tab's id, the same in every partition holding the pane; minted when absent. */
   tabId?: string
+  /** The pane's folder, for the shell an unbound pane starts in its new tab. Older mains drop it. */
+  startupCwd?: string
 }
 
 export type LayoutCommand =

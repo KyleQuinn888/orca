@@ -59,7 +59,7 @@ export type WindowLayoutCommand =
       leafId: string
       groupId: string
       index?: number
-      windowDetach: { ptyId: string | null }
+      windowDetach: { ptyId: string | null; startupCwd?: string }
     }
   | {
       type: 'openBrowserTab'

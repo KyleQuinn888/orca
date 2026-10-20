@@ -120,11 +120,17 @@ async function bootWithFrames(hostId: ExecutionHostId, session: WorkspaceSession
 /** Fixtures whose frames differ from the restore, as the frame parity test lists. */
 const FRAME_DIFFERENCE_FIXTURES = new Set([
   'row without a tab-bar entry or a terminal',
+  'row without a tab-bar entry or a terminal, selected',
+  'row without a tab-bar entry, its terminal in a workspace slept at shutdown',
+  'row without a tab-bar entry, its terminal only on a relay',
+  'row without a tab-bar entry, with a sleeping agent',
+  'row bound only through its pane, without a tab-bar entry',
   'legacy surface tombstone on a pane still showing its terminal',
   'tab-bar label differing from the row title',
   'row without a tab-bar entry, still bound to a terminal',
   'legacy split row sharing one pane’s terminal with a tab-bar tab',
-  'session from before the tab bar, with an open file'
+  'session from before the tab bar, with an open file',
+  'session from before the tab bar, a row with no terminal'
 ])
 
 afterEach(() => endLayoutFramePositions())

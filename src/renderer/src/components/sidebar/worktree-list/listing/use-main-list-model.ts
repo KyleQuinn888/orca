@@ -292,6 +292,7 @@ export function useMainSidebarListModel(args: SidebarListModelArgs): SidebarList
     externalWorktreeCards,
     rowModel: {
       occurrencePlan: planned.plan.occurrencePlan,
+      hostOptions: planned.orderedHostOptions,
       effectiveCollapsedGroups,
       rows: rendered.rows,
       sectionRows,

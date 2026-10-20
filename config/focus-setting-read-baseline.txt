@@ -410,7 +410,8 @@
 1 src/renderer/src/store/slices/browser/browser-tab-focus-actions.ts
 1 src/renderer/src/store/slices/browser/create-browser-slice.ts
 1 src/renderer/src/store/slices/browser/paired-browser-tab-creator.ts
-3 src/renderer/src/store/slices/diff-comment-persistence.ts
+2 src/renderer/src/store/slices/diff-comment-host-write.ts
+1 src/renderer/src/store/slices/diff-comment-persistence.ts
 2 src/renderer/src/store/slices/editor-slice-test-harness.ts
 1 src/renderer/src/store/slices/editor/actions/markdown-link-action.ts
 1 src/renderer/src/store/slices/editor/actions/markdown-preview-actions.ts

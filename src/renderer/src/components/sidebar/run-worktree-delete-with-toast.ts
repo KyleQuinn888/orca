@@ -2,14 +2,12 @@ import { toast } from 'sonner'
 import { useAppStore } from '@/store'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
 import { translate } from '@/i18n/i18n'
-import {
-  resolveWorktreeOperationRoute,
-  resolveWorktreeOperationRouteForHost
-} from '@/lib/worktree-operation-route'
+import { resolveWorktreeOperationRouteForHost } from '@/lib/worktree-operation-route'
 import type { WorktreeRemovalTarget } from '../../../../shared/worktree/removal'
 import { showDeleteWorktreeFailureToast } from './delete-worktree-failure-toast'
 import type { WorktreeDeleteWithToastOptions } from './worktree-delete-request'
 import { getDeleteStateForWorktreeHost } from './worktree-delete-state-host-match'
+import { resolveWriteRoute } from '@/lib/resolve-owner'
 
 // A failed delete usually means unresolved changes, so land on the diff panel.
 function viewWorktreeDiff(
@@ -46,7 +44,7 @@ export function runWorktreeDeleteWithToast(
     const currentState = useAppStore.getState()
     const route = target.executionHostId
       ? resolveWorktreeOperationRouteForHost(currentState, worktreeId, target.executionHostId)
-      : resolveWorktreeOperationRoute(currentState, worktreeId)
+      : resolveWriteRoute(currentState, worktreeId)
     const hasKnownChanges =
       (useAppStore.getState().gitStatusByWorktree[worktreeId]?.length ?? 0) > 0
     showDeleteWorktreeFailureToast({

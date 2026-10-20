@@ -88,7 +88,7 @@ export type HostServerOnConnectDeps = {
   /** Behind the tunnel: answers, or is started from its activated slot if proven stopped. */
   ensureServing: (environmentId: string) => Promise<OrcadManagedServing>
   /** Marks a commit whose reply outlived the move as finished; its source rows are kept. */
-  retainCommittedSource: (target: SshTarget) => void
+  retainCommittedSource: (target: SshTarget) => Promise<void>
   /** False when this build carries no orcad template, so nothing is tried on the host. */
   hasTemplate: () => boolean
   /** A recorded "orcad can't run here" whose key still matches this build. */
@@ -172,7 +172,7 @@ async function decide(
       return unserved
     }
     try {
-      deps.retainCommittedSource(target)
+      await deps.retainCommittedSource(target)
     } catch (error) {
       console.warn('[ssh] Could not mark a finished migration retained:', error)
     }

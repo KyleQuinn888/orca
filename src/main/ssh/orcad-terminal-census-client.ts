@@ -44,11 +44,12 @@ export async function collectManagedTerminalCensus(
     return UNVERIFIABLE
   }
   try {
-    await ensureOrcadManagedTunnel(userDataPath, environment.id)
+    // Why its answer, not `environment`: the tunnel may have re-paired, retiring that token.
+    const current = await ensureOrcadManagedTunnel(userDataPath, environment.id)
     // A server that idled out behind a forward still up is started first, or it never answers.
     await verifyOrcadManagedServing(userDataPath, environment.id)
     return await requestOrcadTerminalCensus(
-      getPreferredPairedRuntimeConnection(environment),
+      getPreferredPairedRuntimeConnection(current),
       activatedAt,
       timeoutMs,
       options

@@ -18,6 +18,7 @@ import { useDiffSectionFallbackCleanup } from './useDiffSectionFallbackCleanup'
 import { submitDiffSectionComment } from './diff-section-comment-submit'
 import type { DiffSectionItemProps } from './diff-section-item-props'
 import { useDiffSectionModelLifecycle } from './use-diff-section-model-lifecycle'
+import { hasLayoutBox } from '@/hooks/virtualized-hidden-row-measurement'
 
 export function DiffSectionItem({
   section,
@@ -177,6 +178,10 @@ export function DiffSectionItem({
     let diffLayoutReady = false
     let pendingHeightFrame: number | null = null
     const updateHeight = (): void => {
+      // Why: a hidden (0-width) side-by-side editor falls back to inline and reports that taller height.
+      if (!hasLayoutBox(editor.getContainerDomNode())) {
+        return
+      }
       const contentHeight = editor.getModifiedEditor().getContentHeight()
       setSectionHeights((prev) => {
         if (prev[index] === contentHeight) {

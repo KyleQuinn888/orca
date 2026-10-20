@@ -210,6 +210,11 @@ describe('layout.apply', () => {
     expect(
       apply?.params?.parse({ command: { ...move, windowDetach: { ptyId: 'pty-1', tabId: 'x' } } })
     ).toEqual({ command: { ...move, windowDetach: { ptyId: 'pty-1' } } })
+    expect(
+      apply?.params?.parse({
+        command: { ...move, windowDetach: { ptyId: null, startupCwd: '/a' } }
+      })
+    ).toEqual({ command: { ...move, windowDetach: { ptyId: null, startupCwd: '/a' } } })
     expect(apply?.params?.safeParse({ command: { ...move, windowDetach: {} } }).success).toBe(false)
     expect(
       apply?.params?.safeParse({ command: { ...move, windowDetach: { ptyId: null }, index: -1 } })

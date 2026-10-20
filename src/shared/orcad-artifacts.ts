@@ -139,6 +139,21 @@ export function orcadRipgrepArtifact(target: string): string {
   return artifact
 }
 
+/** Packaging-only references; deployed slots still contain their own verified binary. */
+export function orcadTemplatePackagedRipgrep(
+  schemaVersion: number,
+  target: string,
+  reference: unknown
+): string | null {
+  if (reference === undefined) {
+    return null
+  }
+  if (schemaVersion !== 4 || reference !== true || target.startsWith('darwin-')) {
+    throw new Error(`Invalid packaged ripgrep reference for ${target}`)
+  }
+  return orcadRipgrepArtifact(target)
+}
+
 export const ORCAD_RIPGREP_LICENSE_ARTIFACTS = [
   'ripgrep/licenses/JEMALLOC-COPYING',
   'ripgrep/licenses/LICENSE-MIT',

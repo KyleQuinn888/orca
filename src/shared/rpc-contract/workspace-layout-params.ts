@@ -155,7 +155,11 @@ const MovePaneToNewTabCommand = z.object({
   groupId: z.string().min(1),
   index: z.number().int().nonnegative().optional(),
   /** The terminal the window's pane shows now, when it has one. */
-  windowDetach: z.object({ ptyId: z.string().min(1).max(512).nullable() })
+  windowDetach: z.object({
+    ptyId: z.string().min(1).max(512).nullable(),
+    /** The pane's folder, where an unbound pane's new shell starts. */
+    startupCwd: z.string().min(1).optional()
+  })
 })
 
 /**

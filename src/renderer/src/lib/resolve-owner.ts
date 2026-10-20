@@ -23,8 +23,9 @@ import {
 import type { ExecutionHostOwnerMatch } from '../../../shared/worktree-execution-host-resolution'
 import {
   getFloatingWorkspaceOperationRoute,
-  resolveStrictWorktreeOperationRouteResultForHost,
+  resolveWorktreeOperationRouteResultForHost,
   resolveWorktreeOperationRouteResult,
+  type WorktreeOperationRoute,
   type WorktreeOperationRouteResolution,
   type WorktreeOperationRouteState
 } from './worktree-operation-route'
@@ -107,7 +108,7 @@ function resolveRoute(
   // Why strict: rival servers proxying the same `ssh:t` must not read as a directly dialed target.
   const match = toOwnerMatch(
     hostId
-      ? resolveStrictWorktreeOperationRouteResultForHost(state, ref.workspaceId, hostId)
+      ? resolveWorktreeOperationRouteResultForHost(state, ref.workspaceId, hostId)
       : resolveWorktreeOperationRouteResult(state, ref.workspaceId)
   )
   return match.kind === 'resolved'
@@ -153,6 +154,26 @@ export function resolveOwner(
   ref: WorkspaceOwnerRef
 ): ExecutionHostOwnerMatch<HostAuthority> {
   return resolveRoute(focusFreeRouteState(state), ref)
+}
+
+/**
+ * The route for a write that names no host, decided by the rows alone: the "Active Server" focus
+ * fallback that terminal reads keep is never reachable for a write.
+ */
+export function resolveWriteRouteResult(
+  state: WorktreeOperationRouteState,
+  workspaceId: string
+): WorktreeOperationRouteResolution {
+  return resolveWorktreeOperationRouteResult(focusFreeRouteState(state), workspaceId)
+}
+
+/** {@link resolveWriteRouteResult}, refusing ambiguity and absence alike. */
+export function resolveWriteRoute(
+  state: WorktreeOperationRouteState,
+  workspaceId: string
+): WorktreeOperationRoute | null {
+  const resolution = resolveWriteRouteResult(state, workspaceId)
+  return resolution.kind === 'resolved' ? resolution.route : null
 }
 
 /**

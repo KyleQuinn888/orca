@@ -85,7 +85,16 @@ export async function applyWindowLayoutCommand(
     // Read before the move, which re-homes the pane.
     const sourceTabId = terminalIdOf(store, hostIds[0], command.workspace, command.tabId)
     const reply = await store.applyLayoutCommand(
-      { ...command, windowDetach: { ptyId: command.windowDetach?.ptyId ?? null } },
+      {
+        ...command,
+        // Why: main mints the new tab's id, so the window's is not carried.
+        windowDetach: {
+          ptyId: command.windowDetach?.ptyId ?? null,
+          ...(command.windowDetach?.startupCwd
+            ? { startupCwd: command.windowDetach.startupCwd }
+            : {})
+        }
+      },
       holders
     )
     if (reply.ok && reply.result.tabId) {

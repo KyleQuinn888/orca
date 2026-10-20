@@ -12,10 +12,10 @@ import type { RuntimeClientTarget } from '../../../../../../shared/runtime-clien
 import type { ExecutionHostId } from '../../../../../../shared/execution-host'
 import {
   getWorktreeOperationOwnerHostIds,
-  resolveWorktreeOperationRoute,
   resolveWorktreeOperationRouteForHost,
   type WorktreeOperationRoute
 } from '@/lib/worktree-operation-route'
+import { resolveWriteRoute } from '@/lib/resolve-owner'
 import { captureWorktreeOperationGenerationGuard } from '@/lib/worktree-operation-generation'
 import { getRepoIdFromWorktreeId } from '../../worktree-helpers'
 import { appliedWorktreeCatalogVersionPatch } from '../listing/worktree-catalog-version-state'
@@ -51,7 +51,7 @@ function resolveHostQualifiedRemovalRoute(
 ): WorktreeOperationRoute | null {
   return requiredExecutionHostId
     ? resolveWorktreeOperationRouteForHost(get(), worktreeId, requiredExecutionHostId)
-    : resolveWorktreeOperationRoute(get(), worktreeId)
+    : resolveWriteRoute(get(), worktreeId)
 }
 
 export type HostQualifiedRemovalStart =
@@ -118,9 +118,9 @@ export function beginHostQualifiedRemoval(
                 ? WORKTREE_REMOVAL_HOST_CHANGED_ERROR
                 : WORKTREE_REMOVAL_AMBIGUOUS_ERROR
             ),
-          // Why: every mid-flight re-check must re-resolve at the CONFIRMED host,
-          // or the active host's route would read as "ownership changed".
-          requiredExecutionHostId ? resolveRemovalRoute : undefined
+          // Why: every mid-flight re-check re-resolves the same way the route was chosen (at the
+          // CONFIRMED host, or focus-free), or an unchanged owner would read as "changed".
+          resolveRemovalRoute
         )
       : null,
     sameIdSurvivesOnAnotherHost: sameIdSurvivingHostId !== null,

@@ -118,14 +118,14 @@ export async function createManagedOrcadEnvironment(
       }
       if (registered) {
         environmentRegistered = true
-        await ensureOrcadManagedTunnel(userDataPath, registered.id)
+        const current = await ensureOrcadManagedTunnel(userDataPath, registered.id)
         const activeVersion = context.activationRecord.active
         if (!activeVersion) {
           throw new Error('The managed Orca server has no active runtime version.')
         }
         return {
           outcome: 'already-current',
-          environment: redactRuntimeEnvironment(registered),
+          environment: redactRuntimeEnvironment(current),
           activeVersion
         }
       }

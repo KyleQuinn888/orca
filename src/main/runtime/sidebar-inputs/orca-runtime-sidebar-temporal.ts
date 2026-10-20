@@ -25,6 +25,7 @@ import { TerminalUseProducer } from './terminal-use-producer'
 import { createKeyedTrailingEdgeCoalescer } from '../keyed-trailing-edge-coalescer'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
 import { getRepoIdFromWorktreeId } from '../../../shared/worktree/id'
+import { anySleepKeyNames } from '../terminal/stop/worktree-terminal-sleep-key'
 import { resolveAgentWorkspaceExecutionHostId } from '../../agent-hooks/restored-status-dead-terminal-sweep'
 import {
   isWslMoveProjectBlocked,
@@ -164,11 +165,26 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
       worktreeId,
       sshHostId: hostId && parseExecutionHostId(hostId)?.kind === 'ssh' ? hostId : null
     }
-    if (writeUnreadFlag(this.store, workspace, false)) {
+    // The phone names only an id. With same-id copies on two hosts it cannot say which one it
+    // shows, and a guessed host would clear the other copy's flag (a `runtime:` copy read as local).
+    if (!this.isTwinRepoWorkspace(worktreeId) && writeUnreadFlag(this.store, workspace, false)) {
       this.sortStampNotices.cancel(worktreeId)
       this.notifySortStampsChanged(worktreeId)
     }
     return this.workspaceViewers.openPhoneSession(worktreeId)
+  }
+
+  private isTwinRepoWorkspace(worktreeId: string): boolean {
+    if (parseWorkspaceKey(worktreeId)?.type === 'folder') {
+      return false
+    }
+    const repoId = getRepoIdFromWorktreeId(worktreeId)
+    const hosts = new Set(
+      (this.store?.getRepos() ?? [])
+        .filter((repo) => repo.id === repoId)
+        .map(getRepoExecutionHostId)
+    )
+    return hosts.size > 1
   }
 
   private workspaceHostId(worktreeId: string): ExecutionHostId | null {
@@ -228,7 +244,7 @@ export abstract class OrcaRuntimeWithSidebarTemporal extends OrcaRuntimeWithWork
       ids: Object.keys(facts),
       isActive: (worktreeId) => worktreeId in facts,
       isUnverifiableGap: (worktreeId) =>
-        !this.terminalSleepByWorktreeId.has(worktreeId) &&
+        !anySleepKeyNames(this.terminalSleepByHostWorktree.keys(), worktreeId) &&
         (this.mobileSessionTabsByWorktree
           .get(worktreeId)
           ?.tabs.some((tab) => tab.type === 'terminal') ??

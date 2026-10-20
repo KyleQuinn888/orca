@@ -42,11 +42,11 @@ export function registerOrcadDeltaMoveHandlers(getUserDataPath: () => string): v
         claims,
         target,
         environment,
-        destination: orcadMigrationDestinationFor(environment),
+        connectDestination: async () =>
+          orcadMigrationDestinationFor(
+            await ensureOrcadManagedTunnel(userDataPath, environment.id)
+          ),
         censusHost: censusHostRelayTerminalsFor(target),
-        ensureTunnel: async () => {
-          await ensureOrcadManagedTunnel(userDataPath, environment.id)
-        },
         runTargetLifecycle
       })
       if (result.outcome === 'moved') {

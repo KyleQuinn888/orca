@@ -12,9 +12,9 @@ import {
 } from './worktree-operation-generation'
 import {
   getFloatingWorkspaceOperationRoute,
-  resolveWorktreeOperationRoute,
   type WorktreeOperationRoute
 } from './worktree-operation-route'
+import { resolveWriteRoute } from './resolve-owner'
 import { resolveExplicitWorktreeOperationRouteResult } from './worktree-operation-catalog-route'
 
 export type EditorFileOperationProvenance = {
@@ -87,9 +87,9 @@ function resolveEditorOwnerRoute(
   worktreeId: string,
   capturedHostId?: ExecutionHostId | null
 ): WorktreeOperationRoute | null {
-  // Workspace focus cannot replace a file's catalog owner.
+  // Neither workspace focus nor the Active Server focus can replace a file's catalog owner.
   const ownerState = { ...state, activeWorktreeId: null, activeWorkspaceExecutionHostId: null }
-  const route = resolveWorktreeOperationRoute(ownerState, worktreeId)
+  const route = resolveWriteRoute(ownerState, worktreeId)
   const scope = parseWorkspaceKey(worktreeId)
   const hostId =
     capturedHostId ??
@@ -100,7 +100,7 @@ function resolveEditorOwnerRoute(
   // Same-id folders may use a host qualifier only when the catalog confirms that owner.
   const folder = findFolderWorkspaceOwner(ownerState, scope.folderWorkspaceId, hostId)
   const qualifiedRoute = folder
-    ? resolveWorktreeOperationRoute({ ...ownerState, folderWorkspaces: [folder] }, worktreeId)
+    ? resolveWriteRoute({ ...ownerState, folderWorkspaces: [folder] }, worktreeId)
     : null
   return qualifiedRoute?.executionHostId === hostId ? qualifiedRoute : null
 }
