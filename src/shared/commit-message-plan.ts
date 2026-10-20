@@ -277,12 +277,13 @@ export function planCommitMessageGeneration(
     promptDelivery: spec.promptDelivery,
     prompt: argvPrompt
   })
-  const generationArgs = mergeOpenCodeGenerationArgs(
+  const mergedArgs = mergeOpenCodeGenerationArgs(
     input.agentId,
     command.binary,
     merged.prefixArgs,
     args
   )
+  const generationArgs = spec.finalizeArgs ? spec.finalizeArgs(mergedArgs) : mergedArgs
   const formatOption =
     input.agentId === 'opencode' || input.agentId === 'opencode2'
       ? findOptionOccurrence(generationArgs, ['--format'], true)

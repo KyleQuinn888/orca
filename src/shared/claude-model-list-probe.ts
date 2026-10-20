@@ -1,3 +1,4 @@
+import { CLAUDE_BACKGROUND_RUN_ARGS } from './claude-background-run-isolation'
 import { assertJsonTextStructureWithinLimits } from './json-text-structure-limit'
 
 // Why: the Claude CLI has no model-listing subcommand (`claude models` starts a
@@ -18,7 +19,8 @@ export const CLAUDE_MODEL_LIST_ARGS = [
   'stream-json',
   '--output-format',
   'stream-json',
-  '--verbose'
+  '--verbose',
+  ...CLAUDE_BACKGROUND_RUN_ARGS
 ]
 
 export type ClaudeListedModel = {

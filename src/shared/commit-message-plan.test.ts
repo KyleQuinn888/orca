@@ -48,7 +48,10 @@ describe('planCommitMessageGeneration', () => {
           '--permission-mode',
           'plan',
           '--effort',
-          'high'
+          'high',
+          '--strict-mcp-config',
+          '--settings',
+          '{"disableAllHooks":true}'
         ],
         stdinPayload: 'PROMPT',
         label: 'Claude'

@@ -141,4 +141,41 @@ describe('generateCommitMessageFromContext', () => {
         'agent could not be reached on the remote PATH. Try again after the SSH connection recovers.'
     })
   })
+
+  it('reruns Claude once without strict mode only when an enterprise MCP config refuses it', async () => {
+    const generate = async (refusal: string) => {
+      const argv: string[][] = []
+      const outcome = await generateCommitMessageFromContext(
+        { branch: 'main', stagedSummary: 'M\tREADME.md', stagedPatch: '+hello' },
+        { agentId: 'claude', model: 'haiku' },
+        {
+          kind: 'remote',
+          cwd: '/repo',
+          missingBinaryLocation: 'remote PATH',
+          execute: async ({ args }) => {
+            argv.push(args)
+            const refused = args.includes('--strict-mcp-config')
+            return {
+              stdout: refused ? '' : 'fix: x',
+              stderr: refused ? refusal : '',
+              exitCode: refused ? 1 : 0,
+              timedOut: false
+            }
+          }
+        }
+      )
+      return { success: outcome.success, argv }
+    }
+    const enterprise = await generate(
+      'You cannot use --strict-mcp-config when an enterprise MCP config is present'
+    )
+    expect(enterprise.success).toBe(true)
+    expect(enterprise.argv[1]).toEqual(
+      enterprise.argv[0].filter((arg) => arg !== '--strict-mcp-config')
+    )
+    expect(await generate('Error: Not logged in')).toMatchObject({
+      success: false,
+      argv: [expect.anything()]
+    })
+  })
 })

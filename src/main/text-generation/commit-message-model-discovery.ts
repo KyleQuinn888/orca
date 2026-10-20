@@ -2,6 +2,10 @@ import { isMissingProviderExecutable } from '../provider-process/provider-execut
 import { mergeCommandEnvironment } from '../../shared/command-environment'
 import type { CommandTemplateBackslash } from '../../shared/commit-message-prompt'
 import { getAgentModelProbeSpec } from '../../shared/agent-model-probe-spec'
+import {
+  claudeRefusedStrictMcpConfig,
+  withoutStrictMcpConfig
+} from '../../shared/claude-background-run-isolation'
 import type { TuiAgent } from '../../shared/tui-agent'
 import { resolveCodexHomeProcessLockKeyForSpawnEnv } from '../codex-cli/codex-home-process-lock'
 import { supervisedProviderSpawnFailure } from '../provider-process/provider-spawn-failure-report'
@@ -28,7 +32,7 @@ export type CommitMessageModelDiscoveryLocalOptions = {
   wslDistro?: string
 }
 
-export async function discoverModelsLocal(input: {
+type DiscoverModelsLocalInput = {
   agentId: TuiAgent
   env: NodeJS.ProcessEnv | undefined
   agentCommandOverride?: string
@@ -37,7 +41,21 @@ export async function discoverModelsLocal(input: {
   spawnAgent: SpawnSourceControlAgent
   /** The command actually spawned, when the caller replaces the plan's; a missing one is typed. */
   binary?: string
-}): Promise<DiscoverCommitMessageModelsResult> {
+}
+
+export async function discoverModelsLocal(
+  input: DiscoverModelsLocalInput
+): Promise<DiscoverCommitMessageModelsResult> {
+  const result = await discoverModelsOnce(input)
+  return !result.success && input.agentId === 'claude' && claudeRefusedStrictMcpConfig(result.error)
+    ? discoverModelsOnce(input, withoutStrictMcpConfig)
+    : result
+}
+
+async function discoverModelsOnce(
+  input: DiscoverModelsLocalInput,
+  mapArgs: (args: readonly string[]) => string[] = (args) => [...args]
+): Promise<DiscoverCommitMessageModelsResult> {
   const spec = getAgentModelProbeSpec(input.agentId)
   if (!spec) {
     return { success: false, error: `Agent "${input.agentId}" does not support model discovery.` }
@@ -75,7 +93,7 @@ export async function discoverModelsLocal(input: {
       try {
         child = input.spawnAgent({
           binary,
-          args: planned.plan.args,
+          args: mapArgs(planned.plan.args),
           cwd: input.options.cwd,
           env: input.options.wslDistro ? input.env : env,
           commandEnv: planned.plan.env,

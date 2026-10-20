@@ -9,6 +9,7 @@ import {
   CLAUDE_MODEL_LIST_STDIN,
   parseClaudeModelList
 } from './claude-model-list-probe'
+import { quotePosixShellUnlessPlain } from './shell-argument-quoting'
 
 // Why: Codex also reads any setting from a `-c key=value` config override.
 function removeCodexAgentArgs(
@@ -143,7 +144,7 @@ export const CLAUDE_SESSION_OPTION_CATALOG: AgentSessionOptionCatalog = {
   },
   unknownModelOptions: [claudeEffort(true)],
   listModels: {
-    command: `echo '${CLAUDE_MODEL_LIST_STDIN.trim()}' | claude ${CLAUDE_MODEL_LIST_ARGS.join(' ')}`,
+    command: `echo '${CLAUDE_MODEL_LIST_STDIN.trim()}' | claude ${CLAUDE_MODEL_LIST_ARGS.map(quotePosixShellUnlessPlain).join(' ')}`,
     parse: parseClaudeCatalogModels
   }
 }

@@ -55,6 +55,8 @@ export type CommitMessageAgentSpec = {
   /** Where the prompt is delivered. Large diffs go via stdin to avoid argv limits. */
   promptDelivery: 'argv' | 'stdin'
   buildArgs: (params: { prompt: string; model: string; thinkingLevel?: string }) => string[]
+  /** Rewrites the final argv, user flags included, before it is spawned. */
+  finalizeArgs?: (args: string[]) => string[]
   /** Alias groups the CLI accepts at most once. Recipe CLI arguments repeating one
    *  replace the generated flag instead of being appended: yargs-based CLIs collapse
    *  a repeated flag into an array and crash. Defaults to the model flag alone. */

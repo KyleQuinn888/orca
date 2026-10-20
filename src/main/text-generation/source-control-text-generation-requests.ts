@@ -1,4 +1,8 @@
 import {
+  claudeRefusedStrictMcpConfig,
+  withoutStrictMcpConfig
+} from '../../shared/claude-background-run-isolation'
+import {
   buildCommitMessagePrompt,
   splitGeneratedCommitMessage,
   type CommitMessageDraftContext
@@ -84,6 +88,14 @@ export async function executeGenerationPlan(input: {
     if (retry) {
       result = await execute(retry)
     }
+  }
+  const failure = result.success ? null : result.failureOutput
+  if (
+    input.params.agentId === 'claude' &&
+    failure &&
+    claudeRefusedStrictMcpConfig(`${failure.stdout}\n${failure.stderr}`)
+  ) {
+    result = await execute({ ...input.plan, args: withoutStrictMcpConfig(input.plan.args) })
   }
   // Why: only a custom command runs a raw model whose chat template can swallow
   // the opening think tag; a built-in agent's message may just mention the tag.

@@ -4,6 +4,10 @@ import {
   parseClaudeModelList
 } from '../../shared/claude-model-list-probe'
 import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
+import {
+  claudeRefusedStrictMcpConfig,
+  withoutStrictMcpConfig
+} from '../../shared/claude-background-run-isolation'
 import { parseClaudeModels } from '../../shared/commit-message-model-parsers'
 import { AgentModelCatalogUnavailableError } from '../native-chat/agent-model-catalog/agent-model-catalog-unavailable'
 import { claudeConfigDirEnvPatch } from './claude-config-dir-pin'
@@ -46,15 +50,26 @@ export async function runClaudeListing(
     ...base,
     ...claudeConfigDirEnvPatch(request.accountHomePath, { env: base })
   }))
-  return (deps.runListing ?? runAgentModelCatalogListing)(
-    {
-      command,
-      args: [...request.args],
-      stdin: request.stdin,
-      ...(request.cwd ? { cwd: request.cwd } : {})
-    },
-    { site: request.site, inheritedEnv: env, signal: request.signal }
-  )
+  const run = (args: readonly string[]) =>
+    (deps.runListing ?? runAgentModelCatalogListing)(
+      {
+        command,
+        args: [...args],
+        stdin: request.stdin,
+        ...(request.cwd ? { cwd: request.cwd } : {})
+      },
+      { site: request.site, inheritedEnv: env, signal: request.signal }
+    )
+  return run(request.args).catch((error: unknown) => {
+    if (
+      error instanceof AgentModelCatalogProbeError &&
+      error.reason === 'exit' &&
+      claudeRefusedStrictMcpConfig(error.message)
+    ) {
+      return run(withoutStrictMcpConfig(request.args))
+    }
+    throw error
+  })
 }
 
 /**
