@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../../shared/runtime-types'
 import {
   captureSurfaceReplies,
@@ -8,6 +8,9 @@ import {
   recordedSurfaceReplies,
   surfaceRuntime
 } from './terminal-surface-replies.test-fixture'
+
+// The recorded reference is the window-owned build's, whatever switch the suite runs with.
+vi.mock('../../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
 
 const golden = (name: string): string => path.join(__dirname, '__fixtures__', name)
 

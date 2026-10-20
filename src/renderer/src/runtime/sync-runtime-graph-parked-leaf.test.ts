@@ -15,6 +15,10 @@ import type { RuntimeSyncWindowGraph } from '../../../shared/runtime-types'
 import type { AppState } from '../store/types'
 import type { TerminalTab } from '../../../shared/terminal-tab-types'
 
+// Rollback build (switch-off): the window's own terminal list. With the switch on, main lists this
+// app's panes (sync-runtime-graph-main-listed-panes.test.ts); delete with the switch-off code post-flip.
+vi.mock('../../../shared/layout-owner-switch', () => ({ ORCA_LAYOUT_OWNER_IS_MAIN: false }))
+
 vi.mock('@/components/terminal-pane/pty-dispatcher', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
   return { ...actual, getEagerPtyBufferHandle: vi.fn(() => undefined) }

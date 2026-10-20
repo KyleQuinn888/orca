@@ -12,7 +12,7 @@ const LEAF = '22222222-2222-4222-8222-222222222222'
 const PARKED_PTY = 'wt-1::/tmp/wt@@parked-pty'
 const TAB_ID = 'parked-tab-1'
 
-function parkedState(): AppState {
+function parkedState(paneTitles: AppState['runtimePaneTitlesByTabId'] = {}): AppState {
   const partial: Partial<AppState> = {
     tabsByWorktree: {
       'wt-1': [
@@ -36,7 +36,7 @@ function parkedState(): AppState {
         ptyIdsByLeafId: { [LEAF]: PARKED_PTY }
       }
     },
-    runtimePaneTitlesByTabId: {},
+    runtimePaneTitlesByTabId: paneTitles,
     groupsByWorktree: {},
     activeGroupIdByWorktree: {},
     layoutByWorktree: {},
@@ -60,27 +60,54 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
+async function publish(state: () => AppState): Promise<RuntimeSyncWindowGraph | undefined> {
+  vi.useFakeTimers()
+  const syncWindowGraph = vi.fn(async (_graph: RuntimeSyncWindowGraph) => undefined)
+  vi.stubGlobal('window', { api: { runtime: { syncWindowGraph } } })
+  vi.stubGlobal('HTMLElement', class HTMLElement {})
+  setRuntimeGraphStoreStateGetter(state)
+  setRuntimeGraphSyncEnabled(true)
+  await vi.advanceTimersByTimeAsync(20)
+  return syncWindowGraph.mock.calls[0]?.[0]
+}
+
+function parkWatcher(paneId: number, disposers = true): void {
+  parkedWatchersByTabId.set(TAB_ID, {
+    worktreeId: 'wt-1',
+    tabPtyId: PARKED_PTY,
+    paneIdByPtyId: new Map([[PARKED_PTY, paneId]]),
+    disposersByPtyId: disposers ? new Map([[PARKED_PTY, () => {}]]) : new Map()
+  })
+}
+
 describe('syncRuntimeGraph in a layout-owner build', () => {
   it("sends a parked pane of this app's workspace as a mount fact, not a terminal listing", async () => {
-    parkedWatchersByTabId.set(TAB_ID, {
-      worktreeId: 'wt-1',
-      tabPtyId: PARKED_PTY,
-      paneIdByPtyId: new Map([[PARKED_PTY, 7]]),
-      disposersByPtyId: new Map([[PARKED_PTY, () => {}]])
-    })
-    vi.useFakeTimers()
-    const syncWindowGraph = vi.fn(async (_graph: RuntimeSyncWindowGraph) => undefined)
-    vi.stubGlobal('window', { api: { runtime: { syncWindowGraph } } })
-    vi.stubGlobal('HTMLElement', class HTMLElement {})
-    setRuntimeGraphStoreStateGetter(parkedState)
-    setRuntimeGraphSyncEnabled(true)
-    await vi.advanceTimersByTimeAsync(20)
+    parkWatcher(7)
 
-    const graph = syncWindowGraph.mock.calls[0]?.[0]
+    const graph = await publish(() => parkedState())
+
     expect(graph?.tabs).toEqual([])
     expect(graph?.leaves).toEqual([])
     expect(graph?.mountedLeaves).toEqual([
       { tabId: TAB_ID, leafId: LEAF, paneRuntimeId: 7, parked: true, paneTitle: null }
     ])
+  })
+
+  it("carries the parked pane's runtime title", async () => {
+    parkWatcher(7)
+
+    const graph = await publish(() => parkedState({ [TAB_ID]: { 7: 'codex [working]' } }))
+
+    expect(graph?.mountedLeaves).toEqual([
+      expect.objectContaining({ leafId: LEAF, paneTitle: 'codex [working]' })
+    ])
+  })
+
+  it('sends nothing for a parked pane whose watcher was disposed', async () => {
+    parkWatcher(7, false)
+
+    const graph = await publish(() => parkedState())
+
+    expect(graph?.mountedLeaves).toBeUndefined()
   })
 })
