@@ -1,6 +1,7 @@
 import type { OrcaRuntimeWithResolveBrowserNetworkExecutionHostForWorktree as ResolveBrowserNetworkExecutionHostForWorktreeMethods } from '../terminal/launch/terminal-workspace-scope'
 import { OrcaRuntimeWithHasTerminalsForWorktree } from './session-graph-reload-lifecycle'
 import { HEADLESS_RUNTIME_WINDOW_ID } from '../../../shared/runtime-types'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../shared/layout-owner-switch'
 import type { FolderWorkspace } from '../../../shared/folder-workspace-types'
 import {
   assertFolderWorkspacePathUsable,
@@ -57,7 +58,11 @@ export abstract class OrcaRuntimeWithTransitionGraphReloadToTerminalState extend
   }
 
   protected shouldRestoreHeadlessGraph(windowId: number): boolean {
-    return windowId !== HEADLESS_RUNTIME_WINDOW_ID && this.headlessGraphFallbackAvailable
+    // Switch point: main holds every pane it owns, so it takes the graph back from any window.
+    return (
+      windowId !== HEADLESS_RUNTIME_WINDOW_ID &&
+      (this.headlessGraphFallbackAvailable || ORCA_LAYOUT_OWNER_IS_MAIN)
+    )
   }
 
   protected restoreHeadlessGraphAuthority(): void {
@@ -75,6 +80,10 @@ export abstract class OrcaRuntimeWithTransitionGraphReloadToTerminalState extend
     this.rejectAllWaiters('terminal_handle_stale')
     this.refreshWritableFlags()
     this.markSessionTabsInventoryPublished()
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      this.headlessGraphFallbackAvailable = true
+      this.republishMainTerminalSurfaces({ force: true })
+    }
   }
 
   assertGraphReady(): void {

@@ -12,9 +12,10 @@ import {
   makeRuntimeStoreWithWorkspaceSession,
   makeWorkspaceSessionWithHeadlessTerminal
 } from '../../orca-runtime-test-fixtures.spec'
-import type { RuntimeSyncWindowGraph } from '../../../../shared/runtime-types'
+import type { RuntimeSyncWindowGraph, RuntimeTerminalShow } from '../../../../shared/runtime-types'
+import type { WorkspaceSessionState } from '../../../../shared/workspace-session-state-types'
 
-export const SURFACE_TAB_ID = '33333333-3333-4333-8333-333333333333'
+export const SURFACE_TAB_ID = '44444444-4444-4444-8444-444444444444'
 export const SURFACE_PTYS = { [HEADLESS_LEAF_ID]: 'pty-a', [HEADLESS_SECOND_LEAF_ID]: 'pty-b' }
 
 type Runtime = InstanceType<typeof OrcaRuntimeService>
@@ -23,6 +24,8 @@ type Runtime = InstanceType<typeof OrcaRuntimeService>
 export function surfaceRuntime(): {
   runtime: Runtime
   store: ReturnType<typeof makeRuntimeStoreWithWorkspaceSession>
+  /** Writes the session the way the Store does: then tells its write listeners. */
+  setSession: (next: WorkspaceSessionState) => void
 } {
   const layout = makeHeadlessTerminalLayout(SURFACE_PTYS)
   const harness = makeRuntimeStoreWithWorkspaceSession(
@@ -46,8 +49,18 @@ export function surfaceRuntime(): {
       terminalLayoutsByTabId: { [SURFACE_TAB_ID]: layout }
     })
   )
+  // The Store's write notice, which main's terminal list follows.
+  const written = new Set<(hostId: string | null) => void>()
+  const runtimeStore = {
+    ...harness.runtimeStore,
+    getWorkspaceSessionHostIds: () => ['local'],
+    onWorkspaceSessionWritten: (listener: (hostId: string | null) => void) => {
+      written.add(listener)
+      return () => written.delete(listener)
+    }
+  }
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: the shared runtime spec fixture store implements every method these paths call.
-  const runtime = new OrcaRuntimeService(harness.runtimeStore as never)
+  const runtime = new OrcaRuntimeService(runtimeStore as never)
   runtime.setPtyController({
     write: () => true,
     kill: () => true,
@@ -62,7 +75,16 @@ export function surfaceRuntime(): {
   for (const ptyId of Object.values(SURFACE_PTYS)) {
     internals.recordPtyWorktree(ptyId, TEST_WORKTREE_ID, { connected: true })
   }
-  return { runtime, store: harness }
+  return {
+    runtime,
+    store: harness,
+    setSession: (next) => {
+      harness.setSession(next)
+      for (const listener of written) {
+        listener('local')
+      }
+    }
+  }
 }
 
 /** Today's window graph for the scenario: both panes mounted. */
@@ -106,7 +128,7 @@ function normaliseHandles(value: unknown): unknown {
 /** Every reply the scenario's readers get, in one JSON document. */
 export async function captureSurfaceReplies(runtime: Runtime): Promise<string> {
   const listed = await runtime.listTerminals(`id:${TEST_WORKTREE_ID}`)
-  const shown = []
+  const shown: RuntimeTerminalShow[] = []
   for (const terminal of listed.terminals) {
     shown.push(await runtime.showTerminal(terminal.handle))
   }
