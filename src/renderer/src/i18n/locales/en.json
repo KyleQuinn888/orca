@@ -192,7 +192,7 @@
   "settings": {
     "chat": {
       "permissionsTitle": "Permissions for new chats",
-      "permissionsDescription": "Applies to new chats only. Agents you open in a terminal use Settings → Agents → Agent Permissions.",
+      "permissionsDescription": "New chats only. Agent-specific defaults are in Settings → Agents.",
       "description": "Choose how chats look and behave.",
       "names": {
         "title": "Chat names",
@@ -217,7 +217,9 @@
         "install": "Install",
         "toggleLabel": "Open {{value0}} as a chat",
         "antigravityDescription": "Antigravity chats run a server Orca downloads to this host, separate from the agy CLI.",
-        "antigravityNotSignedIn": "Not signed in. Chats need an Antigravity sign-in, separate from your agy terminal account."
+        "antigravityNotSignedIn": "Not signed in. Chats need an Antigravity sign-in, separate from your agy terminal account.",
+        "antigravityAccount": "Account",
+        "antigravitySignInNeeded": "Chats need an Antigravity sign-in, separate from your agy terminal account."
       }
     },
     "terminal": {
@@ -386,7 +388,25 @@
       "saveFailed": "Couldn’t save agent settings. Check the host connection and try again.",
       "hostDefaults": "Defaults for new agents on the selected host.",
       "save": "Save",
-      "clearDefault": "Clear default agent"
+      "clearDefault": "Clear default agent",
+      "autoPermissions": "Auto",
+      "autoUnsupported": "Auto needs a newer Orca on this host.",
+      "permissionsDescription": "How much agents can do without asking you. Agents with custom launch arguments keep them.",
+      "permissionsAutoDescription": "<agents>Supported agents</agents> approve safe actions on their own.",
+      "permissionsMixed": "Most agents use {{mode}}. Choosing a mode resets the marked exceptions, except custom arguments.",
+      "permissionsMixedNoMajority": "Agents use different settings. Choosing a mode applies to all.",
+      "permissionsSearchDescription": "Launch agents with Manual, Auto, or Yolo permissions.",
+      "otherAgentsPermissions": "Other agents",
+      "otherAgentsPermissionsLabel": "Permissions for other agents",
+      "customArgsBadge": "Custom",
+      "customArgsTooltip": "Uses its own launch arguments.",
+      "editRowPermissions": "{{agent}} permissions: {{mode}}",
+      "rowPermissions": "Permissions",
+      "rowPermissionsLabel": "{{agent}} permissions",
+      "customPermissions": "Custom arguments",
+      "replaceWithPermissionMode": "Replace with {{mode}}",
+      "expandAgentSettings": "Expand agent settings",
+      "collapseAgentSettings": "Collapse agent settings"
     },
     "followSymlinkedDirectoriesKeywords": {
       "symlink": "symlink",
@@ -2355,6 +2375,8 @@
         "851017590d": "Add Linear access",
         "228b25028f": "Browse and start work on your assigned Linear issues directly from here.",
         "6d56559467": "Connect your Linear account",
+        "linearLoginUnreadableTitle": "Reconnect Linear",
+        "linearLoginUnreadableBody": "Unable to read saved Linear login. Reconnect it in Settings.",
         "eee68073b2": "Open in Jira",
         "9497f2787c": "Start workspace",
         "eba87f2edb": "No Jira issues found",
@@ -3114,6 +3136,7 @@
               "93e1f6bfca": "Loading",
               "98730088a6": ". Search or open Linear for the full set.",
               "06b887d622": "Showing first",
+              "linearLoginUnreadable": "Unable to read saved Linear login. Reconnect it in Settings.",
               "2c4b1c2c08": "number",
               "f2cc1e0ff6": "Linear / Projects",
               "906b5e4cb8": "Linear / Projects / {{value0}}",
@@ -7196,8 +7219,6 @@
           "0d9e293a02": "Refresh",
           "c9b33eb5c0": "Refreshing…",
           "13647f9f80": "Re-read your shell PATH and re-detect installed agents",
-          "dc4a2ffdc0": "Expand command override",
-          "cea7d97be1": "Collapse command override",
           "db9e9e5887": "Customize command",
           "959b67385b": "Set default",
           "24e032fa34": "Default",
@@ -7207,9 +7228,6 @@
           "8fbe1f37c1": "Environment",
           "2d133152fa": "No default environment",
           "agentPermissions": "Agent Permissions",
-          "agentPermissionsInfo": "Agent permissions info",
-          "agentPermissionsTooltip": "Doesn't apply to agents where you've overridden launch arguments.",
-          "agentPermissionsDescription": "Choose whether Orca launches agents with fewer permission prompts or with manual checks.",
           "agentPermissionsYolo": "Yolo",
           "agentPermissionsManual": "Manual",
           "3f1bdf3cb4": "Environment text is too large to parse safely.",
@@ -9615,7 +9633,6 @@
             "a79d266f71": "session",
             "afbf35be68": "stable session",
             "agentPermissions": "Agent Permissions",
-            "agentPermissionsDescription": "Switch agent permission defaults between Yolo and Manual.",
             "agentRuntime": "Agent Runtime",
             "agentRuntimeDescription": "Choose whether agents are detected and launched on Windows or in WSL by default.",
             "runtime": "runtime",
@@ -14779,7 +14796,9 @@
             "jiraMode": "Jira",
             "jiraSelectBindFailed": "Couldn’t link this Jira issue. Pick the matching site or reconnect Jira, then try again.",
             "emoji": "Emoji",
-            "loadingLinearIssue": "Loading Linear issue…"
+            "loadingLinearIssue": "Loading Linear issue…",
+            "linearLoginUnreadableTitle": "Reconnect Linear",
+            "linearLoginUnreadableBody": "Unable to read saved Linear login. Reconnect it in Settings."
           },
           "ProjectCombobox": {
             "empty": "No projects match your search.",
@@ -18074,6 +18093,16 @@
           "confirmLink": "Open link",
           "cancel": "Cancel",
           "launchFailed": "Couldn't open an app for this {{scheme}} link. It may not be installed."
+        },
+        "httpAuth": {
+          "title": "Sign in",
+          "description": "{{origin}} is asking for a username and password.",
+          "insecure": "Your connection to this site isn't private.",
+          "retry": "That username or password didn't work.",
+          "username": "Username",
+          "password": "Password",
+          "confirm": "Sign in",
+          "cancel": "Cancel"
         }
       },
       "HostedReviewUnlinkMenuItem": {

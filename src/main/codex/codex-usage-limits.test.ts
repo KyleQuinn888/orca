@@ -67,18 +67,28 @@ describe('a Codex usage limit', () => {
     const limits = new CodexUsageLimits()
     const observe = (rateLimits: Record<string, unknown>) =>
       limits.observe('notification:account/rateLimits/updated', { rateLimits })
-    const failure = (code = 'usageLimitExceeded') => limits.failure({
-      error: { codexErrorInfo: code, message: CODEX_WORDS }
+    const failure = (code = 'usageLimitExceeded') =>
+      limits.failure({
+        error: { codexErrorInfo: code, message: CODEX_WORDS }
+      })
+    observe({
+      limitId: 'codex',
+      primary: { usedPercent: 100, windowDurationMins: 300, resetsAt: RESETS_AT_S }
     })
-    observe({ limitId: 'codex', primary: { usedPercent: 100, windowDurationMins: 300, resetsAt: RESETS_AT_S } })
-    observe({ limitId: null, primary: { usedPercent: 100, windowDurationMins: 43200, resetsAt: RESETS_AT_S + 3600 } })
+    observe({
+      limitId: null,
+      primary: { usedPercent: 100, windowDurationMins: 43200, resetsAt: RESETS_AT_S + 3600 }
+    })
     expect(failure()?.usageLimit).toEqual({ resetsAt: (RESETS_AT_S + 3600) * 1000 })
     observe({ secondary: { usedPercent: 100, windowDurationMins: 10080 } })
     expect(failure('rateLimitExceeded')?.usageLimit).toBeUndefined()
-    observe({ secondary: null, planType: 'free', primary: { usedPercent: 100, resetsAt: RESETS_AT_S } })
+    observe({
+      secondary: null,
+      planType: 'free',
+      primary: { usedPercent: 100, resetsAt: RESETS_AT_S }
+    })
     expect(failure()?.usageLimit).toEqual({ resetsAt: RESETS_AT_S * 1000 })
     observe({ primary: null })
     expect(failure()?.usageLimit).toBeUndefined()
   })
-
 })

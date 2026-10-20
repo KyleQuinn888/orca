@@ -125,6 +125,10 @@ export class RemoteRuntimeSharedControlConnection {
   private publishDiagnostics(): void {
     this.diagnostics.publish(this.diagnosticsCounts())
   }
+  isReady(): boolean {
+    const { state, ws, handshake } = this
+    return sharedControlReady.isSharedControlReady({ state, ws, handshake })
+  }
   getDiagnostics(): SharedControlTypes.RemoteRuntimeSharedConnectionDiagnostics {
     return this.diagnostics.get(this.diagnosticsCounts())
   }
@@ -140,11 +144,7 @@ export class RemoteRuntimeSharedControlConnection {
   reconnectNow(): void {
     refreshRemoteRuntimeSharedControl({
       intentionallyClosed: this.intentionallyClosed,
-      ready: sharedControlReady.isSharedControlReady({
-        state: this.state,
-        ws: this.ws,
-        handshake: this.handshake
-      }),
+      ready: this.isReady(),
       refresh: () => {
         this.closeSocket(
           remoteRuntimeUnavailableError('Refreshing remote runtime control transport.'),

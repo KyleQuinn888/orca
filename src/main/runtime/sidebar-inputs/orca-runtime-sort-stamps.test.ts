@@ -93,6 +93,36 @@ describe('host sort stamps on a headless runtime', () => {
     }
   })
 
+  it('stamps a session boundary’s done as it stamps a finish, as before the shared detector', () => {
+    const stampsAfter = (sessionBoundary: boolean) => {
+      vi.useFakeTimers({ now: 75_000 })
+      try {
+        const { runtime, meta } = createHeadlessRuntime()
+        const server = new AgentHookServer()
+        runtime.attachAgentStatusStore(server)
+        const pane = {
+          paneKey: 'tab-1:11111111-1111-4111-8111-111111111111',
+          tabId: 'tab-1',
+          worktreeId: WT
+        }
+        server.ingestTerminalStatus({
+          ...pane,
+          payload: { state: 'working', prompt: 'task', agentType: 'claude' }
+        })
+        vi.setSystemTime(76_000)
+        server.ingestTerminalStatus({
+          ...pane,
+          payload: { state: 'done', prompt: 'task', agentType: 'claude', sessionBoundary }
+        })
+        return meta[WT]
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+    expect(stampsAfter(true)).toEqual(stampsAfter(false))
+    expect(stampsAfter(true)).toMatchObject({ smartTier: 'done', smartAt: 76_000 })
+  })
+
   it('stamps agent transitions from the attached hook store', () => {
     vi.useFakeTimers({ now: 70_000 })
     try {

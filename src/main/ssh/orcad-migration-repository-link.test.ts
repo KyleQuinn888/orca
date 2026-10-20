@@ -100,6 +100,7 @@ function serverDestination(): typeof destination {
       const result = server.abortStagedOrcadMigrationCatalog(manifest)
       return result.aborted ? result : { ...result, durableAbsent: true as const }
     },
+    abortByReference: vi.fn(),
     stageChunk: async (request) => server.stageOrcadMigrationSnapshotChunk(request)
   }
 }

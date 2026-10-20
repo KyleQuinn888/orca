@@ -556,7 +556,6 @@ describe('an id reused across commands', () => {
   })
 })
 
-
 describe('source-bound ordinary Continue', () => {
   async function limitedTurn(id: string) {
     const journal = rig.host.collaboratorsForTests().sessions.get(SESSION)?.journal
@@ -565,20 +564,34 @@ describe('source-bound ordinary Continue', () => {
     }
     const identity = { provider: 'orca' as const, clientMessageId: id }
     const turnItemId = agentJournalItemKey(identity)
-    await journal.appendItem(identity, {
-      kind: 'turn', turnId: id, state: 'completed', outcome: 'failure',
-      startedAt: NOW, completedAt: NOW
-    }, { fence: 1, turnScope: { kind: 'thread' } })
-    await journal.appendItem({ provider: 'orca', clientMessageId: `failure-${id}` }, {
-      kind: 'status',
-      ...agentSessionFailureWords({ kind: 'usageLimitReached' }, { surface: 'row' })
-    }, { fence: 1, turnScope: { kind: 'turn', turnItemId } })
+    await journal.appendItem(
+      identity,
+      {
+        kind: 'turn',
+        turnId: id,
+        state: 'completed',
+        outcome: 'failure',
+        startedAt: NOW,
+        completedAt: NOW
+      },
+      { fence: 1, turnScope: { kind: 'thread' } }
+    )
+    await journal.appendItem(
+      { provider: 'orca', clientMessageId: `failure-${id}` },
+      {
+        kind: 'status',
+        ...agentSessionFailureWords({ kind: 'usageLimitReached' }, { surface: 'row' })
+      },
+      { fence: 1, turnScope: { kind: 'turn', turnItemId } }
+    )
     return { journal, turnItemId }
   }
   function params(source: string, id = opId(), options?: Record<string, string>) {
     const fields = {
-      body: hostTestMessage('Continue where you left off.'), delivery: 'queue-if-active' as const,
-      usageLimitContinuationOfTurnItemId: source, ...(options ? { options } : {})
+      body: hostTestMessage('Continue where you left off.'),
+      delivery: 'queue-if-active' as const,
+      usageLimitContinuationOfTurnItemId: source,
+      ...(options ? { options } : {})
     }
     return { ...fields, envelope: rig.envelope(fields, 'agentSession.send', id) }
   }
@@ -589,7 +602,8 @@ describe('source-bound ordinary Continue', () => {
     const first = params(turnItemId)
     const second = params(turnItemId)
     const answers = await Promise.all([
-      rig.host.send(CALLER, first), rig.host.send({ callerKey: 'phone' }, second)
+      rig.host.send(CALLER, first),
+      rig.host.send({ callerKey: 'phone' }, second)
     ])
     expect(answers[0]).toMatchObject({ ok: true, replayed: false })
     expect(answers[1]).toMatchObject(superseded)
@@ -597,8 +611,10 @@ describe('source-bound ordinary Continue', () => {
     expect(journal.queuedMessages.list()).toHaveLength(0)
     await rig.send('newer ordinary message').result
     expect(await rig.host.send(CALLER, first)).toMatchObject({ ok: true, replayed: true })
-    for (const changed of [params('another-turn', first.envelope.clientOperationId),
-      params(turnItemId, first.envelope.clientOperationId, { model: 'other' })]) {
+    for (const changed of [
+      params('another-turn', first.envelope.clientOperationId),
+      params(turnItemId, first.envelope.clientOperationId, { model: 'other' })
+    ]) {
       expect(await rig.host.send(CALLER, changed)).toMatchObject(CONFLICT)
     }
     expect(journal.submissions()).toHaveLength(2)
@@ -619,16 +635,22 @@ describe('source-bound ordinary Continue', () => {
     try {
       const body = hostTestMessage('backlog')
       const row = await journal.queuedMessages.insert({
-        messageId: opId(), body, fingerprint: agentSessionSendBodyFingerprint(SESSION, body),
+        messageId: opId(),
+        body,
+        fingerprint: agentSessionSendBodyFingerprint(SESSION, body),
         hostInstance: structuredAgentSessionHostInstance()
       })
-      journal.queuedMessages.editLeases.acquire({ callerKey: CALLER.callerKey, editId: 'edit' },
-        { messageId: row.messageId, fingerprint: row.fingerprint })
+      journal.queuedMessages.editLeases.acquire(
+        { callerKey: CALLER.callerKey, editId: 'edit' },
+        { messageId: row.messageId, fingerprint: row.fingerprint }
+      )
       const attempt = rig.host.send(CALLER, params(current.turnItemId))
       release()
       expect(await attempt).toMatchObject(superseded)
       expect(journal.queuedMessages.list()).toHaveLength(1)
       expect(journal.submissions()).toHaveLength(1)
-    } finally { release() }
+    } finally {
+      release()
+    }
   })
 })

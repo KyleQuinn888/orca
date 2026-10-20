@@ -48,7 +48,7 @@ export function useWorktreeDropCommitContext(args: {
         onMoveWorktreesToStatusAtIndex({ ...drop, draggedCopies: draggedCopies() }),
       onReorderWorktrees: (reorder) =>
         onReorderWorktrees({ ...reorder, draggedCopies: draggedCopies() }),
-      onPinWorktrees
+      onPinWorktrees: (worktreeIds) => onPinWorktrees(worktreeIds, draggedCopies())
     }
   }, [
     lineageDrop.clearReorderedWorktreeParents,

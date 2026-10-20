@@ -137,11 +137,15 @@ describe('structured agent session message sender', () => {
 
   it('carries the options read at the send on its request, and nothing without them', async () => {
     const calls = deferredCalls()
-    const a = send('a', { options: { model: 'opus', effort: 'high' },
-      usageLimitContinuationOfTurnItemId: 'limited-turn', callerKeepsText: true })
+    const a = send('a', {
+      options: { model: 'opus', effort: 'high' },
+      usageLimitContinuationOfTurnItemId: 'limited-turn',
+      callerKeepsText: true
+    })
     await flush()
     expect(mocks.call.mock.calls[0][2]).toMatchObject({
-      options: { model: 'opus', effort: 'high' }, usageLimitContinuationOfTurnItemId: 'limited-turn'
+      options: { model: 'opus', effort: 'high' },
+      usageLimitContinuationOfTurnItemId: 'limited-turn'
     })
     calls[0].resolve(okSubmission(a.clientMessageId, 'accepted'))
     await a.outcome

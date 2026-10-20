@@ -69,9 +69,7 @@ export class ClaudeUsageLimits {
     const root = message.parent_tool_use_id == null
     const decision = !typed && root ? (turn?.usageLimitEvidence?.cause ?? cause) : cause
     const row =
-      decision !== 'other' && refused
-        ? this.row(messageText(message), decision === 'quota')
-        : null
+      decision !== 'other' && refused ? this.row(messageText(message), decision === 'quota') : null
     if (root && turn?.isOpen && (typed || (refused && decision === 'untyped'))) {
       turn.usageLimitEvidence = { cause: row ? 'quota' : cause }
     }
@@ -137,10 +135,7 @@ export class ClaudeUsageLimits {
     return { ...(window ? { window } : {}), ...(resetsAt ? { resetsAt } : {}) }
   }
 
-  private row(
-    providerText: string,
-    typed = false
-  ): ClaudeUsageLimitRow | null {
+  private row(providerText: string, typed = false): ClaudeUsageLimitRow | null {
     const limit = this.limit()
     if (!limit && !typed) {
       return null

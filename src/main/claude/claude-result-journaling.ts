@@ -73,7 +73,9 @@ export function journalClaudeResult(
     return
   }
   const failure = claudeResultFailure(message, leftToStop)
-  const usageLimit = settlesTurn ? usageLimits.result(message, failure !== null, usageEvidence) : null
+  const usageLimit = settlesTurn
+    ? usageLimits.result(message, failure !== null, usageEvidence)
+    : null
   if (usageLimit && endedTurnIdentity) {
     writeClaudeTerminalFailure(sink, endedTurnIdentity, usageLimit)
   }
@@ -84,11 +86,15 @@ export function journalClaudeResult(
     streamedBlocks.clear()
     streamedText.settle()
   }
-  const goal = threadGoal.settle(message, {
-    backgroundWork: goalBackgroundWork(),
-    stoppedByPerson: leftToStop,
-    turnStartedAt: endedTurnStartedAt
-  }, observedAt)
+  const goal = threadGoal.settle(
+    message,
+    {
+      backgroundWork: goalBackgroundWork(),
+      stoppedByPerson: leftToStop,
+      turnStartedAt: endedTurnStartedAt
+    },
+    observedAt
+  )
   if (goal) {
     sink.appendItem(goal.identity, goal.body, { turnScope: endedTurnScope })
     sink.publish()

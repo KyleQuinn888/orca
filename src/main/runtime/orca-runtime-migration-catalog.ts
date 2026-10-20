@@ -1,5 +1,7 @@
 import type {
   OrcadMigrationCatalogAbortResult,
+  OrcadMigrationCatalogReference,
+  OrcadMigrationCatalogReferenceAbortResult,
   OrcadMigrationCatalogState,
   OrcadMigrationManifest
 } from '../../shared/orcad-migration/orcad-migration-manifest'
@@ -13,6 +15,7 @@ import type {
   OrcadMigrationBlobDescriptor
 } from '../../shared/orcad-migration/orcad-migration-blob-transfer'
 import {
+  abortStagedOrcadMigrationCatalogByReferenceDurably,
   abortStagedOrcadMigrationCatalogDurably,
   commitStagedOrcadMigrationCatalogDurably,
   getOrcadMigrationCatalogState,
@@ -27,6 +30,7 @@ type MigrationStoreKey =
   | 'stageOrcadMigrationSnapshotChunk'
   | 'stageOrcadMigrationBlobChunk'
   | 'abortStagedOrcadMigrationCatalog'
+  | 'abortStagedOrcadMigrationCatalogByReference'
   | 'getOrcadMigrationCatalogState'
   | 'flushPendingOrThrowAsync'
 
@@ -90,6 +94,20 @@ export abstract class OrcaRuntimeWithMigrationCatalog extends OrcaRuntimeWithRes
         'flushPendingOrThrowAsync'
       ),
       manifest,
+      signal: options.signal
+    })
+  }
+
+  async abortStagedOrcadMigrationCatalogByReference(
+    reference: OrcadMigrationCatalogReference,
+    options: { signal?: AbortSignal } = {}
+  ): Promise<OrcadMigrationCatalogReferenceAbortResult> {
+    return abortStagedOrcadMigrationCatalogByReferenceDurably({
+      store: this.requireMigrationStore(
+        'abortStagedOrcadMigrationCatalogByReference',
+        'flushPendingOrThrowAsync'
+      ),
+      reference,
       signal: options.signal
     })
   }

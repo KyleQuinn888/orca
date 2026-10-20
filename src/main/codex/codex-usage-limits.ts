@@ -14,7 +14,10 @@ import {
 const RATE_LIMITS_UPDATED = 'notification:account/rateLimits/updated'
 const USAGE_LIMIT_ERRORS = ['usageLimitExceeded', 'rateLimitExceeded']
 
-type CodexAccountRateLimits = CodexRateLimitWindowsSnapshot & { rateLimitReachedType?: unknown; planType?: unknown }
+type CodexAccountRateLimits = CodexRateLimitWindowsSnapshot & {
+  rateLimitReachedType?: unknown
+  planType?: unknown
+}
 
 function record(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? { ...value } : null
@@ -68,16 +71,33 @@ export class CodexUsageLimits {
    *  when any spent window gave no reset. */
   private limit(): AgentSessionUsageLimit | null {
     const monthlyPlan = this.snapshot.planType === 'free' || this.snapshot.planType === 'go'
-    const spent = ([['primary', monthlyPlan ? 43200 : 300], ['secondary', 10080]] as const).flatMap(([position, fallback]) => {
+    const spent = (
+      [
+        ['primary', monthlyPlan ? 43200 : 300],
+        ['secondary', 10080]
+      ] as const
+    ).flatMap(([position, fallback]) => {
       const raw = this.snapshot[position]
-      if (!raw || typeof raw.usedPercent !== 'number' || !Number.isFinite(raw.usedPercent) || raw.usedPercent < 100) {
+      if (
+        !raw ||
+        typeof raw.usedPercent !== 'number' ||
+        !Number.isFinite(raw.usedPercent) ||
+        raw.usedPercent < 100
+      ) {
         return []
       }
-      const duration = raw.windowDurationMins === undefined || raw.windowDurationMins === null
-        ? fallback : raw.windowDurationMins
-      const window = typeof duration === 'number' && Number.isFinite(duration) && duration > 0
-        ? duration >= 43200 ? undefined : duration >= 10080 ? 'weekly' as const : 'session' as const
-        : undefined
+      const duration =
+        raw.windowDurationMins === undefined || raw.windowDurationMins === null
+          ? fallback
+          : raw.windowDurationMins
+      const window =
+        typeof duration === 'number' && Number.isFinite(duration) && duration > 0
+          ? duration >= 43200
+            ? undefined
+            : duration >= 10080
+              ? ('weekly' as const)
+              : ('session' as const)
+          : undefined
       return [{ window, resetsAt: raw.resetsAt }]
     })
     const reached = this.snapshot.rateLimitReachedType

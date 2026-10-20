@@ -40,7 +40,9 @@
       "providers": {
         "title": "提供方",
         "antigravityDescription": "Antigravity 聊天运行在 Orca 下载到此主机的服务器上，与 agy CLI 相互独立。",
-        "antigravityNotSignedIn": "未登录。聊天需要单独的 Antigravity 登录，与终端中的 agy 帐户分开。"
+        "antigravityNotSignedIn": "未登录。聊天需要单独的 Antigravity 登录，与终端中的 agy 帐户分开。",
+        "antigravityAccount": "账户",
+        "antigravitySignInNeeded": "聊天需要单独的 Antigravity 登录，与终端中的 agy 帐户分开。"
       }
     },
     "terminal": {
@@ -2127,6 +2129,8 @@
         "851017590d": "添加 Linear 访问",
         "228b25028f": "直接从这里浏览并开始处理分配给您的 Linear 议题。",
         "6d56559467": "连接您的 Linear 账户",
+        "linearLoginUnreadableTitle": "重新连接 Linear",
+        "linearLoginUnreadableBody": "无法读取已保存的 Linear 登录信息。请在设置中重新连接。",
         "eee68073b2": "在 Jira 中打开",
         "9497f2787c": "启动工作区",
         "eba87f2edb": "未发现 Jira 议题",
@@ -2886,6 +2890,7 @@
               "93e1f6bfca": "加载中",
               "98730088a6": "。在 Linear 中搜索或打开以查看完整列表。",
               "06b887d622": "首先显示",
+              "linearLoginUnreadable": "无法读取已保存的 Linear 登录信息。请在设置中重新连接。",
               "2c4b1c2c08": "数字",
               "f2cc1e0ff6": "Linear/项目",
               "906b5e4cb8": "Linear/项目/{{value0}}",
@@ -6920,8 +6925,6 @@
           "0d9e293a02": "刷新",
           "c9b33eb5c0": "刷新中…",
           "13647f9f80": "重新读取 shell PATH 并重新检测已安装的智能体",
-          "dc4a2ffdc0": "扩展命令覆盖",
-          "cea7d97be1": "折叠命令覆盖",
           "db9e9e5887": "自定义命令",
           "959b67385b": "设置默认值",
           "24e032fa34": "默认",
@@ -6931,9 +6934,6 @@
           "8fbe1f37c1": "环境",
           "2d133152fa": "无默认环境",
           "agentPermissions": "智能体权限",
-          "agentPermissionsInfo": "智能体权限信息",
-          "agentPermissionsTooltip": "切换模式时，自定义智能体参数保持不变。",
-          "agentPermissionsDescription": "选择 Orca 是以更少的权限提示启动智能体，还是手动检查。",
           "agentPermissionsYolo": "Yolo",
           "agentPermissionsManual": "手动",
           "3f1bdf3cb4": "环境文本过长，无法安全解析。",
@@ -9289,7 +9289,6 @@
             "a79d266f71": "会话",
             "afbf35be68": "稳定会话",
             "agentPermissions": "智能体权限",
-            "agentPermissionsDescription": "在 Yolo 和手动之间切换智能体权限默认值。",
             "agentRuntime": "智能体运行时",
             "agentRuntimeDescription": "选择默认在 Windows 还是 WSL 中检测并启动智能体。",
             "runtime": "运行时",
@@ -14494,7 +14493,9 @@
             "jiraMode": "Jira",
             "jiraSelectBindFailed": "无法关联此 Jira 议题。请选择匹配的站点或重新连接 Jira，然后重试。",
             "emoji": "Emoji",
-            "loadingLinearIssue": "正在加载 Linear 议题..."
+            "loadingLinearIssue": "正在加载 Linear 议题...",
+            "linearLoginUnreadableTitle": "重新连接 Linear",
+            "linearLoginUnreadableBody": "无法读取已保存的 Linear 登录信息。请在设置中重新连接。"
           },
           "ProjectCombobox": {
             "empty": "没有匹配搜索的项目。",

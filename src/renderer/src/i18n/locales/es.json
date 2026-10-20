@@ -40,7 +40,9 @@
       "providers": {
         "title": "Proveedores",
         "antigravityDescription": "Los chats de Antigravity usan un servidor que Orca descarga en este host, independiente de la CLI de agy.",
-        "antigravityNotSignedIn": "No has iniciado sesión. Los chats necesitan un inicio de sesión de Antigravity, independiente de tu cuenta de agy en la terminal."
+        "antigravityNotSignedIn": "No has iniciado sesión. Los chats necesitan un inicio de sesión de Antigravity, independiente de tu cuenta de agy en la terminal.",
+        "antigravityAccount": "Cuenta",
+        "antigravitySignInNeeded": "Los chats necesitan un inicio de sesión de Antigravity, independiente de tu cuenta de agy en la terminal."
       }
     },
     "terminal": {
@@ -2126,6 +2128,8 @@
         "851017590d": "Agregar acceso Linear",
         "228b25028f": "Explora y empieza a trabajar en tus issues asignados de Linear directamente desde aquí.",
         "6d56559467": "Conecta tu cuenta Linear",
+        "linearLoginUnreadableTitle": "Vuelve a conectar Linear",
+        "linearLoginUnreadableBody": "No se puede leer el inicio de sesión guardado de Linear. Vuelve a conectarlo en Configuración.",
         "eee68073b2": "Abrir en Jira",
         "9497f2787c": "Iniciar espacio de trabajo",
         "eba87f2edb": "No se encontraron issues de Jira",
@@ -2885,6 +2889,7 @@
               "93e1f6bfca": "Cargando",
               "98730088a6": ". Busca o abre Linear para ver el conjunto completo.",
               "06b887d622": "Mostrando primero",
+              "linearLoginUnreadable": "No se puede leer el inicio de sesión guardado de Linear. Vuelve a conectarlo en Configuración.",
               "2c4b1c2c08": "número",
               "f2cc1e0ff6": "Linear / Proyectos",
               "906b5e4cb8": "Linear / Proyectos / {{value0}}",
@@ -6930,8 +6935,6 @@
           "0d9e293a02": "Refrescar",
           "c9b33eb5c0": "Actualizando…",
           "13647f9f80": "Vuelve a leer PATH de tu shell y vuelve a detectar los Agents instalados",
-          "dc4a2ffdc0": "Expandir override del comando",
-          "cea7d97be1": "Contraer override del comando",
           "db9e9e5887": "Personalizar comando",
           "959b67385b": "Establecer predeterminado",
           "24e032fa34": "Predeterminado",
@@ -6941,9 +6944,6 @@
           "8fbe1f37c1": "Entorno",
           "2d133152fa": "Sin entorno predeterminado",
           "agentPermissions": "Permisos de Agents",
-          "agentPermissionsInfo": "Información de permisos de Agents",
-          "agentPermissionsTooltip": "No se aplica a agents con argumentos de lanzamiento sobrescritos.",
-          "agentPermissionsDescription": "Elige si Orca lanza agents con menos prompts de permisos o con checks manuales.",
           "agentPermissionsYolo": "Yolo",
           "agentPermissionsManual": "Manual",
           "3f1bdf3cb4": "El texto de entorno es demasiado grande para analizarlo de forma segura.",
@@ -9299,7 +9299,6 @@
             "a79d266f71": "sesión",
             "afbf35be68": "sesión estable",
             "agentPermissions": "Permisos de agentes",
-            "agentPermissionsDescription": "Cambia los permisos predeterminados de los agentes entre Yolo y Manual.",
             "agentRuntime": "Runtime del agente",
             "agentRuntimeDescription": "Elige si los agentes se detectan y ejecutan en Windows o en WSL de forma predeterminada.",
             "7e15b89f6e": "servidor",
@@ -14489,7 +14488,9 @@
             "jiraMode": "Jira",
             "jiraSelectBindFailed": "Couldn’t link this Jira issue. Pick the matching site or reconnect Jira, then try again.",
             "emoji": "Emoji",
-            "loadingLinearIssue": "Cargando problema Linear..."
+            "loadingLinearIssue": "Cargando problema Linear...",
+            "linearLoginUnreadableTitle": "Vuelve a conectar Linear",
+            "linearLoginUnreadableBody": "No se puede leer el inicio de sesión guardado de Linear. Vuelve a conectarlo en Configuración."
           },
           "ProjectCombobox": {
             "empty": "Ningún proyecto coincide con tu búsqueda.",

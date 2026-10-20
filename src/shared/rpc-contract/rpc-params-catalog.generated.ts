@@ -405,6 +405,7 @@ import {
 } from './notifications-params'
 import {
   OrcadMigrationCatalogParams,
+  OrcadMigrationCatalogReferenceParams,
   OrcadMigrationCommitCatalogParams
 } from './orcad-migration-params'
 import {
@@ -1140,6 +1141,7 @@ export const RPC_PARAMS_BY_METHOD = {
   'notifications.unregisterPush': null,
   'notifications.unsubscribe': NotificationUnsubscribeParams,
   'orcad.migration.abortCatalog': OrcadMigrationCatalogParams,
+  'orcad.migration.abortCatalogByReference': OrcadMigrationCatalogReferenceParams,
   'orcad.migration.catalogState': OrcadMigrationCatalogParams,
   'orcad.migration.commitCatalog': OrcadMigrationCommitCatalogParams,
   'orcad.migration.stageBlobChunk': OrcadMigrationBlobChunkRequestSchema,

@@ -171,7 +171,9 @@ describe('a failed ACP turn says why', () => {
     const prompt = lane.openPrompt('c1', 1000)
     f.apply(lane.notification('_x.ai/queue/changed', queued(prompt.promptId), 1001))
     f.apply(lane.notification('_x.ai/session_notification', retryFailed, 1002))
-    f.apply(lane.notification('_x.ai/session_notification', ended(prompt.promptId, 'rate_limit'), 1003))
+    f.apply(
+      lane.notification('_x.ai/session_notification', ended(prompt.promptId, 'rate_limit'), 1003)
+    )
     f.apply(
       lane.notification(
         '_x.ai/session/prompt_complete',

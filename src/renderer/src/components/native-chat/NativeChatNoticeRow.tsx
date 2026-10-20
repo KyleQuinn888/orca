@@ -158,15 +158,17 @@ export function NativeChatNoticeRow({
           sayAgentSessionFailureTranslated
         )
       : failure && authSurface
-      ? agentSessionFailureSentence(
-          failure,
-          authSurface,
-          { agentName },
-          sayAgentSessionFailureTranslated
-        )
-      : block.text
-  const detail = failure?.detail?.audience === 'person' && failure.detail.text.trim() !== text.trim()
-    ? failure.detail.text : undefined
+        ? agentSessionFailureSentence(
+            failure,
+            authSurface,
+            { agentName },
+            sayAgentSessionFailureTranslated
+          )
+        : block.text
+  const detail =
+    failure?.detail?.audience === 'person' && failure.detail.text.trim() !== text.trim()
+      ? failure.detail.text
+      : undefined
   const tone = named ? 'notice' : look.kind === 'line' ? look.tone : null
   const Icon =
     tone === 'warning'

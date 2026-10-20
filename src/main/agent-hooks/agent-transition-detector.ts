@@ -182,8 +182,9 @@ export class AgentTransitionDetector {
     }
   }
 
-  // The window applies a pane's rows in arrival order, so the newest is the one it holds.
-  private latestRow(paneKey: string): AgentStatusIpcPayload | null {
+  /** The row the pane's phase reads. The window applies a pane's rows in arrival order, so the
+   *  newest is the one it holds. */
+  latestRow(paneKey: string): AgentStatusIpcPayload | null {
     let latest: AgentStatusIpcPayload | null = null
     for (const row of this.store?.getStatusSnapshotForPane(paneKey) ?? []) {
       if (!row.providerSessionOnly && (!latest || row.receivedAt > latest.receivedAt)) {

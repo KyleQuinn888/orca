@@ -459,11 +459,13 @@ describe('notice rows', () => {
   })
   it('retains person-facing usage details without inventing a provider frame', () => {
     renderStatus({
-      kind: 'status', tone: 'warning',
+      kind: 'status',
+      tone: 'warning',
       ...agentSessionFailureWords(
         agentSessionFailureFact('usageLimitReached', {
           detail: { audience: 'person', text: 'Your allowance resets tomorrow.' }
-        }), { surface: 'row' }
+        }),
+        { surface: 'row' }
       )
     })
     const disclosure = screen.getByText('Details').closest('details')

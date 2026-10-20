@@ -47,9 +47,15 @@ afterAll(() => restoreViewport())
 afterEach(cleanup)
 
 const continueUsageLimit = vi.fn()
-const usageLimitView = { hostLabel: null, remoteHost: false, continueAvailable: false,
-  offeredTurnItemId: null, continueNow: vi.fn(), usageLimitTurnItemId: 'item-2', continueUsageLimit }
-
+const usageLimitView = {
+  hostLabel: null,
+  remoteHost: false,
+  continueAvailable: false,
+  offeredTurnItemId: null,
+  continueNow: vi.fn(),
+  usageLimitTurnItemId: 'item-2',
+  continueUsageLimit
+}
 
 {
   const TURN_MS = 12_000
@@ -252,41 +258,80 @@ const usageLimitView = { hostLabel: null, remoteHost: false, continueAvailable: 
     readPhase: 'ready'
   }
 
-  it.each(['claude', 'codex', 'grok'] as const)('keeps a collapsed %s quota failure and Continue visible', (agent) => {
-    continueUsageLimit.mockClear()
-    const items: AgentJournalRenderItem[] = [
-      journalItem(1, { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'Start' }] }),
-      journalItem(2, { kind: 'turn', turnId: 'turn-1', userItemId: 'item-1',
-        state: 'completed', outcome: 'failure', startedAt: 1000, completedAt: 2000 }),
-      { ...journalItem(3, { kind: 'message', role: 'assistant', blocks: [{ type: 'text', text: 'Earlier work' }] }),
-        turnScope: { kind: 'turn', turnItemId: 'item-2' } },
-      { ...journalItem(4, { kind: 'status', tone: 'warning', ...agentSessionFailureWords({
-          kind: 'usageLimitReached', usageLimit: { window: 'session', resetsAt: Date.now() + 3600_000 },
-          detail: { text: 'The provider refused this request.', audience: 'person' }
-        }, { surface: 'row' }) }), turnScope: { kind: 'turn', turnItemId: 'item-2' } }
-    ]
-    render(
-      <TooltipProvider>
-        <NativeChatOrcaStopContext.Provider value={usageLimitView}>
-          <NativeChatMessageList
-            session={{ ...session, agent, status: 'ready', messages: projectStructuredAgentSessionMessages(items, [], []) }}
-            journalItems={items}
-            settledTurns={selectStructuredAgentSettledTurns(items)}
-            isWorking={false}
-            expandSignal={false}
-          />
-        </NativeChatOrcaStopContext.Provider>
-      </TooltipProvider>
-    )
-    expect(screen.getByRole('button', { name: 'Toggle turn details' })).toHaveAttribute('aria-expanded', 'false')
-    expect(screen.queryByText('Earlier work')).toBeNull()
-    expect(screen.getByText(/hit its session limit/)).toBeVisible()
-    expect(screen.getByText('Details')).toBeVisible()
-    const button = screen.getByRole('button', { name: 'Continue' })
-    expect(button).toBeVisible()
-    fireEvent.click(button)
-    expect(continueUsageLimit).toHaveBeenCalledOnce()
-  })
+  it.each(['claude', 'codex', 'grok'] as const)(
+    'keeps a collapsed %s quota failure and Continue visible',
+    (agent) => {
+      continueUsageLimit.mockClear()
+      const items: AgentJournalRenderItem[] = [
+        journalItem(1, {
+          kind: 'message',
+          role: 'user',
+          blocks: [{ type: 'text', text: 'Start' }]
+        }),
+        journalItem(2, {
+          kind: 'turn',
+          turnId: 'turn-1',
+          userItemId: 'item-1',
+          state: 'completed',
+          outcome: 'failure',
+          startedAt: 1000,
+          completedAt: 2000
+        }),
+        {
+          ...journalItem(3, {
+            kind: 'message',
+            role: 'assistant',
+            blocks: [{ type: 'text', text: 'Earlier work' }]
+          }),
+          turnScope: { kind: 'turn', turnItemId: 'item-2' }
+        },
+        {
+          ...journalItem(4, {
+            kind: 'status',
+            tone: 'warning',
+            ...agentSessionFailureWords(
+              {
+                kind: 'usageLimitReached',
+                usageLimit: { window: 'session', resetsAt: Date.now() + 3600_000 },
+                detail: { text: 'The provider refused this request.', audience: 'person' }
+              },
+              { surface: 'row' }
+            )
+          }),
+          turnScope: { kind: 'turn', turnItemId: 'item-2' }
+        }
+      ]
+      render(
+        <TooltipProvider>
+          <NativeChatOrcaStopContext.Provider value={usageLimitView}>
+            <NativeChatMessageList
+              session={{
+                ...session,
+                agent,
+                status: 'ready',
+                messages: projectStructuredAgentSessionMessages(items, [], [])
+              }}
+              journalItems={items}
+              settledTurns={selectStructuredAgentSettledTurns(items)}
+              isWorking={false}
+              expandSignal={false}
+            />
+          </NativeChatOrcaStopContext.Provider>
+        </TooltipProvider>
+      )
+      expect(screen.getByRole('button', { name: 'Toggle turn details' })).toHaveAttribute(
+        'aria-expanded',
+        'false'
+      )
+      expect(screen.queryByText('Earlier work')).toBeNull()
+      expect(screen.getByText(/hit its session limit/)).toBeVisible()
+      expect(screen.getByText('Details')).toBeVisible()
+      const button = screen.getByRole('button', { name: 'Continue' })
+      expect(button).toBeVisible()
+      fireEvent.click(button)
+      expect(continueUsageLimit).toHaveBeenCalledOnce()
+    }
+  )
 
   // The turn still runs while a Stop ends it, so its bar keeps the running clock; only the tail line
   // says the turn is stopping, and the bar settles to "Interrupted after" once the turn ends.

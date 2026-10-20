@@ -7,6 +7,8 @@ import type { SshRemotePtyLease } from '../../../shared/ssh-types'
 import type { LegacyRelayBridgedPane } from '../../../shared/legacy-relay-bridge-contract'
 import { parsePaneKey } from '../../../shared/stable-pane-id'
 import type { LegacyRelayPty } from './legacy-relay-client'
+import { isEpochScopedRelayPtyId } from '../../../shared/ssh-pending-pty-kill'
+import type { LegacyRelayPaneOwners } from './legacy-relay-pane-owners'
 
 export type { LegacyRelayPty }
 
@@ -95,6 +97,59 @@ export function toPane(
     ...(listed ? { listed } : {}),
     ...(lease.pendingKill ? { stopping: true as const } : {})
   }
+}
+
+/** Every leased pane not yet tracked, as unverifiable; null when all already are. */
+export function seededPanes(
+  targetId: string,
+  panes: ReadonlyMap<string, Pane>,
+  leases: ReadonlyMap<string, SshRemotePtyLease>
+): Map<string, Pane> | null {
+  const seeded = new Map(panes)
+  for (const [relayPtyId, lease] of leases) {
+    const ptyId = toAppSshPtyId(targetId, relayPtyId)
+    if (!seeded.has(ptyId)) {
+      seeded.set(ptyId, toPane(lease, relayPtyId, null, 'unverifiable'))
+    }
+  }
+  return seeded.size !== panes.size ? seeded : null
+}
+
+/**
+ * A leased pane after a listing, or the proof it ended: `exited` is its exit code, or `null` once
+ * every relay that could run it answered without it. `complete`: every relay the host runs was
+ * accounted for and answered.
+ */
+export function relistedPane(
+  lease: SshRemotePtyLease,
+  relayPtyId: string,
+  listedRows: readonly (LegacyRelayPty & { endpoint: string })[],
+  owners: LegacyRelayPaneOwners,
+  complete: boolean
+): Pane | { exited: number | null } {
+  const rows = listedRows.filter((row) => row.relayPtyId === relayPtyId)
+  if (owners.owner(relayPtyId) === undefined && rows.length > 1) {
+    owners.claim(relayPtyId, null)
+  }
+  const owner = owners.owner(relayPtyId)
+  // Why only on a complete listing: a relay that could not be asked, or that the host's census
+  // could not account for, may be the one running it, and an owner once pinned is never revisited.
+  // An epoch-scoped id names one process on one relay, so its sole lister is its owner regardless.
+  const provable = complete || isEpochScopedRelayPtyId(relayPtyId)
+  const adopted = owner === undefined && provable && rows.length === 1 ? rows[0] : undefined
+  const listed = owner ? rows.find((row) => row.endpoint === owner) : adopted
+  // A listing taken before the new owner's exit report must not bring the pane back live.
+  const exitedFirst = adopted && owners.exitBeforeAdoption(relayPtyId, adopted.endpoint)
+  if (exitedFirst !== undefined || (!listed && complete && (owner || rows.length === 0))) {
+    owners.forget(relayPtyId)
+    return { exited: exitedFirst ?? null }
+  }
+  if (listed) {
+    owners.claim(relayPtyId, listed.endpoint)
+    return toPane(lease, relayPtyId, listed.endpoint, 'live', listed)
+  }
+  // Unreachable or contested: loss of contact is never exit, so the pane waits.
+  return toPane(lease, relayPtyId, null, 'unverifiable')
 }
 
 /** The panes a bridge serves; a closed tab's pane, its stop owed or its lease ended, is not one. */

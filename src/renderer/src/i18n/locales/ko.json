@@ -40,7 +40,9 @@
       "providers": {
         "title": "공급자",
         "antigravityDescription": "Antigravity 채팅은 Orca가 이 호스트에 다운로드하는 서버에서 실행되며, agy CLI와는 별개입니다.",
-        "antigravityNotSignedIn": "로그인되어 있지 않습니다. 채팅에는 터미널 agy 계정과 별개인 Antigravity 로그인이 필요합니다."
+        "antigravityNotSignedIn": "로그인되어 있지 않습니다. 채팅에는 터미널 agy 계정과 별개인 Antigravity 로그인이 필요합니다.",
+        "antigravityAccount": "계정",
+        "antigravitySignInNeeded": "채팅에는 터미널 agy 계정과 별개인 Antigravity 로그인이 필요합니다."
       }
     },
     "terminal": {
@@ -2127,6 +2129,8 @@
         "851017590d": "Linear 액세스 추가",
         "228b25028f": "여기에서 직접 할당된 Linear 이슈를 찾아보고 작업을 시작하세요.",
         "6d56559467": "Linear 계정 연결",
+        "linearLoginUnreadableTitle": "Linear 다시 연결",
+        "linearLoginUnreadableBody": "저장된 Linear 로그인을 읽을 수 없습니다. 설정에서 다시 연결하세요.",
         "eee68073b2": "Jira에서 열기",
         "9497f2787c": "워크스페이스 시작",
         "eba87f2edb": "Jira 이슈가 발견되지 않았습니다.",
@@ -2886,6 +2890,7 @@
               "93e1f6bfca": "로드 중",
               "98730088a6": ". 전체 세트를 보려면 Linear를 검색하거나 엽니다.",
               "06b887d622": "처음 표시",
+              "linearLoginUnreadable": "저장된 Linear 로그인을 읽을 수 없습니다. 설정에서 다시 연결하세요.",
               "2c4b1c2c08": "숫자",
               "f2cc1e0ff6": "Linear / 프로젝트",
               "906b5e4cb8": "Linear / 프로젝트 / {{value0}}",
@@ -6920,8 +6925,6 @@
           "0d9e293a02": "새로고침",
           "c9b33eb5c0": "새로고침 중…",
           "13647f9f80": "셸 PATH를 다시 읽고 설치된 에이전트를 다시 감지합니다",
-          "dc4a2ffdc0": "명령 재정의 펼치기",
-          "cea7d97be1": "명령 재정의 접기",
           "db9e9e5887": "명령 사용자 정의",
           "959b67385b": "기본값 설정",
           "24e032fa34": "기본",
@@ -6931,9 +6934,6 @@
           "8fbe1f37c1": "환경",
           "2d133152fa": "기본 환경 없음",
           "agentPermissions": "에이전트 권한",
-          "agentPermissionsInfo": "에이전트 권한 정보",
-          "agentPermissionsTooltip": "실행 인수를 재정의한 에이전트에는 적용되지 않습니다.",
-          "agentPermissionsDescription": "Orca가 에이전트를 실행할 때 권한 프롬프트를 줄일지, 수동 확인을 유지할지 선택합니다.",
           "agentPermissionsYolo": "Yolo",
           "agentPermissionsManual": "수동",
           "3f1bdf3cb4": "환경 텍스트가 너무 커서 안전하게 파싱할 수 없습니다.",
@@ -9289,7 +9289,6 @@
             "a79d266f71": "세션",
             "afbf35be68": "안정적인 세션",
             "agentPermissions": "에이전트 권한",
-            "agentPermissionsDescription": "에이전트 권한 기본값을 Yolo와 수동 사이에서 전환합니다.",
             "agentRuntime": "에이전트 런타임",
             "agentRuntimeDescription": "기본적으로 Windows 또는 WSL에서 agents를 감지하고 시작할지 선택합니다.",
             "runtime": "런타임",
@@ -14494,7 +14493,9 @@
             "jiraMode": "Jira",
             "jiraSelectBindFailed": "Couldn’t link this Jira issue. Pick the matching site or reconnect Jira, then try again.",
             "emoji": "Emoji",
-            "loadingLinearIssue": "Linear 문제 로드 중…"
+            "loadingLinearIssue": "Linear 문제 로드 중…",
+            "linearLoginUnreadableTitle": "Linear 다시 연결",
+            "linearLoginUnreadableBody": "저장된 Linear 로그인을 읽을 수 없습니다. 설정에서 다시 연결하세요."
           },
           "ProjectCombobox": {
             "empty": "검색과 일치하는 프로젝트가 없습니다.",

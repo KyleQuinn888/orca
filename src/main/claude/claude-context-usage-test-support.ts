@@ -22,9 +22,17 @@ import { claudeTurnLifecycleIdentity } from './claude-turn-lifecycle-item'
 export function journal({ deferred = false } = {}) {
   const queued: (() => void)[] = []
   const run = (write: () => void): void => {
-    if (deferred) { queued.push(write) } else { write() }
+    if (deferred) {
+      queued.push(write)
+    } else {
+      write()
+    }
   }
-  const flush = (): void => { while (queued.length) { queued.shift()!() } }
+  const flush = (): void => {
+    while (queued.length) {
+      queued.shift()!()
+    }
+  }
   const clock = { now: 0 }
   const appends: { identity: AgentJournalItemIdentity; body: AgentJournalItemBody }[] = []
   const rows = new Map<string, AgentJournalRenderItem>()
@@ -37,7 +45,9 @@ export function journal({ deferred = false } = {}) {
       revision: (existing?.revision ?? 0) + 1,
       sequence: existing?.sequence ?? rows.size + 1,
       observedAt: existing?.observedAt ?? options?.observedAt ?? clock.now,
-      ...options, turnScope: existing?.turnScope ?? options.turnScope, body
+      ...options,
+      turnScope: existing?.turnScope ?? options.turnScope,
+      body
     })
   }
   const scans = { count: 0 }
@@ -59,14 +69,20 @@ export function journal({ deferred = false } = {}) {
   ) => {
     run(() => {
       const resolved = resolve(bound)
-      if (resolved) { appendItem(resolved.identity, resolved.body, options) }
+      if (resolved) {
+        appendItem(resolved.identity, resolved.body, options)
+      }
     })
     return { accepted: true }
   }
   const stopState = createJournalReducerState('orca-session', 'test')
-  const queueStop = (turnId: string, at: number): void => run(() => {
-    stopState.queuePauseMarks.latestStop = { sequence: rows.size + 1, event: { reason: 'user-stop', turnId, at } }
-  })
+  const queueStop = (turnId: string, at: number): void =>
+    run(() => {
+      stopState.queuePauseMarks.latestStop = {
+        sequence: rows.size + 1,
+        event: { reason: 'user-stop', turnId, at }
+      }
+    })
   const sink: StructuredAgentSessionEventSink = {
     journalStopDecidesTurn: (turnId, at) => personStopDecidesTurn(stopState, turnId, at),
     appendItem: (...args) => run(() => appendItem(...args)),
@@ -159,7 +175,10 @@ export const turnIdentity = (turnId: string) =>
   claudeTurnLifecycleIdentity('claude-session', turnId)
 
 /** Every turn the CLI runs opens with an init naming the main model as `modelUsage` keys it. */
-export function setup({ init = 'claude-fable-5-1[1m]', deferred = false }: { init?: string | null; deferred?: boolean } = {}) {
+export function setup({
+  init = 'claude-fable-5-1[1m]',
+  deferred = false
+}: { init?: string | null; deferred?: boolean } = {}) {
   const state = journal({ deferred })
   const translator = createClaudeJournalTranslator({ sink: state.sink, coalesceMs: 0 })
   const requests: ClaudeContextReportTarget[] = []

@@ -217,7 +217,7 @@ export const WORKTREE_METHODS = [
     permission: 'workspace',
     params: WorktreeSortOrder,
     handler: async (params, { runtime }) =>
-      runtime.persistManagedWorktreeSortOrder(params.orderedIds)
+      runtime.persistManagedWorktreeSortOrder(params.orderedIds, params.hostIds)
   }),
   defineMethod({
     name: 'worktree.resolvePrBase',

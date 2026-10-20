@@ -114,36 +114,43 @@ export function useNativeChatInterruptedContinuation(input: {
     transport.sendBlockedReason === undefined
       ? usageLimitCut.turnItemId
       : null
-  const continueUsageLimit = useCallback((hadFocus = false): void => {
-    if (
-      usageLimitTurnItemId === null ||
-      usageCapability === 'unknown' ||
-      getStructuredAgentSessionPendingSends(sessionId).length > 0
-    ) {
-      return
-    }
-    const turnItemId = usageLimitTurnItemId
-    setUsageFailure(null)
-    reportComposerError(null)
-    // Keeping the draft must not keep the previous send's error.
-    publishStructuredAgentSessionSends(sessionId, { notice: null })
-    const transport = latestTransport.current
-    const admission = transport.send(NATIVE_CHAT_USAGE_LIMIT_CONTINUE_MESSAGE, [], {
-      callerKeepsText: true,
-      ...(usageCapability === 'supported' ? { usageLimitContinuationOfTurnItemId: turnItemId } : {}),
-      onSettled: (outcome) => {
-        if (outcome === 'returned' || outcome === 'unconfirmed') {
-          setUsageFailure({ turnItemId, unconfirmed: outcome === 'unconfirmed' })
+  const continueUsageLimit = useCallback(
+    (hadFocus = false): void => {
+      if (
+        usageLimitTurnItemId === null ||
+        usageCapability === 'unknown' ||
+        getStructuredAgentSessionPendingSends(sessionId).length > 0
+      ) {
+        return
+      }
+      const turnItemId = usageLimitTurnItemId
+      setUsageFailure(null)
+      reportComposerError(null)
+      // Keeping the draft must not keep the previous send's error.
+      publishStructuredAgentSessionSends(sessionId, { notice: null })
+      const transport = latestTransport.current
+      const admission = transport.send(NATIVE_CHAT_USAGE_LIMIT_CONTINUE_MESSAGE, [], {
+        callerKeepsText: true,
+        ...(usageCapability === 'supported'
+          ? { usageLimitContinuationOfTurnItemId: turnItemId }
+          : {}),
+        onSettled: (outcome) => {
+          if (outcome === 'returned' || outcome === 'unconfirmed') {
+            setUsageFailure({ turnItemId, unconfirmed: outcome === 'unconfirmed' })
+          }
+        }
+      })
+      if (admission === false) {
+        setUsageFailure({ turnItemId, unconfirmed: false })
+      } else {
+        completeNativeChatStructuredUserAction(agent, transport, admission === true)
+        if (hadFocus) {
+          focusComposer()
         }
       }
-    })
-    if (admission === false) {
-      setUsageFailure({ turnItemId, unconfirmed: false })
-    } else {
-      completeNativeChatStructuredUserAction(agent, transport, admission === true)
-      if (hadFocus) { focusComposer() }
-    }
-  }, [usageLimitTurnItemId, usageCapability, sessionId, reportComposerError, focusComposer, agent])
+    },
+    [usageLimitTurnItemId, usageCapability, sessionId, reportComposerError, focusComposer, agent]
+  )
   const continueNow = useCallback((): void => {
     if (offered === null) {
       return
@@ -244,7 +251,9 @@ export function NativeChatInterruptedContinueButton({
             type="button"
             size="xs"
             aria-describedby={explanationId}
-            onClick={(event) => onContinue(event.currentTarget === event.currentTarget.ownerDocument.activeElement)}
+            onClick={(event) =>
+              onContinue(event.currentTarget === event.currentTarget.ownerDocument.activeElement)
+            }
             disabled={disabled}
           >
             <Play />

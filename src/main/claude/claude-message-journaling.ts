@@ -103,12 +103,25 @@ export function journalClaudeMessage(
   }
   const openOutputTurn = (): void => ctx.turn.ensureOpen(message, source, observedAt)
   const messageBody = claudeMessageBody(outputEnvelope)
-  const ordinaryFailure = typeof message.api_error === 'string' && message.api_error !== 'usage_limit_reached'
-    ? { kind: 'status' as const, tone: 'error' as const, ...agentSessionFailureWords({ kind: 'providerRejected' }, { agentName: 'Claude', provider: 'claude', surface: 'row' }) } : null
-  const terminal = envelope.role === 'assistant' && producerRef === null &&
+  const ordinaryFailure =
+    typeof message.api_error === 'string' && message.api_error !== 'usage_limit_reached'
+      ? {
+          kind: 'status' as const,
+          tone: 'error' as const,
+          ...agentSessionFailureWords(
+            { kind: 'providerRejected' },
+            { agentName: 'Claude', provider: 'claude', surface: 'row' }
+          )
+        }
+      : null
+  const terminal =
+    envelope.role === 'assistant' &&
+    producerRef === null &&
     (typeof message.api_error === 'string' || message.error === 'rate_limit')
-  if (envelope.role === 'assistant' &&
-    (messageBody || typeof message.api_error === 'string' || message.error === 'rate_limit')) {
+  if (
+    envelope.role === 'assistant' &&
+    (messageBody || typeof message.api_error === 'string' || message.error === 'rate_limit')
+  ) {
     openOutputTurn()
   }
   const usageLimit = ctx.usageLimits.assistant(message, ctx.turn)
@@ -116,9 +129,9 @@ export function journalClaudeMessage(
     ctx.authenticationFailures.assistant(message) ??
     usageLimit ??
     ctx.threadGoal.report(message, claudeMessageIdentity(envelope), observedAt) ??
-    messageBody ?? ordinaryFailure
-  const terminalIdentity = terminal && ctx.turn.identity && usageLimit
-    ? ctx.turn.identity : null
+    messageBody ??
+    ordinaryFailure
+  const terminalIdentity = terminal && ctx.turn.identity && usageLimit ? ctx.turn.identity : null
   const identity =
     (body && envelope.role === 'assistant'
       ? ctx.streamedBlocks.reconcile(envelope)?.identity

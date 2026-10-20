@@ -1,6 +1,14 @@
 // @vitest-environment happy-dom
 import '@testing-library/jest-dom/vitest'
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor
+} from '@testing-library/react'
 import { useRef, useState } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -18,11 +26,17 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock('@/lib/native-chat-telemetry', () => ({ emitNativeChatMessageSent: vi.fn() }))
-vi.mock('@/lib/worker-terminal-takeover-report', () => ({ reportStructuredSessionUserInput: vi.fn() }))
+vi.mock('@/lib/worker-terminal-takeover-report', () => ({
+  reportStructuredSessionUserInput: vi.fn()
+}))
 
 vi.mock('@/i18n/i18n', () => ({ translate: (_key: string, fallback: string) => fallback }))
-vi.mock('@/runtime/runtime-rpc-client', () => ({ ensureRuntimeEnvironmentCompatible: async () => {} }))
-vi.mock('@/lib/structured-agent-session-launch-label', () => ({ structuredAgentLabel: () => 'Codex' }))
+vi.mock('@/runtime/runtime-rpc-client', () => ({
+  ensureRuntimeEnvironmentCompatible: async () => {}
+}))
+vi.mock('@/lib/structured-agent-session-launch-label', () => ({
+  structuredAgentLabel: () => 'Codex'
+}))
 vi.mock('@/runtime/structured-agent-session-client', () => ({
   callStructuredAgentSession: mocks.call
 }))
@@ -110,7 +124,9 @@ function Harness(props: Props): React.JSX.Element {
   const [composerError, setComposerError] = useState<string | null>(null)
   const continuation = useNativeChatInterruptedContinuation({
     reportComposerError: setComposerError,
-    focusComposer: () => { composerRef.current?.focus() },
+    focusComposer: () => {
+      composerRef.current?.focus()
+    },
     target: props.target ?? PAIRED,
     agent: 'codex',
     sessionId: 'session-1',
@@ -118,7 +134,16 @@ function Harness(props: Props): React.JSX.Element {
     submissions: props.submissions ?? [],
     isWorking: props.isWorking ?? false,
     pending: props.pending ?? [],
-    transport: props.transport ?? { send: () => true, dispatchCommand: async () => ({ handled: false, accepted: false, error: null }), optionsSurface, optionSnapshot: [], onError: () => {}, runtime: 'remote', sessionId: 'session-1', runtimeEnvironmentId: 'studio-mac' }
+    transport: props.transport ?? {
+      send: () => true,
+      dispatchCommand: async () => ({ handled: false, accepted: false, error: null }),
+      optionsSurface,
+      optionSnapshot: [],
+      onError: () => {},
+      runtime: 'remote',
+      sessionId: 'session-1',
+      runtimeEnvironmentId: 'studio-mac'
+    }
   })
   return (
     <TooltipProvider delayDuration={0}>
@@ -131,8 +156,10 @@ function Harness(props: Props): React.JSX.Element {
         compose
       </button>
       {continuation.view.usageLimitTurnItemId === null ? null : (
-        <NativeChatInterruptedContinueButton onContinue={continuation.view.continueUsageLimit}
-          disabled={continuation.view.usageLimitContinueDisabled} />
+        <NativeChatInterruptedContinueButton
+          onContinue={continuation.view.continueUsageLimit}
+          disabled={continuation.view.usageLimitContinueDisabled}
+        />
       )}
       {/* As the cut's own row shows it. */}
       {continuation.view.offeredTurnItemId === null ? null : (
@@ -319,29 +346,69 @@ describe('Continue on a reply an Orca stop cut off', () => {
   })
 })
 
-
 it('keeps the draft through Continue admission, refusal, uncertainty and recorded-before-journal', async () => {
   const items: AgentJournalRenderItem[] = [
-    { ...cutChat[0]!, body: { kind: 'turn', turnId: 'cut', state: 'completed', outcome: 'failure', startedAt: 1, completedAt: 5 } },
-    { ...cutChat[1]!, body: { kind: 'status', ...agentSessionFailureWords({ kind: 'usageLimitReached' }, { surface: 'row' }) } }
+    {
+      ...cutChat[0]!,
+      body: {
+        kind: 'turn',
+        turnId: 'cut',
+        state: 'completed',
+        outcome: 'failure',
+        startedAt: 1,
+        completedAt: 5
+      }
+    },
+    {
+      ...cutChat[1]!,
+      body: {
+        kind: 'status',
+        ...agentSessionFailureWords({ kind: 'usageLimitReached' }, { surface: 'row' })
+      }
+    }
   ]
   const scope = structuredAgentSessionDraftScopeKey('session-1')
-  const draft = { text: 'My unfinished request', images: [{ id: 'attached', path: '/tmp/photo.png' }] }
+  const draft = {
+    text: 'My unfinished request',
+    images: [{ id: 'attached', path: '/tmp/photo.png' }]
+  }
   updateNativeChatComposerDraft(scope, draft, 'immediate')
   const options = { model: 'gpt-current', effort: 'high' }
   const uploading = { id: 'upload', path: '', pending: true, pendingName: 'next.png' }
   const reveal = vi.fn()
   function LiveHarness() {
     const sends = useStructuredAgentSessionSends({
-      sessionId: 'session-1', target: PAIRED, fence: 1, submissions: [], queuedMessageIds: [],
-      queue: { capability: 'unsupported', enabled: false }, historyLoaded: false, sendOptions: () => options
+      sessionId: 'session-1',
+      target: PAIRED,
+      fence: 1,
+      submissions: [],
+      queuedMessageIds: [],
+      queue: { capability: 'unsupported', enabled: false },
+      historyLoaded: false,
+      sendOptions: () => options
     })
     const transport: NativeChatStructuredComposerTransport = {
-      send: (text, images, request) => sends.send(text, images.map((image) => ({ path: image.path, previewUri: image.path })), request),
-      onSubmitted: reveal, onError: vi.fn(), dispatchCommand: async () => ({ handled: false, accepted: false, error: null }),
-      optionsSurface, optionSnapshot: [], runtime: 'remote', sessionId: 'session-1', runtimeEnvironmentId: 'studio-mac'
+      send: (text, images, request) =>
+        sends.send(
+          text,
+          images.map((image) => ({ path: image.path, previewUri: image.path })),
+          request
+        ),
+      onSubmitted: reveal,
+      onError: vi.fn(),
+      dispatchCommand: async () => ({ handled: false, accepted: false, error: null }),
+      optionsSurface,
+      optionSnapshot: [],
+      runtime: 'remote',
+      sessionId: 'session-1',
+      runtimeEnvironmentId: 'studio-mac'
     }
-    return <><span>{uploading.pendingName}</span><Harness journalItems={items} transport={transport} pending={sends.pending} /></>
+    return (
+      <>
+        <span>{uploading.pendingName}</span>
+        <Harness journalItems={items} transport={transport} pending={sends.pending} />
+      </>
+    )
   }
   let answer = Promise.withResolvers<unknown>()
   mocks.call.mockImplementation(() => answer.promise)
@@ -360,14 +427,32 @@ it('keeps the draft through Continue admission, refusal, uncertainty and recorde
   expect(screen.getByTestId('error')).toHaveTextContent('none')
   expect(continueButton()).toBeNull()
   await waitFor(() => expect(mocks.call).toHaveBeenCalledOnce())
-  expect(mocks.call.mock.calls[0].slice(0, 3)).toMatchObject([PAIRED, 'agentSession.send', {
-    body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: 'Continue where you left off.' }] },
-    options, usageLimitContinuationOfTurnItemId: TURN
-  }])
+  expect(mocks.call.mock.calls[0].slice(0, 3)).toMatchObject([
+    PAIRED,
+    'agentSession.send',
+    {
+      body: {
+        kind: 'message',
+        role: 'user',
+        blocks: [{ type: 'text', text: 'Continue where you left off.' }]
+      },
+      options,
+      usageLimitContinuationOfTurnItemId: TURN
+    }
+  ])
   expect(reveal).toHaveBeenCalledOnce()
   expect(reportStructuredSessionUserInput).toHaveBeenCalledWith('session-1', 'studio-mac')
   expect(emitNativeChatMessageSent).toHaveBeenCalledWith({ agent: 'codex', runtime: 'remote' })
-  await act(async () => answer.resolve({ ok: false, refusal: { code: 'agent_session_operation_invalid', details: { reason: 'providerRejected' }, message: 'Refused' } }))
+  await act(async () =>
+    answer.resolve({
+      ok: false,
+      refusal: {
+        code: 'agent_session_operation_invalid',
+        details: { reason: 'providerRejected' },
+        message: 'Refused'
+      }
+    })
+  )
   await waitFor(() => expect(continueButton()).toBeInTheDocument())
   expect(screen.getByTestId('error')).toHaveTextContent(FAILED)
   expect(readNativeChatComposerDraft(scope)).toMatchObject(draft)
@@ -379,7 +464,9 @@ it('keeps the draft through Continue admission, refusal, uncertainty and recorde
   await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(2))
   expect(mocks.call.mock.calls[1][2]).not.toHaveProperty('usageLimitContinuationOfTurnItemId')
   await act(async () => answer.reject(new Error('connection lost')))
-  await waitFor(() => expect(screen.getByTestId('error')).toHaveTextContent('Check the chat before trying again.'))
+  await waitFor(() =>
+    expect(screen.getByTestId('error')).toHaveTextContent('Check the chat before trying again.')
+  )
   expect(screen.getByTestId('error')).not.toHaveTextContent('was not sent')
   expect(readNativeChatComposerDraft(scope)).toMatchObject(draft)
   mocks.capability = 'supported'
@@ -388,8 +475,14 @@ it('keeps the draft through Continue admission, refusal, uncertainty and recorde
   fireEvent.click(continueButton()!)
   await waitFor(() => expect(mocks.call).toHaveBeenCalledTimes(3))
   const id = mocks.call.mock.calls[2][2].envelope.clientOperationId
-  await act(async () => answer.resolve({ ok: true, fence: 1, cursor: { epoch: 'e', sequence: 5 },
-    value: { clientMessageId: id, submission: { clientMessageId: id, dispatchState: 'accepted' } } }))
+  await act(async () =>
+    answer.resolve({
+      ok: true,
+      fence: 1,
+      cursor: { epoch: 'e', sequence: 5 },
+      value: { clientMessageId: id, submission: { clientMessageId: id, dispatchState: 'accepted' } }
+    })
+  )
   // Accepted before the journal arrives: the recorded sender entry still owns availability.
   expect(continueButton()).toBeNull()
   expect(readNativeChatComposerDraft(scope)).toMatchObject(draft)
@@ -399,18 +492,52 @@ it('keeps the draft through Continue admission, refusal, uncertainty and recorde
 
 it('keeps the notice view stable while Continue invokes the latest committed transport', () => {
   const items: AgentJournalRenderItem[] = [
-    { ...cutChat[0]!, body: { kind: 'turn', turnId: 'cut', state: 'completed', outcome: 'failure', startedAt: 1, completedAt: 5 } },
-    { ...cutChat[1]!, body: { kind: 'status', ...agentSessionFailureWords({ kind: 'usageLimitReached' }, { surface: 'row' }) } }
+    {
+      ...cutChat[0]!,
+      body: {
+        kind: 'turn',
+        turnId: 'cut',
+        state: 'completed',
+        outcome: 'failure',
+        startedAt: 1,
+        completedAt: 5
+      }
+    },
+    {
+      ...cutChat[1]!,
+      body: {
+        kind: 'status',
+        ...agentSessionFailureWords({ kind: 'usageLimitReached' }, { surface: 'row' })
+      }
+    }
   ]
   const first = vi.fn(() => true)
   const latest = vi.fn(() => true)
   const transport: NativeChatStructuredComposerTransport = {
-    send: first, dispatchCommand: async () => ({ handled: false, accepted: false, error: null }),
-    optionsSurface, optionSnapshot: [], onError: () => {}, runtime: 'remote', sessionId: 'session-1', runtimeEnvironmentId: 'studio-mac'
+    send: first,
+    dispatchCommand: async () => ({ handled: false, accepted: false, error: null }),
+    optionsSurface,
+    optionSnapshot: [],
+    onError: () => {},
+    runtime: 'remote',
+    sessionId: 'session-1',
+    runtimeEnvironmentId: 'studio-mac'
   }
-  const input = { target: PAIRED, agent: 'codex' as const, sessionId: 'session-1', journalItems: items,
-    submissions: [], isWorking: false, pending: [], reportComposerError: vi.fn(), focusComposer: vi.fn(), transport }
-  const { result, rerender } = renderHook((props) => useNativeChatInterruptedContinuation(props), { initialProps: input })
+  const input = {
+    target: PAIRED,
+    agent: 'codex' as const,
+    sessionId: 'session-1',
+    journalItems: items,
+    submissions: [],
+    isWorking: false,
+    pending: [],
+    reportComposerError: vi.fn(),
+    focusComposer: vi.fn(),
+    transport
+  }
+  const { result, rerender } = renderHook((props) => useNativeChatInterruptedContinuation(props), {
+    initialProps: input
+  })
   const view = result.current.view
   rerender({ ...input, transport: { ...transport, send: latest } })
   expect(result.current.view).toBe(view)

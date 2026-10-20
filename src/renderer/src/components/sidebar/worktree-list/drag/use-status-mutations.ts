@@ -99,18 +99,17 @@ export function useWorktreeStatusMutations(args: {
     [manualOrderCatalog, updateWorktreesMeta, workspaceStatuses]
   )
 
-  const pinWorktree = useCallback(
-    (worktreeId: string) => {
-      setWorktreesPinnedAndReveal([worktreeId], true)
+  const pinWorktrees = useCallback(
+    (worktreeIds: readonly string[], draggedCopies?: DraggedWorktreeCopies) => {
+      const rowsFor = dropWriteRows(useAppStore.getState(), draggedCopies)
+      setWorktreesPinnedAndReveal(worktreeIds.flatMap(rowsFor.status), true)
     },
     [setWorktreesPinnedAndReveal]
   )
 
-  const pinWorktrees = useCallback(
-    (worktreeIds: readonly string[]) => {
-      setWorktreesPinnedAndReveal(worktreeIds, true)
-    },
-    [setWorktreesPinnedAndReveal]
+  const pinWorktree = useCallback(
+    (worktreeId: string) => pinWorktrees([worktreeId]),
+    [pinWorktrees]
   )
 
   const reorderWorktrees = useCallback(

@@ -59,7 +59,10 @@ function written(): {
   return updateWorktreesMeta.mock.calls[0]?.[0] ?? []
 }
 
-function writtenHosts(worktreeId = TWIN_ID, field?: 'workspaceStatus' | 'manualOrder') {
+function writtenHosts(
+  worktreeId = TWIN_ID,
+  field?: 'workspaceStatus' | 'manualOrder' | 'isPinned'
+) {
   return written()
     .filter((u) => u.worktreeId === worktreeId && (!field || field in (u.updates ?? {})))
     .map((u) => u.executionHostId)
@@ -319,7 +322,31 @@ describe('a sidebar drop on one card of a twin', () => {
     ).toBe(false)
   })
 
+  it('pins the dragged copy of a twin dropped on Pinned, not the copy the id-keyed map kept', async () => {
+    const { dragged } = seedTwins()
+    const mutations = renderMutations()
+
+    await act(async () => {
+      mutations.current.pinWorktrees([TWIN_ID], copyOf(dragged))
+    })
+
+    expect(writtenHosts(TWIN_ID, 'isPinned')).toEqual([dragged.hostId])
+  })
+
+  it('refuses a host-less pin of an id two hosts publish', async () => {
+    seedTwins()
+    const mutations = renderMutations()
+
+    await act(async () => {
+      mutations.current.pinWorktree(TWIN_ID)
+      useAppStore.getState().setWorktreesPinnedAndReveal([{ id: TWIN_ID }], true)
+    })
+
+    expect(updateWorktreesMeta).not.toHaveBeenCalled()
+  })
+
   it('hands the drop the copies the active drag picked up', () => {
+    const onPinWorktrees = vi.fn()
     const onMoveWorktreesToStatusAtIndex = vi.fn()
     const onReorderWorktrees = vi.fn()
     const onMoveWorktreesToStatus = vi.fn()
@@ -337,7 +364,7 @@ describe('a sidebar drop on one card of a twin', () => {
         onMoveWorktreesToStatus,
         onMoveWorktreesToStatusAtIndex,
         onReorderWorktrees,
-        onPinWorktrees: vi.fn()
+        onPinWorktrees
       })
     )
     const ctx: WorktreeDropCommitContext = result.current
@@ -359,5 +386,7 @@ describe('a sidebar drop on one card of a twin', () => {
     expect(onMoveWorktreesToStatus).toHaveBeenCalledWith([TWIN_ID], 'done', draggedCopies)
     expect(onMoveWorktreesToStatusAtIndex.mock.calls[0][0].draggedCopies).toBe(draggedCopies)
     expect(onReorderWorktrees.mock.calls[0][0].draggedCopies).toBe(draggedCopies)
+    ctx.onPinWorktrees([TWIN_ID])
+    expect(onPinWorktrees).toHaveBeenCalledWith([TWIN_ID], draggedCopies)
   })
 })

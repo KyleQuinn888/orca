@@ -5,6 +5,7 @@ import {
   isDaemonInitTestSupportChange,
   isUnitTestSupportSource
 } from './pr-code-change-scope.mjs'
+import { MANAGED_SSH_E2E_SPEC_PREFIX } from './ci-e2e-job-selection.mjs'
 import { LAYOUT_ORACLE_E2E_SPECS } from './pr-layout-oracle-route.mjs'
 
 const isProductSource = (file) => !/\.test\.tsx?$/.test(file) && !isUnitTestSupportSource(file)
@@ -20,10 +21,10 @@ const NATIVE_IME_PRODUCT_SOURCE =
 const NATIVE_IME_HARNESS =
   /^(?:config\/scripts\/focus-nested-wayland-terminal\.sh$|config\/scripts\/(?:run-terminal-ibus-hangul-e2e|terminal-ime-engagement-receipt)\.mjs$|tests\/e2e\/terminal-ime-(?:boundary-probe|byte-reader|engagement-receipt)\.ts$|tests\/e2e\/terminal-(?:ibus-hangul|hangul-terminating-digit|macos-2set-korean)-native\.spec\.ts$)/
 
-/**
- * Managed-SSH harness helpers; every managed-SSH spec runs in one job, so any route may claim them.
- * `pr-e2e-managed-ssh-harness-route.test.mjs` fails when a helper only these specs import is missing.
- */
+// This spec requires ORCA_SIDEBAR_INPUTS=main; ordinary PR builds can only skip it.
+export const MANUAL_ONLY_E2E_SPECS = ['tests/e2e/ssh-orcad-phone-feed-list.spec.ts']
+
+// Shared fixtures and workflow changes must exercise every managed-SSH consumer.
 const MANAGED_SSH_HARNESS =
   /^tests\/e2e\/helpers\/(?:orcad-managed-workspace|orcad-convert-(?:flow|host|teardown)|orcad-template-variant|orcad-upgrade-(?:profile|retained-state)|docker-ssh-host-target|reserve-local-port|ssh-remote-only-browser-fixture|windows-host-orcad-processes)\.ts$/
 
@@ -270,18 +271,6 @@ export const PR_E2E_SOURCE_ROUTES = [
       )
   },
   {
-    // The spec runs only in a switch-on build; it guards the phone's list against the desktop's.
-    id: 'ssh.orcad-phone-feed-list',
-    specs: ['tests/e2e/ssh-orcad-phone-feed-list.spec.ts'],
-    matches: (file) =>
-      MANAGED_SSH_HARNESS.test(file) ||
-      /^tests\/e2e\/helpers\/(?:phone-feed-list|sidebar-inputs-build)\.ts$/.test(file) ||
-      (isProductSource(file) &&
-        /^(?:src\/shared\/sidebar-list\/sidebar-(?:feed|inputs)-|mobile\/src\/host-screen\/host-sidebar-feed-)/.test(
-          file
-        ))
-  },
-  {
     id: 'browser-network.ssh-docker-route',
     specs: ['tests/e2e/ssh-browser-network-execution-route.docker.unit.test.ts'],
     matches: (file) =>
@@ -475,7 +464,10 @@ export function selectPrE2eSpecs(
   // The required layout_oracle job owns the oracle specs; running them here too would double the cost.
   const specs = new Set(
     changedPaths.filter(
-      (file) => /^tests\/e2e\/.*\.spec\.ts$/.test(file) && !LAYOUT_ORACLE_E2E_SPECS.includes(file)
+      (file) =>
+        /^tests\/e2e\/.*\.spec\.ts$/.test(file) &&
+        !LAYOUT_ORACLE_E2E_SPECS.includes(file) &&
+        !MANUAL_ONLY_E2E_SPECS.includes(file)
     )
   )
   for (const route of PR_E2E_SOURCE_ROUTES) {
@@ -485,6 +477,17 @@ export function selectPrE2eSpecs(
     }
     route.specs.forEach((spec) => specs.add(spec))
     reportRoute(`[pr-e2e] ${route.id}: ${route.specs.join(', ')}`)
+  }
+  if (
+    routePaths.some(
+      (file) =>
+        (file.startsWith('tests/e2e/helpers/') &&
+          [...specs].some((spec) => spec.startsWith(MANAGED_SSH_E2E_SPEC_PREFIX))) ||
+        file === '.github/workflows/e2e.yml' ||
+        file === 'config/scripts/ci-e2e-job-selection.mjs'
+    )
+  ) {
+    specs.add(MANAGED_SSH_E2E_SPEC_PREFIX)
   }
   return [...specs].sort((left, right) => left.localeCompare(right))
 }

@@ -81,59 +81,66 @@ function goalSink(
 }
 
 describe('Claude /goal journaling', () => {
-  it.each([false, true])('journals the goal and its completion before adjacent idle (deferred %s)', (deferred) => {
-    const { frame, reply, result, goals, flush } = goalSink(null, undefined, deferred)
-    reply('goal-set', '<synthetic>', `Goal set: ${OBJECTIVE}`)
-    reply('work-1', 'claude-haiku-4-5', 'Working on it.')
-    // A turn cap stops Claude before the goal passes: the goal stays open and gains the time.
-    result(
-      'result-1',
-      { subtype: 'error_max_turns', is_error: true, terminal_reason: 'max_turns' },
-      5_000
-    )
-    frame({ type: 'system', subtype: 'session_state_changed', state: 'idle' }, 1)
-    reply('work-2', 'claude-haiku-4-5', 'done')
-    result('result-2', { subtype: 'success', is_error: false, terminal_reason: 'completed' }, 3_000)
-    frame({ type: 'system', subtype: 'session_state_changed', state: 'idle' }, 1)
-    flush()
+  it.each([false, true])(
+    'journals the goal and its completion before adjacent idle (deferred %s)',
+    (deferred) => {
+      const { frame, reply, result, goals, flush } = goalSink(null, undefined, deferred)
+      reply('goal-set', '<synthetic>', `Goal set: ${OBJECTIVE}`)
+      reply('work-1', 'claude-haiku-4-5', 'Working on it.')
+      // A turn cap stops Claude before the goal passes: the goal stays open and gains the time.
+      result(
+        'result-1',
+        { subtype: 'error_max_turns', is_error: true, terminal_reason: 'max_turns' },
+        5_000
+      )
+      frame({ type: 'system', subtype: 'session_state_changed', state: 'idle' }, 1)
+      reply('work-2', 'claude-haiku-4-5', 'done')
+      result(
+        'result-2',
+        { subtype: 'success', is_error: false, terminal_reason: 'completed' },
+        3_000
+      )
+      frame({ type: 'system', subtype: 'session_state_changed', state: 'idle' }, 1)
+      flush()
 
-    expect(goals()).toEqual([
-      {
-        identity: { provider: 'claude', sessionId: 'claude-session', uuid: 'goal-set' },
-        body: expect.objectContaining({
-          text: `Goal set: ${OBJECTIVE}`,
-          threadGoal: {
-            state: 'set',
-            goal: expect.objectContaining({
-              objective: OBJECTIVE,
-              status: 'active',
-              timeUsedSeconds: 0
-            })
-          }
-        })
-      },
-      {
-        identity: { provider: 'claude', sessionId: 'claude-session', uuid: 'goal-set' },
-        body: expect.objectContaining({
-          text: `Goal set: ${OBJECTIVE}`,
-          threadGoal: {
-            state: 'set',
-            goal: expect.objectContaining({ status: 'active', timeUsedSeconds: 6 })
-          }
-        })
-      },
-      {
-        identity: { provider: 'claude', sessionId: 'claude-session', uuid: 'result-2:goal' },
-        body: expect.objectContaining({
-          text: `Goal complete: ${OBJECTIVE}`,
-          threadGoal: {
-            state: 'set',
-            goal: expect.objectContaining({ status: 'complete', timeUsedSeconds: 10 })
-          }
-        })
-      }
-    ])
-  })
+      expect(goals()).toEqual([
+        {
+          identity: { provider: 'claude', sessionId: 'claude-session', uuid: 'goal-set' },
+          body: expect.objectContaining({
+            text: `Goal set: ${OBJECTIVE}`,
+            threadGoal: {
+              state: 'set',
+              goal: expect.objectContaining({
+                objective: OBJECTIVE,
+                status: 'active',
+                timeUsedSeconds: 0
+              })
+            }
+          })
+        },
+        {
+          identity: { provider: 'claude', sessionId: 'claude-session', uuid: 'goal-set' },
+          body: expect.objectContaining({
+            text: `Goal set: ${OBJECTIVE}`,
+            threadGoal: {
+              state: 'set',
+              goal: expect.objectContaining({ status: 'active', timeUsedSeconds: 6 })
+            }
+          })
+        },
+        {
+          identity: { provider: 'claude', sessionId: 'claude-session', uuid: 'result-2:goal' },
+          body: expect.objectContaining({
+            text: `Goal complete: ${OBJECTIVE}`,
+            threadGoal: {
+              state: 'set',
+              goal: expect.objectContaining({ status: 'complete', timeUsedSeconds: 10 })
+            }
+          })
+        }
+      ])
+    }
+  )
 
   // Seen live: a Stop pressed while Claude ran the goal's check ended the turn with a clean result.
   it('keeps the goal open when a person stops the turn, even on a clean result', () => {

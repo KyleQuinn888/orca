@@ -191,7 +191,9 @@ export class ClaudeOpenTurn {
   /** End the open turn, if one is open, and clear the live activity line. The
    *  context facts the end brings ride the same revision. */
   settle(end: ClaudeTurnEnd, contextUsage?: AgentSessionContextUsage): void {
-    const quotaEnd = this.current !== null && end.outcome === undefined &&
+    const quotaEnd =
+      this.current !== null &&
+      end.outcome === undefined &&
       this.usageLimitEvidence?.cause === 'quota'
     this.suppressReopenOnFailure(quotaEnd)
     // Every settle is a provider cycle ending (result, idle, child exit).
@@ -234,12 +236,10 @@ export class ClaudeOpenTurn {
     if (quotaEnd && refineClaudeQuotaTurnEnd(this.deps.sink, item.identity, write)) {
       return
     }
-    writeAgentJournalTurnRow(
-      this.deps.sink,
-      { identity: item.identity },
-      write,
-      { publish: false, options: item.options }
-    )
+    writeAgentJournalTurnRow(this.deps.sink, { identity: item.identity }, write, {
+      publish: false,
+      options: item.options
+    })
     // Keyed apart, so this never replaces the start's publication while it still waits to run.
     this.deps.sink.publish({ coalescingKey: item.publishCoalescingKey })
   }

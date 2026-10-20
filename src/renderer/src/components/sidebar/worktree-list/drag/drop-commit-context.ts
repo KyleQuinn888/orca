@@ -62,5 +62,5 @@ export type WorktreeDropCommitContext = {
   ) => void
   onMoveWorktreesToStatusAtIndex: (args: WorktreeStatusDropAtIndexArgs) => void
   onReorderWorktrees: (args: WorktreeReorderArgs) => void
-  onPinWorktrees: (worktreeIds: readonly string[]) => void
+  onPinWorktrees: (worktreeIds: readonly string[], draggedCopies?: DraggedWorktreeCopies) => void
 }

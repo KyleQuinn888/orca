@@ -2979,7 +2979,6 @@
         "stopRefusedQuoted": "{{agent}} didn't stop: {{detail}}.",
         "theAgent": "The agent",
         "thenSendAgain": "Then send your message again.",
-        "writeFailed": "Orca couldn't hand this message to the agent, so it was not sent.",
         "usageLimitReached": "{{agent}} hit its usage limit.",
         "usageLimitReachedNamed": "{{agent}} hit its {{window}} limit.",
         "usageLimitResetsAt": "It resets at {{when}}.",
@@ -2987,7 +2986,8 @@
         "usageLimitWindowCredits": "extra usage",
         "usageLimitWindowSession": "session",
         "usageLimitWindowWeekly": "weekly",
-        "usageLimitWindowWeeklyModel": "weekly model"
+        "usageLimitWindowWeeklyModel": "weekly model",
+        "writeFailed": "Orca couldn't hand this message to the agent, so it was not sent."
       },
       "notices": {
         "compaction": "Context compacted",
@@ -3082,9 +3082,6 @@
         "usedManySummary": "Used {{toolCount}} tools",
         "usedOneSummary": "Used 1 tool"
       },
-      "interruptedContinue": {
-        "unconfirmed": "Couldn't confirm whether {{agent}} received Continue. Check the chat before trying again."
-      },
       "writeNotice": {
         "agentRefused": "The agent turned this down.",
         "agentStarting": "The agent is still starting.",
@@ -3105,6 +3102,7 @@
         "compactAfterAnswer": "Answer the agent's question or approval, then run /compact.",
         "compactAfterRetry": "Retry your earlier message, then run /compact.",
         "compactAfterSending": "Your earlier message is still being sent. Run /compact once it has gone.",
+        "continuationSuperseded": "This chat has moved on. Check the latest messages before continuing.",
         "conversationCleared": "This conversation has been cleared.",
         "goalsUnsupported": "This agent doesn't support goals.",
         "historyUnavailable": "Orca couldn't open this chat's history right now.",
@@ -3128,7 +3126,6 @@
         "outcomeUnknown": "Orca couldn't confirm what happened. Check the chat.",
         "ownerUnproven": "The previous agent in this chat may still be running.",
         "promptPending": "The agent is waiting for an answer to a question or approval.",
-        "continuationSuperseded": "This chat has moved on. Check the latest messages before continuing.",
         "questionChanged": "This question was already answered or has changed.",
         "queueTooLarge": "Too much text is waiting in the queue.",
         "quitTerminalAgent": "Quit that agent to continue the chat here.",
