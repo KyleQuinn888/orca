@@ -7,19 +7,25 @@ import type { ComposedStructuredLaunch } from '../runtime/structured-agent-launc
 
 const ZCODE_ACQUIRE_TIMEOUT_MS = 60_000
 
-/** create-or-resume plus the initial settings read, as one acquire step. */
+/** create-or-resume plus the initial settings read, as one acquire step.
+ *  `permissionMode` is the chat's Orca permission pick; it outranks a saved
+ *  mode option so Full access actually runs the protocol's yolo. */
 export async function zcodeSessionLifecycle(
   connection: ZcodeAppServerConnection,
   launch: ComposedStructuredLaunch<ZcodeStructuredLaunch>,
   resumeSessionId: string | null,
-  options: Readonly<Record<string, string>> | undefined
+  options: Readonly<Record<string, string>> | undefined,
+  permissionMode?: string
 ): Promise<unknown> {
   const timeout = { timeoutMs: ZCODE_ACQUIRE_TIMEOUT_MS }
   const workspace = {
     workspacePath: launch.cwd,
     workspaceKey: launch.cwd.replaceAll('\\', '/').split('/').pop() ?? launch.cwd
   }
-  const mode = options?.mode ?? 'build'
+  const mode =
+    (permissionMode !== undefined ? zcodeModeForPermission(permissionMode) : undefined) ??
+    options?.mode ??
+    'build'
   if (resumeSessionId) {
     return await connection.request(
       'session/resume',

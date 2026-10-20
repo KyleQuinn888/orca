@@ -113,6 +113,12 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       return
     }
     if (request.method === 'interaction/requestPermission') {
+      // Full access (protocol yolo) auto-allows: a card would only race the
+      // server's request timeout and die as "handled elsewhere".
+      if (session.reportedOptions.mode === 'yolo') {
+        session.connection.respond(request.id, { decision: 'allow' })
+        return
+      }
       session.lane.permissionRequest(session.connection, request.id, request.params)
       return
     }
@@ -176,7 +182,8 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
         connection,
         launch,
         launch.resumeSessionId,
-        input.options
+        input.options,
+        input.permissionMode
       )) as {
         session?: { sessionId?: string }
         settings?: Record<string, unknown>
