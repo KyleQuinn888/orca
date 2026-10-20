@@ -125,11 +125,11 @@ it.each(['local', 'remote'] as const)(
       }
       const spawnAgent: SpawnSourceControlAgent = ({ args, ...other }) => {
         calls.push({ args, other })
-        const child = Object.assign(new ChildProcess(), {
-          stdin: new PassThrough(),
-          stdout: new PassThrough(),
-          stderr: new PassThrough()
-        })
+        const child = new (class extends ChildProcess {
+          override stdin = new PassThrough()
+          override stdout = new PassThrough()
+          override stderr = new PassThrough()
+        })()
         queueMicrotask(() => {
           const output = response(args)
           child.stdout.emit('data', Buffer.from(output.stdout))
