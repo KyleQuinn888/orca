@@ -14,6 +14,7 @@
 //   frame carries success/content, and the input JSON streamed earlier as
 //   model.streaming tool_input deltas.
 
+import { mapZcodeProtocolQuestions } from './zcode-protocol-questions'
 import type { ProviderTimelineEvent } from '../native-chat/agent-session-timeline/provider-timeline-event'
 import {
   boundPayload,
@@ -317,15 +318,16 @@ export class ZcodeTimelineTranslator {
     if (requestId === null) {
       return []
     }
-    const questions = Array.isArray(payload.questions) ? payload.questions : []
+    const questions = mapZcodeProtocolQuestions(payload.questions)
     return [
       {
         type: 'request.open',
         request: requestId,
         body: {
           kind: 'question',
-          question: asString(payload.prompt) ?? 'The agent asked a question.',
-          ...(questions.length > 0 ? { questions: questions as never } : {}),
+          question:
+            asString(payload.prompt) ?? questions[0]?.question ?? 'The agent asked a question.',
+          ...(questions.length > 0 ? { questions } : {}),
           options: [{ id: 'answer', label: 'Answer' }],
           resolution: {
             state: 'pending' as const,
