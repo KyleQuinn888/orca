@@ -280,15 +280,17 @@ export function lazyWithPreload<T extends AnyComponent>(
   options?: LazyWithRetryOptions
 ): PreloadableLazyComponent<T> {
   let loaded: T | null = null
-  const LazyComponent = lazy(() =>
-    loadLazyWithRetry(factory, options).then((module) => {
-      loaded ??= module.default
-      return module
-    })
+  const LazyComponent = lazyWithRetry(
+    () =>
+      factory().then((module) => {
+        loaded ??= module.default
+        return module
+      }),
+    options
   )
   function PreloadableComponent(props: ComponentProps<T>): ReactNode {
     // Why: pinned per mount so a module resolving mid-life cannot swap the element type and remount the subtree.
-    const [Component] = useState<T | LazyExoticComponent<T>>(() => loaded ?? LazyComponent)
+    const [Component] = useState(() => loaded ?? LazyComponent)
     return createElement(Component, props)
   }
   PreloadableComponent.preload = (): void => {
