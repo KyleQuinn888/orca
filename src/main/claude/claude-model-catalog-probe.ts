@@ -1,13 +1,10 @@
 import {
-  CLAUDE_MODEL_LIST_ARGS,
+  buildClaudeModelListArgs,
   CLAUDE_MODEL_LIST_STDIN,
   parseClaudeModelList
 } from '../../shared/claude-model-list-probe'
 import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
-import {
-  isolateClaudeBackgroundArgs,
-  runClaudeBackgroundAttempts
-} from '../../shared/claude-background-run-isolation'
+import { runClaudeBackgroundAttempts } from '../../shared/claude-background-run-isolation'
 import { parseClaudeModels } from '../../shared/commit-message-model-parsers'
 import { AgentModelCatalogUnavailableError } from '../native-chat/agent-model-catalog/agent-model-catalog-unavailable'
 import { claudeConfigDirEnvPatch } from './claude-config-dir-pin'
@@ -37,7 +34,6 @@ export async function runClaudeListing(
   deps: ClaudeModelCatalogProbeDeps,
   request: {
     accountHomePath: string
-    args: readonly string[]
     stdin: string
     site: string
     cwd?: string
@@ -62,9 +58,8 @@ export async function runClaudeListing(
     )
   const result = await runClaudeBackgroundAttempts({
     agentId: 'claude',
-    args: isolateClaudeBackgroundArgs(request.args),
-    run: (args) =>
-      run(args).catch((error: unknown) => {
+    run: (strictMcp) =>
+      run(buildClaudeModelListArgs(strictMcp)).catch((error: unknown) => {
         if (error instanceof AgentModelCatalogProbeError) {
           return error
         }
@@ -92,7 +87,6 @@ export function createClaudeModelCatalogProbe(
   return async (accountHome, options): Promise<AgentModelCatalogSuccess> => {
     const stdout = await runClaudeListing(deps, {
       accountHomePath: requireLegacyAgentSessionAccountHome(accountHome).path,
-      args: CLAUDE_MODEL_LIST_ARGS,
       stdin: CLAUDE_MODEL_LIST_STDIN,
       site: 'claude-model-catalog-probe',
       ...(options?.signal ? { signal: options.signal } : {})

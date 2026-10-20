@@ -1,4 +1,3 @@
-import { isolateClaudeBackgroundArgs } from './claude-background-run-isolation'
 import { findOptionOccurrence } from './command-option-occurrence'
 import { planAgentBinary } from './agent-command-plan'
 export { planAgentBinary } from './agent-command-plan'
@@ -127,7 +126,7 @@ function keepFirstOptionOccurrence(tokens: string[], aliases: readonly string[])
 
 /** Removes generated singleton options shadowed by user input. Recipe args
  *  outrank a command-override prefix, which outranks Orca's generated value. */
-function applySingletonOptionOverrides(args: {
+export function applySingletonOptionOverrides(args: {
   generatedArgs: string[]
   prefixArgs: string[]
   recipeArgs: string[]
@@ -190,7 +189,8 @@ function insertAdditionalAgentArgs(args: {
 
 export function planCommitMessageGeneration(
   input: CommitMessagePlanInput,
-  prompt: string
+  prompt: string,
+  options: { strictMcp?: boolean } = {}
 ): CommitMessagePlanResult {
   if (isCustomAgentId(input.agentId)) {
     const command = input.customAgentCommand?.trim() ?? ''
@@ -254,7 +254,8 @@ export function planCommitMessageGeneration(
   const baseArgs = spec.buildArgs({
     prompt: argvPrompt,
     model: input.model,
-    thinkingLevel: input.thinkingLevel
+    thinkingLevel: input.thinkingLevel,
+    strictMcp: options.strictMcp
   })
   const agentArgs = planAdditionalAgentArgs(input.agentArgs, input.backslash)
   if (!agentArgs.ok) {
@@ -278,14 +279,12 @@ export function planCommitMessageGeneration(
     promptDelivery: spec.promptDelivery,
     prompt: argvPrompt
   })
-  const mergedArgs = mergeOpenCodeGenerationArgs(
+  const generationArgs = mergeOpenCodeGenerationArgs(
     input.agentId,
     command.binary,
     merged.prefixArgs,
     args
   )
-  const generationArgs =
-    input.agentId === 'claude' ? isolateClaudeBackgroundArgs(mergedArgs) : mergedArgs
   const formatOption =
     input.agentId === 'opencode' || input.agentId === 'opencode2'
       ? findOptionOccurrence(generationArgs, ['--format'], true)

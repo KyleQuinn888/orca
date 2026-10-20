@@ -37,10 +37,8 @@ export async function runGenerationRequest(input: {
   operation: TextGenerationOperation
   spawnAgent: SpawnSourceControlAgent
 }): Promise<InternalTextGenerationResult> {
-  const planned = planCommitMessageGeneration(
-    { ...input.params, backslash: commandBackslashMode(input.target) },
-    input.prompt
-  )
+  const params = { ...input.params, backslash: commandBackslashMode(input.target) }
+  const planned = planCommitMessageGeneration(params, input.prompt)
   if (!planned.ok) {
     return { success: false, error: planned.error }
   }
@@ -63,8 +61,15 @@ export async function runGenerationRequest(input: {
         })
   let result = await runClaudeBackgroundAttempts({
     agentId: input.params.agentId,
-    args: plan.args,
-    run: (args) => execute({ ...plan, args }),
+    run: (strictMcp): Promise<InternalTextGenerationResult> => {
+      if (strictMcp) {
+        return execute(plan)
+      }
+      const retry = planCommitMessageGeneration(params, input.prompt, { strictMcp })
+      return retry.ok
+        ? execute(retry.plan)
+        : Promise.resolve({ success: false, error: retry.error })
+    },
     failedExit: (outcome) => (outcome.success ? undefined : outcome.failureOutput)
   })
   if (

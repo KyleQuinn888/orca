@@ -69,8 +69,14 @@ export async function discoverModelsLocal(
   )
   const attempt = await runClaudeBackgroundAttempts({
     agentId: input.agentId,
-    args: planned.plan.args,
-    run: (args) => discoverModelsOnce(input, spec, { ...planned.plan, args }, env),
+    run: (strictMcp): ReturnType<typeof discoverModelsOnce> => {
+      const rebuilt = strictMcp
+        ? planned
+        : planModelDiscovery(spec, input.agentCommandOverride, input.backslash, strictMcp)
+      return rebuilt.ok
+        ? discoverModelsOnce(input, spec, rebuilt.plan, env)
+        : Promise.resolve({ result: { success: false as const, error: rebuilt.error } })
+    },
     failedExit: (outcome) => (outcome.result.success ? undefined : outcome.failedExit)
   })
   return attempt.result

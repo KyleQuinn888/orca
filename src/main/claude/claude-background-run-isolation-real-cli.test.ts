@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { runProcess } from '@orca/process-host'
 import { withCliRuntimeOnPath } from '../../shared/node-cli-command-resolution'
-import { isolateClaudeBackgroundArgs } from '../../shared/claude-background-run-isolation'
+import { claudeBackgroundArgs } from '../../shared/claude-background-run-isolation'
 import { CLAUDE_MODEL_LIST_ARGS } from '../../shared/claude-model-list-probe'
 import { realClaudeAvailable, realClaudeCommand } from './claude-real-cli-availability-test-support'
 
@@ -53,17 +53,15 @@ describe.skipIf(!realClaudeAvailable)('background Claude runs with the real CLI'
       JSON.stringify({ allowedMcpServers: [{ serverName: 'user' }, { serverName: 'explicit' }] })
     )
     writeFileSync(join(root, 'mcp.json'), JSON.stringify({ mcpServers: { explicit: server } }))
-    const listing = [...CLAUDE_MODEL_LIST_ARGS]
+    const listing = CLAUDE_MODEL_LIST_ARGS.slice(0, -claudeBackgroundArgs().length)
 
     expect(await loaded(listing)).toEqual({ servers: ['user'], hooksOff: false })
-    expect(await loaded(isolateClaudeBackgroundArgs(listing))).toEqual({
+    expect(await loaded([...listing, ...claudeBackgroundArgs()])).toEqual({
       servers: [],
       hooksOff: true
     })
     expect(
-      await loaded(
-        isolateClaudeBackgroundArgs([...listing, '--mcp-config', join(root, 'mcp.json')])
-      )
+      await loaded([...listing, ...claudeBackgroundArgs(), '--mcp-config', join(root, 'mcp.json')])
     ).toEqual({ servers: ['explicit'], hooksOff: true })
   }, 180_000)
 })

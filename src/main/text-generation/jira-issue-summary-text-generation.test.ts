@@ -202,56 +202,70 @@ it('preserves Jira custom output and OpenCode one-attempt behavior', async () =>
   expect(attempts).toBe(1)
 })
 
-it.each([
-  ['', '', '{"disableAllHooks":true}'],
-  [
-    '--settings \'{"language":"French"}\'',
-    '--settings \'{"model":"haiku"}\'',
-    '{"disableAllHooks":true,"model":"haiku"}'
-  ],
-  [
-    '--settings earlier.json',
-    '--settings=\'{"model":"haiku"}\'',
-    '{"disableAllHooks":true,"model":"haiku"}'
-  ],
-  ['--settings \'{"language":"French"}\'', '--settings winning.json', 'winning.json'],
-  [
-    '',
-    '--settings=\'{"disableAllHooks":false}\' --mcp-config explicit.json',
-    '{"disableAllHooks":false}'
-  ]
-])(
-  'preserves effective settings across discovery and preview: %s %s',
-  (prefix, recipe, effective) => {
-    const preview = planCommitMessageGeneration(
-      {
-        agentId: 'claude',
-        model: 'haiku',
-        agentCommandOverride: `claude ${prefix}`,
-        agentArgs: recipe
-      },
-      'prompt'
-    )
+it.each(['\'{"model":"haiku"}\'', 'provider-settings.json'])(
+  'uses existing settings override for generation and discovery: %s',
+  (settings) => {
+    const override = `claude --settings ${settings}`
     const spec = getAgentModelProbeSpec('claude')
     if (!spec) {
       throw new Error('Missing Claude spec')
     }
-    const discovery = planModelDiscovery(spec, `claude ${prefix} ${recipe}`)
-    for (const planned of [preview, discovery]) {
+    const requests = [
+      planModelDiscovery(spec, override),
+      planCommitMessageGeneration(
+        { agentId: 'claude', model: 'haiku', agentCommandOverride: override },
+        'prompt'
+      ),
+      planCommitMessageGeneration(
+        { agentId: 'claude', model: 'haiku', agentArgs: `--settings ${settings}` },
+        'prompt'
+      )
+    ]
+    for (const planned of requests) {
       if (!planned.ok) {
         throw new Error(planned.error)
       }
-      const options = planned.plan.args.filter(
-        (arg) => arg === '--settings' || arg.startsWith('--settings=')
+      expect(planned.plan.args.filter((arg) => arg === '--settings')).toHaveLength(1)
+      expect(planned.plan.args[planned.plan.args.indexOf('--settings') + 1]).toBe(
+        settings.replaceAll("'", '')
       )
-      const last = options.at(-1) ?? ''
-      const value =
-        last === '--settings'
-          ? planned.plan.args[planned.plan.args.lastIndexOf(last) + 1]
-          : last.slice(11)
-      expect(value).toBe(effective)
-      expect(planned.plan.args.join(' ')).toContain(prefix.replaceAll("'", ''))
-      expect(planned.plan.args.includes('explicit.json')).toBe(recipe.includes('explicit.json'))
+      expect(planned.plan.args).not.toContain('{"disableAllHooks":true}')
     }
   }
 )
+
+it('rebuilds without inspecting prompt-like, optional or user strict tokens', async () => {
+  for (const agentArgs of [
+    "--append-subagent-system-prompt '--strict-mcp-config'",
+    '--resume --strict-mcp-config saved-session',
+    '--mcp-config custom.json --strict-mcp-config'
+  ]) {
+    const calls: CommitMessagePlan[] = []
+    const params = { agentId: 'claude' as const, model: 'haiku', agentArgs }
+    const result = await generateJiraIssueSummaryFromContext({ description: 'Crash' }, params, {
+      kind: 'remote',
+      cwd: '/repo',
+      missingBinaryLocation: 'remote PATH',
+      execute: async (plan) => {
+        calls.push(plan)
+        return {
+          stdout: '',
+          stderr: 'You cannot use --strict-mcp-config when an enterprise MCP config is present',
+          exitCode: 1,
+          timedOut: false
+        }
+      }
+    })
+    expect(result.success).toBe(false)
+    expect(calls).toHaveLength(2)
+    const first = planCommitMessageGeneration(params, calls[0].stdinPayload ?? '')
+    const second = planCommitMessageGeneration(params, calls[0].stdinPayload ?? '', {
+      strictMcp: false
+    })
+    if (!first.ok || !second.ok) {
+      throw new Error('Invalid fixture')
+    }
+    expect(calls).toEqual([first.plan, second.plan])
+    expect(calls[1].args).toContain('--strict-mcp-config')
+  }
+})

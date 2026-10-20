@@ -59,21 +59,6 @@ const VALUE_OPTIONS: Partial<Record<AgentType, readonly string[]>> = {
   ]
 }
 
-/** Finds an active option without mistaking a required value for another option. */
-export function findAgentArgOption(
-  agent: AgentType,
-  tokens: readonly string[],
-  aliases: readonly string[]
-): { index: number; consumed: number; value?: string } | null {
-  const found = findOptionOccurrence(tokens, aliases, true, VALUE_OPTIONS[agent])
-  if (!found || !aliases.includes(tokens[found.index])) {
-    return found
-  }
-  const takesValue = VALUE_OPTIONS[agent]?.includes(tokens[found.index])
-  const value = takesValue ? tokens[found.index + 1] : undefined
-  return { index: found.index, consumed: value === undefined ? 1 : 2, value }
-}
-
 export function agentArgTerminatorIndex(agent: AgentType, tokens: readonly string[]): number {
   return findOptionOccurrence(tokens, ['--'], false, VALUE_OPTIONS[agent])?.index ?? tokens.length
 }

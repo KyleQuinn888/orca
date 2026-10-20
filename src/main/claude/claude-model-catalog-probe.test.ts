@@ -1,4 +1,3 @@
-import { isolateClaudeBackgroundArgs } from '../../shared/claude-background-run-isolation'
 import { AgentModelCatalogUnavailableError } from '../native-chat/agent-model-catalog/agent-model-catalog-unavailable'
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
@@ -95,7 +94,7 @@ describe('claude model catalog probe', () => {
       const [launch, options] = calls[0]!
       expect(launch).toEqual({
         command: invocation.command,
-        args: isolateClaudeBackgroundArgs(CLAUDE_MODEL_LIST_ARGS),
+        args: [...CLAUDE_MODEL_LIST_ARGS],
         stdin: CLAUDE_MODEL_LIST_STDIN
       })
       expect(options.inheritedEnv).toEqual(invocation.env)

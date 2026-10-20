@@ -1,7 +1,7 @@
-import { isolateClaudeBackgroundArgs } from '../../shared/claude-background-run-isolation'
+import { buildClaudeModelListArgs } from '../../shared/claude-model-list-probe'
 import type { CommandTemplateBackslash } from '../../shared/commit-message-prompt'
 import type { CommitMessagePlan } from '../../shared/commit-message-plan'
-import { planAgentBinary } from '../../shared/commit-message-plan'
+import { planAgentBinary, applySingletonOptionOverrides } from '../../shared/commit-message-plan'
 import type { AgentModelProbeSpec } from '../../shared/agent-model-probe-spec'
 import { formatAgentCliFailureMessage } from './source-control-agent-failure'
 import type { DiscoverCommitMessageModelsResult } from './source-control-text-generation-types'
@@ -76,7 +76,8 @@ export function finalizeModelDiscoveryOutput(
 export function planModelDiscovery(
   spec: AgentModelProbeSpec,
   agentCommandOverride?: string,
-  backslash: CommandTemplateBackslash = 'escape'
+  backslash: CommandTemplateBackslash = 'escape',
+  strictMcp = true
 ): { ok: true; plan: CommitMessagePlan } | { ok: false; error: string } {
   const modelDiscovery = spec.modelDiscovery
   if (!modelDiscovery) {
@@ -86,14 +87,20 @@ export function planModelDiscovery(
   if (!command.ok) {
     return command
   }
+  const args =
+    spec.id === 'claude'
+      ? applySingletonOptionOverrides({
+          generatedArgs: buildClaudeModelListArgs(strictMcp),
+          prefixArgs: command.prefixArgs,
+          recipeArgs: [],
+          singletonOptions: [['--settings']]
+        })
+      : { prefixArgs: command.prefixArgs, generatedArgs: modelDiscovery.args }
   return {
     ok: true,
     plan: {
       binary: command.binary,
-      args:
-        spec.id === 'claude'
-          ? isolateClaudeBackgroundArgs([...command.prefixArgs, ...modelDiscovery.args])
-          : [...command.prefixArgs, ...modelDiscovery.args],
+      args: [...args.prefixArgs, ...args.generatedArgs],
       stdinPayload: modelDiscovery.stdinPayload ?? null,
       label: spec.label,
       ...(command.env ? { env: command.env } : {})

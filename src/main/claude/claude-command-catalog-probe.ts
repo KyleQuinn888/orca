@@ -1,5 +1,4 @@
 import type { AgentSessionSlashCommand } from '../../shared/agent-session-wire'
-import { CLAUDE_MODEL_LIST_ARGS } from '../../shared/claude-model-list-probe'
 import { assertJsonTextStructureWithinLimits } from '../../shared/json-text-structure-limit'
 import { runClaudeListing, type ClaudeModelCatalogProbeDeps } from './claude-model-catalog-probe'
 import { ClaudeSlashCommandCatalog } from './claude-slash-command-catalog'
@@ -29,7 +28,6 @@ export function createClaudeCommandCatalogProbe(
     const stdout = await runClaudeListing(deps, {
       accountHomePath,
       cwd,
-      args: CLAUDE_MODEL_LIST_ARGS,
       stdin: CLAUDE_COMMAND_LIST_STDIN,
       site: 'claude-command-catalog-probe'
     })
