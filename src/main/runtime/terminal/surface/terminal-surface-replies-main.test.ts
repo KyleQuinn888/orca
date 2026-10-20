@@ -119,8 +119,7 @@ describe('terminal replies from main (switch on)', () => {
         }
       }
     })
-    ;(runtime as unknown as { recordPtyWorktree: (id: string, wt: string, s: object) => void })
-      .recordPtyWorktree('pty-c', TEST_WORKTREE_ID, { connected: true })
+    runtime.registerPty('pty-c', TEST_WORKTREE_ID)
     await Promise.resolve()
 
     const listed = await runtime.listTerminals(`id:${TEST_WORKTREE_ID}`)

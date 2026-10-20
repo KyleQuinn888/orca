@@ -69,11 +69,8 @@ export function surfaceRuntime(): {
       Object.values(SURFACE_PTYS).map((id) => ({ id, cwd: TEST_WORKTREE_PATH, title: 'sh' }))
     )
   })
-  const internals = runtime as unknown as {
-    recordPtyWorktree: (ptyId: string, worktreeId: string, state?: Record<string, unknown>) => void
-  }
   for (const ptyId of Object.values(SURFACE_PTYS)) {
-    internals.recordPtyWorktree(ptyId, TEST_WORKTREE_ID, { connected: true })
+    runtime.registerPty(ptyId, TEST_WORKTREE_ID)
   }
   return {
     runtime,
