@@ -17,6 +17,7 @@ import {
 } from '../terminal-topology/unstarted-pane-withdraw'
 import { resolveHostId } from './session-host-partitions'
 import { evaluatePtyBindingFastLane } from './pty-binding-fast-lane'
+import { durabilityOnlyBindingResult, isDurabilityOnlyMatch } from './pty-binding-durability-only'
 import { ptyBindingIsRefused } from './pty-binding-refusals'
 import { startPtyBindingSpan, type PtyBindingOrigin, type PtyBindingSpan } from './pty-binding-span'
 import { applyPtyBinding } from './pty-binding-session-update'
@@ -41,7 +42,7 @@ import type {
   CommandOf,
   LayoutRefusalCode
 } from '../../../shared/workspace-layout/workspace-layout-command-types'
-import { findTerminalBindingConflict } from '../../../shared/workspace-layout/terminal-owner-invariants'
+import { reportOwnerConflict } from './pty-binding-owner-conflict-report'
 
 type PtyBindingPersistenceOperationsRuntime = Pick<
   StoreRuntimeState,
@@ -203,18 +204,16 @@ export class PtyBindingPersistenceOperations {
         span.setEligibility(verdict)
         if (verdict.eligible) {
           outcome = 'fast_lane'
+          span.setPath('durable_match')
           return { value: true, persist: false }
         }
-        // Report-only: the binding is written even when it breaks an invariant, or the check throws.
-        // After the fast lane, so a no-op rebind skips the scan.
-        try {
-          const conflict = findTerminalBindingConflict(args, resolvedHostId, partitions)
-          if (conflict) {
-            span.setOwnerConflict(conflict.reason)
-          }
-        } catch {
-          span.setOwnerConflict('check_threw')
+        if (isDurabilityOnlyMatch(verdict)) {
+          span.setPath('durability_only')
+          return durabilityOnlyBindingResult(runtime, resolvedHostId)
         }
+        span.setPath('mutation')
+        // After the fast lane, so a no-op rebind skips the scan.
+        reportOwnerConflict(span, args, resolvedHostId, partitions)
         return {
           value: true,
           rollback: writePtyBinding(this, args, session, resolvedHostId, bindingWorktreeId, paneKey)
