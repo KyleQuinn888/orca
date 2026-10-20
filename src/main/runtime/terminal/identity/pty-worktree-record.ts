@@ -9,6 +9,8 @@ import { maxTimestamp } from '../../runtime-worktree-status-projection'
 import type { RuntimeSyncedLeaf } from '../../../../shared/runtime-types'
 import { isTerminalLeafId, makePaneKey } from '../../../../shared/stable-pane-id'
 import { inferWorktreeIdFromPtyId } from '../../runtime-worktree-path-identity'
+import { ORCA_LAYOUT_OWNER_IS_MAIN } from '../../../../shared/layout-owner-switch'
+import { startedMainTerminalSurfaces } from '../surface/main-terminal-surfaces'
 import {
   recordPtySurfaceClaim,
   SURFACE_CLAIM_WITHOUT_STANDING
@@ -47,6 +49,18 @@ export abstract class OrcaRuntimeWithRecordPtyWorktree extends RuntimeWorkspaceR
       >
     > = {}
   ): RuntimePtyWorktreeRecord {
+    // Switch point: the pane main's layout binds the terminal to outranks any caller's claim.
+    if (ORCA_LAYOUT_OWNER_IS_MAIN) {
+      const pane = startedMainTerminalSurfaces(this)?.findPaneForPty(ptyId)
+      if (pane && (state.tabId !== undefined || state.paneKey !== undefined)) {
+        state = {
+          ...state,
+          tabId: pane.tabId,
+          paneKey: makePaneKey(pane.tabId, pane.leafId),
+          surfaceRecordedAtGraphSequence: this.graphSequence
+        }
+      }
+    }
     let pty = this.ptysById.get(ptyId)
     if (!pty) {
       const titleObservedAt = state.title ? this.nextTitleObservationSequence() : null
