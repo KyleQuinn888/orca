@@ -179,6 +179,27 @@ export class ZcodeStructuredLane {
     this.assembler.apply({ type: 'input.accepted', clientMessageId, requestedAt })
   }
 
+  /** A dispatched builtin answered without a provider turn (e.g. /goal): its
+   *  answer becomes a self-contained completed turn, so the armed send settles
+   *  through the ordinary binding instead of waiting on a turn that never opens. */
+  commandTurn(response: string, turnId: string): void {
+    const at = Date.now()
+    this.armedTurn = turnId
+    this.applyAll([
+      { type: 'turn.open', turn: turnId, at },
+      {
+        type: 'item.close',
+        item: `${turnId}-response`,
+        body: {
+          kind: 'message',
+          role: 'assistant',
+          blocks: [{ type: 'text', text: response }]
+        }
+      },
+      { type: 'turn.end', turn: turnId, at: at + 1, state: 'completed', outcome: 'success' }
+    ])
+  }
+
   /** The child is gone: settle the timeline after everything it said lands. */
   sessionEnded(): void {
     this.pendingPrompts.clear()

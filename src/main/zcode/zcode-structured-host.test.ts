@@ -57,6 +57,18 @@ const FAKE_ZCODE_APP_SERVER = String.raw`
     if (message.method === 'session/stop') {
       return send({ id: message.id, result: {} })
     }
+    if (message.method === 'session/goal') {
+      const action = message.params.action
+      return send({
+        id: message.id,
+        result: {
+          response:
+            action === 'set'
+              ? 'Goal active\\nObjective: ' + message.params.objective
+              : 'No goal is set.'
+        }
+      })
+    }
     return send({ id: message.id, result: {} })
   })
 `
@@ -133,6 +145,41 @@ describe('Zcode behind the real structured-session host', () => {
       )
     } finally {
       unsubscribe()
+      await rig.host.close(SESSION, 'user-close')
+    }
+  })
+
+  it('routes the /goal builtin to its protocol method, not the model', async () => {
+    const rig = await openZcodeHostRig()
+    try {
+      await expect(rig.host.attach(CALLER, attachParams())).resolves.toMatchObject({ ok: true })
+      const outcome = await rig.adapter.dispatch({
+        sessionId: SESSION,
+        clientMessageId: 'goal-1',
+        body: {
+          kind: 'message',
+          role: 'user',
+          blocks: [{ type: 'text', text: '/goal ship the app' }]
+        },
+        fence: 1
+      })
+      expect(outcome).toMatchObject({ state: 'accepted' })
+      await vi.waitFor(
+        async () => {
+          const messages = await rig.messages()
+          const flat = messages.join(' ')
+          // The command's own answer is the turn's message row.
+          expect(flat).toContain('Goal active')
+          expect(flat).toContain('ship the app')
+          const turns = (
+            await rig.host.history({ sessionId: SESSION, direction: 'tail' })
+          ).page.items.filter((row) => row.body.kind === 'turn')
+          const turn = turns.at(-1)?.body as { state?: string } | undefined
+          expect(turn?.state).toBe('completed')
+        },
+        { timeout: 10_000 }
+      )
+    } finally {
       await rig.host.close(SESSION, 'user-close')
     }
   })

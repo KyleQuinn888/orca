@@ -1,5 +1,6 @@
 // The turn surface of a live zcode session: send (with its pre-write opener and
-// its refusal words), stop, and compaction, as one bounded step each.
+// its refusal words), the `/goal` builtin routed to its protocol method, stop,
+// and compaction, as one bounded step each.
 
 import type { AgentJournalMessageItem } from '../../shared/agent-session-journal-types'
 import type { AgentSessionDispatchOutcome } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
@@ -14,6 +15,77 @@ export type ZcodeSessionLike = {
   providerSessionId: string
   connection: ZcodeAppServerConnection
   lane: ZcodeStructuredLane
+}
+
+/** `/goal` arguments → the protocol's action + objective, live-verified:
+ *  `/goal` shows, `pause|resume|clear` act, `replace <obj>` swaps, the rest sets. */
+function parseZcodeGoalCommand(
+  text: string
+):
+  | { action: 'show' | 'set' | 'replace' | 'pause' | 'resume' | 'clear'; objective?: string }
+  | undefined {
+  const match = /^\/goal(?:[ \t]+(.*))?$/u.exec(text.trim())
+  if (!match) {
+    return undefined
+  }
+  const rest = (match[1] ?? '').trim()
+  if (rest.length === 0) {
+    return { action: 'show' }
+  }
+  const verb = /^(pause|resume|clear)(?:[ \t]+|$)/u.exec(rest)
+  if (verb) {
+    return { action: verb[1] as 'pause' | 'resume' | 'clear' }
+  }
+  const replace = /^replace[ \t]+(.+)$/u.exec(rest)
+  if (replace) {
+    return { action: 'replace', objective: replace[1].trim() }
+  }
+  return { action: 'set', objective: rest }
+}
+
+async function dispatchZcodeGoal(
+  session: ZcodeSessionLike,
+  clientMessageId: string,
+  text: string,
+  timeoutMs: number
+): Promise<AgentSessionDispatchOutcome | undefined> {
+  const goal = parseZcodeGoalCommand(text)
+  if (goal === undefined) {
+    return undefined
+  }
+  // The TUI runs /goal as a protocol call, not a model turn; the command's own
+  // answer becomes a completed turn so the send binds and settles like any other.
+  session.lane.inputAccepted(clientMessageId, Date.now())
+  try {
+    const result = (await session.connection.request(
+      'session/goal',
+      {
+        sessionId: session.providerSessionId,
+        action: goal.action,
+        ...(goal.objective !== undefined ? { objective: goal.objective } : {})
+      },
+      { timeoutMs }
+    )) as { response?: unknown }
+    const response = typeof result.response === 'string' ? result.response : 'Goal updated.'
+    const turnId = `goal-command-${Date.now()}`
+    session.lane.commandTurn(response, turnId)
+    const identity = session.lane.armedTurnIdentity()
+    if (identity !== null) {
+      return { state: 'accepted', providerIdentity: identity }
+    }
+    return { state: 'admitted' }
+  } catch (error) {
+    if (isZcodeAppServerRequestError(error)) {
+      return {
+        state: 'rejected',
+        ...agentSessionFailureWords(
+          agentSessionFailureFact('providerRejected', { detail: providerDiagnosticOf(error) }),
+          { surface: 'rejection', agentName: 'ZCode' }
+        )
+      }
+    }
+    throw error
+  }
 }
 
 export async function dispatchZcodeTurn(
@@ -33,6 +105,12 @@ export async function dispatchZcodeTurn(
     .filter((block): block is { type: 'text'; text: string } => block.type === 'text')
     .map((block) => block.text)
     .join('\n')
+  // The TUI intercepts `/goal` locally; over the protocol the text would reach
+  // the model, so the builtin is routed to its method before the write.
+  const goal = await dispatchZcodeGoal(session, input.clientMessageId, text, timeoutMs)
+  if (goal !== undefined) {
+    return goal
+  }
   // Accepted before the write: turn.started (and on fast turns, turn.completed)
   // arrive while the send's reply is still in flight, and an opener registered
   // only after the await never binds — the submission stays pending and the
