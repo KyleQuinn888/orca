@@ -163,28 +163,30 @@ it('sends the address pasted from a browser on another computer to the host', as
 it("names the account and why it's needed before the host knows its sign-in", async () => {
   const owner = { kind: 'environment', environmentId: 'provider-unanswered' } as const
   render(
-    <AntigravityProviderSignInArea
-      owner={owner}
-      label="this computer"
-      install={{
-        kind: 'active',
-        subject: { target: owner, runtimeId: null, agent: 'antigravity' },
-        removable: true,
-        snapshot: {
-          kind: 'known',
-          state: {
-            agent: 'antigravity',
-            revision: 1,
-            available: true,
-            version: '1.0.0',
-            installedVersion: '1.0.0',
-            installedCurrent: true,
-            source: 'managed',
-            operation: null
+    <TooltipProvider>
+      <AntigravityProviderSignInArea
+        owner={owner}
+        label="this computer"
+        install={{
+          kind: 'active',
+          subject: { target: owner, runtimeId: null, agent: 'antigravity' },
+          removable: true,
+          snapshot: {
+            kind: 'known',
+            state: {
+              agent: 'antigravity',
+              revision: 1,
+              available: true,
+              version: '1.0.0',
+              installedVersion: '1.0.0',
+              installedCurrent: true,
+              source: 'managed',
+              operation: null
+            }
           }
-        }
-      }}
-    />
+        }}
+      />
+    </TooltipProvider>
   )
   await act(async () => undefined)
   expect(screen.getByText('Account')).toBeTruthy()
