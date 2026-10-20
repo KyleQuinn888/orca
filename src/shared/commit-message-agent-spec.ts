@@ -59,6 +59,7 @@ export type CommitMessageAgentSpec = {
     model: string
     thinkingLevel?: string
     strictMcp?: boolean
+    userArgs?: readonly string[]
   }) => string[]
   /** Alias groups the CLI accepts at most once. Recipe CLI arguments repeating one
    *  replace the generated flag instead of being appended: yargs-based CLIs collapse

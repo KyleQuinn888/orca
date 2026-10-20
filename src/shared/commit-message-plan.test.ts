@@ -59,6 +59,19 @@ describe('planCommitMessageGeneration', () => {
     })
   })
 
+  it('preserves a literal --settings prompt value without generating hooks settings', () => {
+    const result = planCommitMessageGeneration(
+      { agentId: 'claude', model: 'sonnet', agentArgs: '--append-system-prompt "--settings"' },
+      'PROMPT'
+    )
+    expect(result.ok && result.plan.args.slice(-3)).toEqual([
+      '--strict-mcp-config',
+      '--append-system-prompt',
+      '--settings'
+    ])
+    expect(result.ok && result.plan.args).not.toContain('{"disableAllHooks":true}')
+  })
+
   it('plans OpenCode run with prompt on stdin and model variant', () => {
     const result = planCommitMessageGeneration(
       {

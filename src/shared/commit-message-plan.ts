@@ -126,7 +126,7 @@ function keepFirstOptionOccurrence(tokens: string[], aliases: readonly string[])
 
 /** Removes generated singleton options shadowed by user input. Recipe args
  *  outrank a command-override prefix, which outranks Orca's generated value. */
-export function applySingletonOptionOverrides(args: {
+function applySingletonOptionOverrides(args: {
   generatedArgs: string[]
   prefixArgs: string[]
   recipeArgs: string[]
@@ -251,12 +251,6 @@ export function planCommitMessageGeneration(
   }
 
   const argvPrompt = spec.promptDelivery === 'argv' ? prompt : ''
-  const baseArgs = spec.buildArgs({
-    prompt: argvPrompt,
-    model: input.model,
-    thinkingLevel: input.thinkingLevel,
-    strictMcp: options.strictMcp
-  })
   const agentArgs = planAdditionalAgentArgs(input.agentArgs, input.backslash)
   if (!agentArgs.ok) {
     return agentArgs
@@ -265,6 +259,13 @@ export function planCommitMessageGeneration(
   if (!command.ok) {
     return { ok: false, error: command.error }
   }
+  const baseArgs = spec.buildArgs({
+    prompt: argvPrompt,
+    model: input.model,
+    thinkingLevel: input.thinkingLevel,
+    strictMcp: options.strictMcp,
+    userArgs: [...command.prefixArgs, ...agentArgs.args]
+  })
   // Why: repeating a singleton flag makes yargs-based CLIs parse it as an array and
   // crash (OpenCode's `model.split('/')`). User values replace Orca's, never stack.
   const merged = applySingletonOptionOverrides({

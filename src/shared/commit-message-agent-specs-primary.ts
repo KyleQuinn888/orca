@@ -36,7 +36,7 @@ export function buildPrimaryCommitMessageAgentSpecs({
       // Why: diffs can be large and `claude -p` reads from stdin natively when no
       // positional prompt is provided.
       promptDelivery: 'stdin',
-      buildArgs: ({ model, thinkingLevel, strictMcp }) => [
+      buildArgs: ({ model, thinkingLevel, strictMcp, userArgs }) => [
         '-p',
         '--output-format',
         'text',
@@ -45,9 +45,9 @@ export function buildPrimaryCommitMessageAgentSpecs({
         '--permission-mode',
         'plan',
         ...(thinkingLevel ? ['--effort', thinkingLevel] : []),
-        ...claudeBackgroundArgs(strictMcp)
+        ...claudeBackgroundArgs(strictMcp, userArgs)
       ],
-      singletonOptions: [['--model'], ['--settings']],
+      singletonOptions: [['--model']],
       modelSource: 'dynamic',
       // Why: the Claude CLI has no listing subcommand; one list_models control
       // request over --print stream-json returns the /model picker catalog.

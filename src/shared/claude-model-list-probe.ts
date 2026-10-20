@@ -13,7 +13,10 @@ export const CLAUDE_MODEL_LIST_STDIN = `${JSON.stringify({
 })}\n`
 
 // Why: --print rejects stream-json output unless --verbose is also set.
-export function buildClaudeModelListArgs(strictMcp = true): string[] {
+export function buildClaudeModelListArgs(
+  strictMcp = true,
+  userArgs: readonly string[] = []
+): string[] {
   return [
     '-p',
     '--input-format',
@@ -21,7 +24,7 @@ export function buildClaudeModelListArgs(strictMcp = true): string[] {
     '--output-format',
     'stream-json',
     '--verbose',
-    ...claudeBackgroundArgs(strictMcp)
+    ...claudeBackgroundArgs(strictMcp, userArgs)
   ]
 }
 

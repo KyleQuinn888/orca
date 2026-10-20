@@ -2,8 +2,13 @@ const ENTERPRISE_REFUSAL =
   'You cannot use --strict-mcp-config when an enterprise MCP config is present'
 
 /** Background policy is generated separately from user arguments. */
-export function claudeBackgroundArgs(strictMcp = true): string[] {
-  return [...(strictMcp ? ['--strict-mcp-config'] : []), '--settings', '{"disableAllHooks":true}']
+export function claudeBackgroundArgs(strictMcp = true, userArgs: readonly string[] = []): string[] {
+  // A literal option value also preserves existing hooks; never interpret user argument grammar.
+  const hasSettings = userArgs.some((arg) => arg === '--settings' || arg.startsWith('--settings='))
+  return [
+    ...(strictMcp ? ['--strict-mcp-config'] : []),
+    ...(hasSettings ? [] : ['--settings', '{"disableAllHooks":true}'])
+  ]
 }
 
 export type ClaudeBackgroundFailedExit = { exitCode: number | null; stdout: string; stderr: string }
