@@ -161,7 +161,7 @@ it.each(['local', 'remote'] as const)(
               spawnAgent
             )
           : await generateCommitMessage({
-              context: { stagedSummary: 'M file', stagedPatch: '+fix' },
+              context: { branch: 'main', stagedSummary: 'M file', stagedPatch: '+fix' },
               params,
               target,
               spawnAgent
