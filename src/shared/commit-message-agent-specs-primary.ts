@@ -5,7 +5,6 @@ import type {
   ThinkingLevel
 } from './commit-message-agent-spec'
 import { CLAUDE_MODEL_LIST_ARGS, CLAUDE_MODEL_LIST_STDIN } from './claude-model-list-probe'
-import { isolateClaudeBackgroundArgs } from './claude-background-run-isolation'
 
 type PrimaryAgentSpecDeps = {
   CLAUDE_THINKING_LEVELS: ThinkingLevel[]
@@ -46,7 +45,6 @@ export function buildPrimaryCommitMessageAgentSpecs({
         'plan',
         ...(thinkingLevel ? ['--effort', thinkingLevel] : [])
       ],
-      finalizeArgs: isolateClaudeBackgroundArgs,
       modelSource: 'dynamic',
       // Why: the Claude CLI has no listing subcommand; one list_models control
       // request over --print stream-json returns the /model picker catalog.

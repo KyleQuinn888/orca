@@ -395,10 +395,7 @@ describe('model discovery parsers', () => {
       'stream-json',
       '--output-format',
       'stream-json',
-      '--verbose',
-      '--strict-mcp-config',
-      '--settings',
-      '{"disableAllHooks":true}'
+      '--verbose'
     ])
     const payload = JSON.parse(discovery?.stdinPayload ?? '') as {
       type?: string

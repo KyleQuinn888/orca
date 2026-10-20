@@ -1,4 +1,14 @@
 import { describe, expect, it } from 'vitest'
+import { ChildProcess } from 'node:child_process'
+import { PassThrough } from 'node:stream'
+import { generateCommitMessage } from './source-control-text-generation-requests'
+import type {
+  CommitMessageGenerationTarget,
+  SpawnSourceControlAgent
+} from './source-control-text-generation-types'
+import { getAgentModelProbeSpec } from '../../shared/agent-model-probe-spec'
+import { planModelDiscovery } from './commit-message-model-discovery-policy'
+import { planCommitMessageGeneration } from '../../shared/commit-message-plan'
 import type { CommitMessagePlan } from '../../shared/commit-message-plan'
 import { generateJiraIssueSummaryFromContext } from './jira-issue-summary-text-generation'
 
@@ -95,3 +105,153 @@ describe('generateJiraIssueSummaryFromContext', () => {
     })
   })
 })
+
+// One owner must cover Jira and ordinary generation through both existing transports.
+it.each(['local', 'remote'] as const)(
+  'retries the same Claude invocation for Jira and commits on %s',
+  async (kind) => {
+    for (const operation of ['jira-issue-summary', 'commit-message'] as const) {
+      const calls: { args: string[]; other: unknown }[] = []
+      const response = (args: string[]) => {
+        const refused = args.includes('--strict-mcp-config')
+        return {
+          stdout: refused ? '' : 'Fix crash',
+          stderr: refused
+            ? 'You cannot use --strict-mcp-config when an enterprise MCP config is present'
+            : '',
+          exitCode: refused ? 1 : 0,
+          timedOut: false
+        }
+      }
+      const spawnAgent: SpawnSourceControlAgent = ({ args, ...other }) => {
+        calls.push({ args, other })
+        const child = Object.assign(new ChildProcess(), {
+          stdin: new PassThrough(),
+          stdout: new PassThrough(),
+          stderr: new PassThrough()
+        })
+        queueMicrotask(() => {
+          const output = response(args)
+          child.stdout.emit('data', Buffer.from(output.stdout))
+          child.stderr.emit('data', Buffer.from(output.stderr))
+          child.emit('close', output.exitCode)
+        })
+        return child
+      }
+      const target: CommitMessageGenerationTarget =
+        kind === 'local'
+          ? { kind, cwd: '/repo' }
+          : {
+              kind,
+              cwd: '/repo',
+              missingBinaryLocation: 'remote PATH',
+              execute: async ({ args, ...other }, cwd, timeout, op) => {
+                expect(op).toBe(operation)
+                calls.push({ args, other: { ...other, cwd, timeout, op } })
+                return response(args)
+              }
+            }
+      const params = { agentId: 'claude' as const, model: 'haiku' }
+      const result =
+        operation === 'jira-issue-summary'
+          ? await generateJiraIssueSummaryFromContext(
+              { description: 'Crash on save' },
+              params,
+              target,
+              spawnAgent
+            )
+          : await generateCommitMessage({
+              context: { stagedSummary: 'M file', stagedPatch: '+fix' },
+              params,
+              target,
+              spawnAgent
+            })
+      expect(result.success).toBe(true)
+      expect(calls).toHaveLength(2)
+      expect(calls[1]).toEqual({
+        ...calls[0],
+        args: calls[0].args.filter((arg) => arg !== '--strict-mcp-config')
+      })
+    }
+  }
+)
+
+it('preserves Jira custom output and OpenCode one-attempt behavior', async () => {
+  expect(
+    await generateJiraIssueSummaryFromContext(
+      { description: 'Crash' },
+      { agentId: 'custom', model: '', customAgentCommand: 'agent' },
+      remoteTarget(async () => 'Draft thought</think>\nFix crash')
+    )
+  ).toMatchObject({ summary: 'Draft thought</think>' })
+  let attempts = 0
+  const result = await generateJiraIssueSummaryFromContext(
+    { description: 'Crash' },
+    { agentId: 'opencode', model: 'provider/model', thinkingLevel: 'high' },
+    {
+      kind: 'remote',
+      cwd: '/repo',
+      missingBinaryLocation: 'remote PATH',
+      execute: async () => {
+        attempts++
+        return { stdout: '', stderr: 'Unknown argument: variant', exitCode: 1, timedOut: false }
+      }
+    }
+  )
+  expect(result.success).toBe(false)
+  expect(attempts).toBe(1)
+})
+
+it.each([
+  ['', '', '{"disableAllHooks":true}'],
+  [
+    '--settings \'{"language":"French"}\'',
+    '--settings \'{"model":"haiku"}\'',
+    '{"disableAllHooks":true,"model":"haiku"}'
+  ],
+  [
+    '--settings earlier.json',
+    '--settings=\'{"model":"haiku"}\'',
+    '{"disableAllHooks":true,"model":"haiku"}'
+  ],
+  ['--settings \'{"language":"French"}\'', '--settings winning.json', 'winning.json'],
+  [
+    '',
+    '--settings=\'{"disableAllHooks":false}\' --mcp-config explicit.json',
+    '{"disableAllHooks":false}'
+  ]
+])(
+  'preserves effective settings across discovery and preview: %s %s',
+  (prefix, recipe, effective) => {
+    const preview = planCommitMessageGeneration(
+      {
+        agentId: 'claude',
+        model: 'haiku',
+        agentCommandOverride: `claude ${prefix}`,
+        agentArgs: recipe
+      },
+      'prompt'
+    )
+    const spec = getAgentModelProbeSpec('claude')
+    if (!spec) {
+      throw new Error('Missing Claude spec')
+    }
+    const discovery = planModelDiscovery(spec, `claude ${prefix} ${recipe}`)
+    for (const planned of [preview, discovery]) {
+      if (!planned.ok) {
+        throw new Error(planned.error)
+      }
+      const options = planned.plan.args.filter(
+        (arg) => arg === '--settings' || arg.startsWith('--settings=')
+      )
+      const last = options.at(-1) ?? ''
+      const value =
+        last === '--settings'
+          ? planned.plan.args[planned.plan.args.lastIndexOf(last) + 1]
+          : last.slice(11)
+      expect(value).toBe(effective)
+      expect(planned.plan.args.join(' ')).toContain(prefix.replaceAll("'", ''))
+      expect(planned.plan.args.includes('explicit.json')).toBe(recipe.includes('explicit.json'))
+    }
+  }
+)

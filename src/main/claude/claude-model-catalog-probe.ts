@@ -5,8 +5,8 @@ import {
 } from '../../shared/claude-model-list-probe'
 import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
 import {
-  claudeRefusedStrictMcpConfig,
-  withoutStrictMcpConfig
+  isolateClaudeBackgroundArgs,
+  runClaudeBackgroundAttempts
 } from '../../shared/claude-background-run-isolation'
 import { parseClaudeModels } from '../../shared/commit-message-model-parsers'
 import { AgentModelCatalogUnavailableError } from '../native-chat/agent-model-catalog/agent-model-catalog-unavailable'
@@ -60,16 +60,25 @@ export async function runClaudeListing(
       },
       { site: request.site, inheritedEnv: env, signal: request.signal }
     )
-  return run(request.args).catch((error: unknown) => {
-    if (
-      error instanceof AgentModelCatalogProbeError &&
-      error.reason === 'exit' &&
-      claudeRefusedStrictMcpConfig(error.message)
-    ) {
-      return run(withoutStrictMcpConfig(request.args))
-    }
-    throw error
+  const result = await runClaudeBackgroundAttempts({
+    agentId: 'claude',
+    args: isolateClaudeBackgroundArgs(request.args),
+    run: (args) =>
+      run(args).catch((error: unknown) => {
+        if (error instanceof AgentModelCatalogProbeError) {
+          return error
+        }
+        throw error
+      }),
+    failedExit: (outcome) =>
+      outcome instanceof AgentModelCatalogProbeError && outcome.reason === 'exit'
+        ? outcome.failedExit
+        : undefined
   })
+  if (result instanceof AgentModelCatalogProbeError) {
+    throw result
+  }
+  return result
 }
 
 /**

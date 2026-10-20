@@ -1,3 +1,4 @@
+import { isolateClaudeBackgroundArgs } from './claude-background-run-isolation'
 import { findOptionOccurrence } from './command-option-occurrence'
 import { planAgentBinary } from './agent-command-plan'
 export { planAgentBinary } from './agent-command-plan'
@@ -283,7 +284,8 @@ export function planCommitMessageGeneration(
     merged.prefixArgs,
     args
   )
-  const generationArgs = spec.finalizeArgs ? spec.finalizeArgs(mergedArgs) : mergedArgs
+  const generationArgs =
+    input.agentId === 'claude' ? isolateClaudeBackgroundArgs(mergedArgs) : mergedArgs
   const formatOption =
     input.agentId === 'opencode' || input.agentId === 'opencode2'
       ? findOptionOccurrence(generationArgs, ['--format'], true)

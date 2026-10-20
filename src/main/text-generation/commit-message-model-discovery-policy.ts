@@ -1,3 +1,4 @@
+import { isolateClaudeBackgroundArgs } from '../../shared/claude-background-run-isolation'
 import type { CommandTemplateBackslash } from '../../shared/commit-message-prompt'
 import type { CommitMessagePlan } from '../../shared/commit-message-plan'
 import { planAgentBinary } from '../../shared/commit-message-plan'
@@ -89,7 +90,10 @@ export function planModelDiscovery(
     ok: true,
     plan: {
       binary: command.binary,
-      args: [...command.prefixArgs, ...modelDiscovery.args],
+      args:
+        spec.id === 'claude'
+          ? isolateClaudeBackgroundArgs([...command.prefixArgs, ...modelDiscovery.args])
+          : [...command.prefixArgs, ...modelDiscovery.args],
       stdinPayload: modelDiscovery.stdinPayload ?? null,
       label: spec.label,
       ...(command.env ? { env: command.env } : {})

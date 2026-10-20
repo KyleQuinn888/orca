@@ -1,16 +1,8 @@
-// Why: Orca's background Claude runs (model and `/` listings, chat naming, commit messages) only
-// produce text. Loading the user's MCP servers starts every server just to stop it, and can cut
-// off an OAuth refresh mid-flight; their hooks would fire on every run. Strict mode drops every
-// server not passed explicitly, whatever allowlists other settings sources hold.
+import { agentArgTerminatorIndex, findAgentArgOption } from './agent-session-option-agent-args'
 
 const STRICT_MCP_CONFIG = '--strict-mcp-config'
-const HOOKS_OFF = { disableAllHooks: true }
-
-export const CLAUDE_BACKGROUND_RUN_ARGS = [
-  STRICT_MCP_CONFIG,
-  '--settings',
-  JSON.stringify(HOOKS_OFF)
-] as const
+const ENTERPRISE_REFUSAL =
+  'You cannot use --strict-mcp-config when an enterprise MCP config is present'
 
 function inlineSettings(value: string): Record<string, unknown> | null {
   try {
@@ -21,39 +13,64 @@ function inlineSettings(value: string): Record<string, unknown> | null {
   }
 }
 
-/** Isolates a background run whose argv includes the user's own flags. Claude keeps only the
- *  last `--settings`, so inline user settings merge into one object over hooks-off; a settings
- *  file is left as written, since only the executing host can read it. */
+/** Apply defaults below the last active user settings value; only the execution host can read files. */
 export function isolateClaudeBackgroundArgs(args: readonly string[]): string[] {
-  const rest: string[] = []
-  const settings: string[] = []
-  for (let i = 0; i < args.length; i++) {
-    if (args[i] === '--settings' && i + 1 < args.length) {
-      settings.push(args[++i])
-    } else if (args[i].startsWith('--settings=')) {
-      settings.push(args[i].slice('--settings='.length))
-    } else {
-      rest.push(args[i])
+  const prepared = [...args]
+  let offset = 0
+  let winner: { index: number; consumed: number; value?: string } | null = null
+  let option = findAgentArgOption('claude', args, ['--settings'])
+  while (option) {
+    winner = { ...option, index: offset + option.index }
+    offset = winner.index + option.consumed
+    option = findAgentArgOption('claude', args.slice(offset), ['--settings'])
+  }
+  if (winner) {
+    const settings = winner.value === undefined ? null : inlineSettings(winner.value)
+    if (settings) {
+      const value = JSON.stringify({ disableAllHooks: true, ...settings })
+      prepared.splice(
+        winner.index,
+        winner.consumed,
+        ...(args[winner.index] === '--settings' ? ['--settings', value] : [`--settings=${value}`])
+      )
     }
   }
-  const parsed = settings.map(inlineSettings)
-  const merged = parsed.every((value) => value !== null)
-    ? ['--settings', JSON.stringify(Object.assign({ ...HOOKS_OFF }, ...parsed))]
-    : null
-  return [
-    ...(merged ? rest : [...args]),
-    ...(args.includes(STRICT_MCP_CONFIG) ? [] : [STRICT_MCP_CONFIG]),
-    ...(merged ?? [])
-  ]
+  const defaults = winner ? [] : ['--settings', '{"disableAllHooks":true}']
+  if (!findAgentArgOption('claude', args, [STRICT_MCP_CONFIG])) {
+    defaults.unshift(STRICT_MCP_CONFIG)
+  }
+  prepared.splice(agentArgTerminatorIndex('claude', prepared), 0, ...defaults)
+  return prepared
 }
 
-/** Whether Claude refused strict mode because an enterprise MCP config is present. That config
- *  already keeps the user's own servers out, and Claude, not Orca, decides where it lives on each
- *  host (WSL can inherit Windows policy), so the run is retried once without the flag. */
-export function claudeRefusedStrictMcpConfig(output: string): boolean {
-  return output.includes(STRICT_MCP_CONFIG) && /enterprise MCP config/i.test(output)
-}
+export type ClaudeBackgroundFailedExit = { exitCode: number | null; stdout: string; stderr: string }
 
-export function withoutStrictMcpConfig(args: readonly string[]): string[] {
-  return args.filter((arg) => arg !== STRICT_MCP_CONFIG)
+/** Retry the same invocation once, only after Claude's completed enterprise-policy refusal. */
+export async function runClaudeBackgroundAttempts<T>(input: {
+  agentId: string
+  args: readonly string[]
+  run: (args: string[]) => Promise<T>
+  failedExit: (result: T) => ClaudeBackgroundFailedExit | undefined
+}): Promise<T> {
+  const result = await input.run([...input.args])
+  const failure = input.failedExit(result)
+  const strict = findAgentArgOption('claude', input.args, [STRICT_MCP_CONFIG])
+  if (
+    input.agentId !== 'claude' ||
+    !strict ||
+    !failure ||
+    typeof failure.exitCode !== 'number' ||
+    failure.exitCode === 0 ||
+    !`${failure.stdout}\n${failure.stderr}`.includes(ENTERPRISE_REFUSAL)
+  ) {
+    return result
+  }
+  const retryArgs = [...input.args]
+  // Remove active flags only; the same text can be an option value or a positional argument.
+  let active = findAgentArgOption('claude', retryArgs, [STRICT_MCP_CONFIG])
+  while (active) {
+    retryArgs.splice(active.index, 1)
+    active = findAgentArgOption('claude', retryArgs, [STRICT_MCP_CONFIG])
+  }
+  return input.run(retryArgs)
 }

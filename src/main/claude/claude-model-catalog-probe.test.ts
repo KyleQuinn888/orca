@@ -1,3 +1,4 @@
+import { isolateClaudeBackgroundArgs } from '../../shared/claude-background-run-isolation'
 import { AgentModelCatalogUnavailableError } from '../native-chat/agent-model-catalog/agent-model-catalog-unavailable'
 import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { homedir, tmpdir } from 'node:os'
@@ -94,7 +95,7 @@ describe('claude model catalog probe', () => {
       const [launch, options] = calls[0]!
       expect(launch).toEqual({
         command: invocation.command,
-        args: [...CLAUDE_MODEL_LIST_ARGS],
+        args: isolateClaudeBackgroundArgs(CLAUDE_MODEL_LIST_ARGS),
         stdin: CLAUDE_MODEL_LIST_STDIN
       })
       expect(options.inheritedEnv).toEqual(invocation.env)
@@ -249,4 +250,18 @@ describe('Claude catalog availability', () => {
       rmSync(folder, { recursive: true, force: true })
     }
   })
+})
+
+// Only completed failed exits supply process facts to the shared retry policy.
+it.each([null, 0, 1])('enterprise retry uses the actual exit code %s', async (exitCode) => {
+  const stderr = 'You cannot use --strict-mcp-config when an enterprise MCP config is present'
+  const runListing = vi.fn(async () => LISTED)
+  runListing.mockRejectedValueOnce(
+    new AgentModelCatalogProbeError(stderr, 'exit', false, { exitCode, stdout: '', stderr })
+  )
+  const result = createClaudeModelCatalogProbe({ ...probeDeps(), runListing })(HOME('/homes/a'))
+  await (exitCode === 1
+    ? expect(result).resolves.toMatchObject({ models: [{ id: 'sonnet' }] })
+    : expect(result).rejects.toMatchObject({ failedExit: { exitCode } }))
+  expect(runListing).toHaveBeenCalledTimes(exitCode === 1 ? 2 : 1)
 })
