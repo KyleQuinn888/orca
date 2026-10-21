@@ -300,10 +300,15 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
   }
 
   /** True while the child runs a turn; a pinned-true answer would never let the
-   *  host's idle sweep stop an idle zcode child. */
+   *  host's idle sweep stop an idle zcode child. A held question counts too:
+   *  its turn stays open on the provider's side, blocked on a person. */
   holdsDispatch = (sessionId: string): boolean => {
     const session = this.sessions.get(sessionId)
-    return session !== undefined && !session.ended && session.lane.assembler.openTurnId !== null
+    return (
+      session !== undefined &&
+      !session.ended &&
+      (session.lane.assembler.openTurnId !== null || session.lane.pendingPrompts.size > 0)
+    )
   }
 
   closeSession = async (sessionId: string): Promise<boolean> => {
