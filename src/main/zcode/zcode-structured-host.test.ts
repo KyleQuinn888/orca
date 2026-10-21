@@ -77,6 +77,24 @@ const FAKE_ZCODE_APP_SERVER = String.raw`
             questions
           }
         })
+        // The real server re-asks an unanswered question every few seconds
+        // under a fresh interaction id and wire id; the answer must reach the
+        // NEWEST ask, or the server rejects it as already answered elsewhere.
+        setTimeout(() => {
+          send({
+            id: 'ask-2',
+            method: 'interaction/requestUserInput',
+            params: {
+              requestId: 'perm_ask2',
+              sessionId: s,
+              turnId: 'turn_a',
+              toolCallId: 'call_ask',
+              toolName: 'AskUserQuestion',
+              prompt: 'Tool AskUserQuestion requires user interaction',
+              questions
+            }
+          })
+        }, 300)
         return send({ id: message.id, result: { accepted: true } })
       }
       const ts = Date.now()
@@ -88,8 +106,13 @@ const FAKE_ZCODE_APP_SERVER = String.raw`
       return send({ id: message.id, result: { accepted: true } })
     }
     if (message.id === 'ask-1') {
-      // The client answered the interaction request: finish the tool and turn
-      // with the answer echoed back, so the test can assert what we sent.
+      // The first ask was superseded by a re-ask: answering it is the bug this
+      // test pins, so the fake server treats a stale-ask answer as an error.
+      return send({ id: message.id, error: { code: -32001, message: 'request superseded' } })
+    }
+    if (message.id === 'ask-2') {
+      // The client answered the NEWEST interaction request: finish the tool and
+      // turn with the answer echoed back, so the test can assert what we sent.
       const s = message.params?.sessionId ?? 'sess_provider_1'
       const ts = Date.now()
       const answer = JSON.stringify(message.result ?? message.error ?? null)
@@ -250,6 +273,9 @@ describe('Zcode behind the real structured-session host', () => {
         },
         { timeout: 10_000 }
       )
+      // A person reads the options before answering: let the server's re-ask
+      // (a fresh interaction id, 300ms in) land first, as it always does live.
+      await new Promise((resolve) => setTimeout(resolve, 700))
       // The renderer's exact path: answer with the card's revision, as answers.
       const answers = [{ questionId: 'q0', optionIds: ['咖啡'] }]
       const fields = { itemId: card.itemId, expectedRevision: card.revision, answers }
@@ -263,14 +289,44 @@ describe('Zcode behind the real structured-session host', () => {
         value: { resolution: { state: 'resolved', answers } }
       })
       // The server received the answers-by-question-text shape and the turn
-      // it unblocked completes with the answer echoed in the reply.
+      // it unblocked completes with the answer echoed in the reply. Read the
+      // journal directly: the conversation winds down once the last dispatch
+      // settles, after which host.history refuses ownership.
       await vi.waitFor(
-        async () => {
-          const messages = await rig.messages()
-          expect(messages.join('\n')).toContain('the user chose')
-          expect(messages.join('\n')).toContain('咖啡')
+        () => {
+          const { DatabaseSync } = require('node:sqlite')
+          const db = new DatabaseSync(
+            require('node:path').join(rig.state.root, 'agent-session-journal.db'),
+            { readOnly: true }
+          )
+          const rows = db
+            .prepare(
+              "select row_json from journal_rows where session_id = ? and row_json like '%the user chose%' order by seq"
+            )
+            .all(SESSION) as { row_json: string }[]
+          const reply = rows.map((row) => row.row_json).join('\n')
+          if (!reply.includes('the user chose')) {
+            const all = db
+              .prepare('select seq, row_json from journal_rows where session_id = ? order by seq')
+              .all(SESSION) as { seq: number; row_json: string }[]
+            console.info(
+              '[ask-rows]',
+              all
+                .map((row) => {
+                  const parsed = JSON.parse(row.row_json) as {
+                    kind?: string
+                    body?: { kind?: string; state?: string }
+                  }
+                  return `${row.seq}:${parsed.kind ?? parsed.body?.kind ?? '?'}`
+                })
+                .join(' ')
+            )
+          }
+          db.close()
+          expect(reply).toContain('the user chose')
+          expect(reply).toContain('咖啡')
         },
-        { timeout: 10_000 }
+        { timeout: 15_000 }
       )
       // The turn's completion is asserted against the journal itself: the
       // conversation can wind down the moment the last dispatch settles, after

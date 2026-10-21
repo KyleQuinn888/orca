@@ -16,6 +16,12 @@ import { ZcodeTimelineTranslator } from './zcode-timeline-translator'
 import { mapZcodeProtocolQuestions } from './zcode-protocol-questions'
 
 const RETRY_MS = 250
+
+/** The tool call an interaction request names, when it names one. */
+function toolCallIdOf(params: unknown): string | null {
+  const value = (params as { toolCallId?: unknown } | null | undefined)?.toolCallId
+  return typeof value === 'string' ? value : null
+}
 import type { ZcodeAppServerConnection } from './zcode-app-server-connection'
 
 /** What a held interaction request needs to be answered over the transport.
@@ -24,6 +30,10 @@ import type { ZcodeAppServerConnection } from './zcode-app-server-connection'
 export type ZcodeHeldPrompt = {
   kind: 'approval' | 'question'
   requestId: number | string
+  /** The tool call the interaction belongs to: an unanswered question is
+   *  re-asked every few seconds under a fresh interaction and wire id, and
+   *  only the newest ask of a tool call stays answerable. */
+  toolCallId?: string
   questions?: readonly { id: string; question: string }[]
 }
 
@@ -147,7 +157,12 @@ export class ZcodeStructuredLane {
     requestId: number | string,
     params: unknown
   ): void {
-    this.pendingPrompts.set(String(requestId), { kind: 'approval', requestId })
+    this.retireReaskedPrompt('approval', toolCallIdOf(params))
+    this.pendingPrompts.set(String(requestId), {
+      kind: 'approval',
+      requestId,
+      ...(toolCallIdOf(params) !== null ? { toolCallId: toolCallIdOf(params) ?? undefined } : {})
+    })
     this.applyAll(
       this.translator.translate({
         type: 'permission.requested',
@@ -163,9 +178,11 @@ export class ZcodeStructuredLane {
     const questions = mapZcodeProtocolQuestions(
       (params as { questions?: unknown } | null | undefined)?.questions
     )
+    this.retireReaskedPrompt('question', toolCallIdOf(params))
     this.pendingPrompts.set(String(requestId), {
       kind: 'question',
       requestId,
+      ...(toolCallIdOf(params) !== null ? { toolCallId: toolCallIdOf(params) ?? undefined } : {}),
       ...(questions.length > 0
         ? { questions: questions.map(({ id, question }) => ({ id, question })) }
         : {})
@@ -177,6 +194,20 @@ export class ZcodeStructuredLane {
         payload: params as Record<string, unknown>
       })
     )
+  }
+
+  /** An unanswered interaction is re-asked every few seconds under a fresh
+   *  interaction and wire id; the older ask of the same tool call is no longer
+   *  answerable, so its hold retires here — elimination stays at one. */
+  private retireReaskedPrompt(kind: 'approval' | 'question', toolCallId: string | null): void {
+    if (toolCallId === null) {
+      return
+    }
+    for (const [key, held] of this.pendingPrompts) {
+      if (held.kind === kind && held.toolCallId === toolCallId) {
+        this.pendingPrompts.delete(key)
+      }
+    }
   }
 
   /** Orca's send reached the provider. */

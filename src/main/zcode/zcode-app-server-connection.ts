@@ -191,12 +191,6 @@ export async function openZcodeAppServerConnection(
   }
 
   function close(): Promise<boolean> {
-    // Temporary diagnostics: name the host path that stops a zcode child
-    // mid-question (the ~60s stops that cancel a pending AskUserQuestion card).
-    console.info(
-      '[zcode-close] connection close called; initiator stack:',
-      new Error('initiator').stack?.split('\n').slice(1, 6).join(' <- ')
-    )
     closing ||= managed.rootVerdict !== 'exited'
     return managed.close().then((result) => {
       dispatcher.failPending(new Error('zcode app-server connection closed'))
