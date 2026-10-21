@@ -24,9 +24,12 @@ export function mapZcodeProtocolQuestions(rawQuestions: unknown): ZcodeJournalQu
       continue
     }
     const entry = raw as Record<string, unknown>
-    const id = asString(entry.id) ?? asString(entry.questionId)
+    // The protocol identifies questions by their text (the runtime's answer
+    // merge keys answers by it); entries carry no id, so one is minted here
+    // and answerFor maps it back through the same order.
+    const id = asString(entry.id) ?? asString(entry.questionId) ?? `q${mapped.length}`
     const question = asString(entry.question) ?? asString(entry.header) ?? ''
-    if (id === null || question.length === 0) {
+    if (question.length === 0) {
       continue
     }
     const options: JournalOption[] = []

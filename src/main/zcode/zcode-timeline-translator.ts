@@ -328,7 +328,11 @@ export class ZcodeTimelineTranslator {
           question:
             asString(payload.prompt) ?? questions[0]?.question ?? 'The agent asked a question.',
           ...(questions.length > 0 ? { questions } : {}),
-          options: [{ id: 'answer', label: 'Answer' }],
+          // The flat list stands in for renderers that ignore the grouped
+          // field; AskUserQuestion always admits an Other free-text answer.
+          options:
+            questions.length > 0 ? questions[0]!.options : [{ id: 'answer', label: 'Answer' }],
+          ...(questions.length > 0 ? { freeTextQuestionId: questions[0]!.id } : {}),
           resolution: {
             state: 'pending' as const,
             selectedOptionId: null,

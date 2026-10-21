@@ -136,4 +136,66 @@ describe('ZcodeTimelineTranslator', () => {
       }
     ])
   })
+
+  it('renders an AskUserQuestion request as grouped question options, not the flat fallback', () => {
+    const translator = new ZcodeTimelineTranslator()
+    const events = translator.translate({
+      type: 'userInput.requested',
+      turnId: 'turn_x',
+      timestamp: 5,
+      // Shape as the app-server sends it: prompt is generic, questions carry
+      // the real content, and entries have no id of their own.
+      payload: {
+        requestId: 'perm_uuid-1',
+        sessionId: 'sess_1',
+        toolCallId: 'call_1',
+        toolName: 'AskUserQuestion',
+        prompt: 'Tool AskUserQuestion requires user interaction',
+        questions: [
+          {
+            question: '你希望我接下来做什么？',
+            header: '下一步',
+            multiSelect: false,
+            options: [
+              { value: '写一个小 demo', label: '写一个小 demo', description: '创建一个示例项目' },
+              { value: '查看仓库结构', label: '查看仓库结构' }
+            ]
+          }
+        ]
+      }
+    })
+    expect(events).toEqual([
+      {
+        type: 'request.open',
+        request: 'perm_uuid-1',
+        join: { turn: 'turn_x' },
+        body: {
+          kind: 'question',
+          question: 'Tool AskUserQuestion requires user interaction',
+          questions: [
+            {
+              id: 'q0',
+              question: '你希望我接下来做什么？',
+              multiSelect: false,
+              options: [
+                { id: '写一个小 demo', label: '写一个小 demo', description: '创建一个示例项目' },
+                { id: '查看仓库结构', label: '查看仓库结构' }
+              ]
+            }
+          ],
+          options: [
+            { id: '写一个小 demo', label: '写一个小 demo', description: '创建一个示例项目' },
+            { id: '查看仓库结构', label: '查看仓库结构' }
+          ],
+          freeTextQuestionId: 'q0',
+          resolution: {
+            state: 'pending',
+            selectedOptionId: null,
+            resolvedBy: null,
+            resolvedAt: null
+          }
+        }
+      }
+    ])
+  })
 })

@@ -14,14 +14,18 @@ import { createProviderTimelineAssembler } from '../native-chat/agent-session-ti
 import { createLegacyProviderTimelineIdentityScheme } from '../native-chat/agent-session-timeline/provider-timeline-identity'
 import type { ProviderTimelineEvent } from '../native-chat/agent-session-timeline/provider-timeline-event'
 import { ZcodeTimelineTranslator } from './zcode-timeline-translator'
+import { mapZcodeProtocolQuestions } from './zcode-protocol-questions'
 
 const RETRY_MS = 250
 import type { ZcodeAppServerConnection } from './zcode-app-server-connection'
 
-/** What a held interaction request needs to be answered over the transport. */
+/** What a held interaction request needs to be answered over the transport.
+ *  Question texts ride along because the server's answer merge keys the
+ *  answers record by the question text, not by any id. */
 export type ZcodeHeldPrompt = {
   kind: 'approval' | 'question'
   requestId: number | string
+  questions?: readonly { id: string; question: string }[]
 }
 
 /** An event sink with no journal behind it: the protocol still runs, the timeline drops. */
@@ -162,7 +166,16 @@ export class ZcodeStructuredLane {
 
   /** The transport pushed a user-input request: journal its card, hold the answer. */
   userInputRequest(requestId: number | string, params: unknown): void {
-    this.pendingPrompts.set(String(requestId), { kind: 'question', requestId })
+    const questions = mapZcodeProtocolQuestions(
+      (params as { questions?: unknown } | null | undefined)?.questions
+    )
+    this.pendingPrompts.set(String(requestId), {
+      kind: 'question',
+      requestId,
+      ...(questions.length > 0
+        ? { questions: questions.map(({ id, question }) => ({ id, question })) }
+        : {})
+    })
     this.applyAll(
       this.translator.translate({
         type: 'userInput.requested',
@@ -222,10 +235,23 @@ export class ZcodeStructuredLane {
     if (response.kind !== 'answers') {
       return { action: 'decline' }
     }
-    const content = response.answers
-      .map((answer) => answer.other ?? answer.optionIds.join(', '))
-      .join(' ')
-    return { action: 'accept', content }
+    // The server merges content.answers keyed by the question TEXT (it derives
+    // those keys from the tool input); synthesized card ids map back by order.
+    const answers: Record<string, string> = {}
+    response.answers.forEach((answer, index) => {
+      const question = pending.questions?.[index]?.question
+      if (question === undefined) {
+        return
+      }
+      const value = answer.other ?? answer.optionIds.join(', ')
+      if (value.length > 0) {
+        answers[question] = value
+      }
+    })
+    if (Object.keys(answers).length === 0) {
+      return { action: 'decline' }
+    }
+    return { action: 'accept', content: { answers } }
   }
 
   private applyAll(events: readonly ProviderTimelineEvent[]): void {
