@@ -39,7 +39,9 @@ export function mapZcodeProtocolQuestions(rawQuestions: unknown): ZcodeJournalQu
       }
       const opt = option as Record<string, unknown>
       const label = asString(opt.label) ?? asString(opt.value) ?? ''
-      const optionId = asString(opt.id) ?? (label.length > 0 ? label : null)
+      // The wire's `value` is the canonical answer token (plan approval sends
+      // label "Approve" but value "approve" — the server compares the value).
+      const optionId = asString(opt.id) ?? asString(opt.value) ?? (label.length > 0 ? label : null)
       if (optionId === null) {
         continue
       }
