@@ -71,6 +71,31 @@ describe('ZcodeStructuredLane held prompts', () => {
     ).toEqual({ action: 'decline' })
   })
 
+  it('answers a permission card with the chosen protocol optionId, never a bare decision', () => {
+    const subject = lane()
+    // Plan approval: the server's options carry their own ids and pre-baked
+    // responses; the card's option ids are those same ids, and the server
+    // resolves the answer by looking the optionId up in its options.
+    subject.permissionRequest(undefined as never, 44, {
+      requestId: 'perm_plan1',
+      toolCallId: 'call_plan',
+      toolName: 'ExitPlanMode',
+      options: [
+        { optionId: 'allowOnce', kind: 'allow_once', name: 'Approve' },
+        { optionId: 'deny', kind: 'deny', name: 'Deny' }
+      ]
+    })
+    const pending = subject.pendingPrompts.get('44')!
+    expect(pending.kind).toBe('approval')
+    expect(pending.toolCallId).toBe('call_plan')
+    expect(subject.answerFor(pending, { kind: 'option', optionId: 'allowOnce' })).toEqual({
+      optionId: 'allowOnce'
+    })
+    expect(subject.answerFor(pending, { kind: 'option', optionId: 'deny' })).toEqual({
+      optionId: 'deny'
+    })
+  })
+
   it('still answers the flat no-questions card by declining', () => {
     const subject = lane()
     subject.userInputRequest(43, {

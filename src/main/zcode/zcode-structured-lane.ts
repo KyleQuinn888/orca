@@ -253,10 +253,11 @@ export class ZcodeStructuredLane {
       | { kind: 'answers'; answers: { questionId: string; optionIds: string[]; other?: string }[] }
   ): Record<string, unknown> {
     if (pending.kind === 'approval') {
-      return {
-        decision:
-          response.kind === 'option' && response.optionId.startsWith('deny') ? 'deny' : 'allow'
-      }
+      // The server resolves a permission answer by looking the response's
+      // optionId up in the request's own options; anything else is a deny.
+      // The card's option ids ARE the request's optionIds, so the chosen one
+      // passes straight through.
+      return response.kind === 'option' ? { optionId: response.optionId } : { optionId: 'deny' }
     }
     if (response.kind !== 'answers') {
       return { action: 'decline' }
