@@ -11,7 +11,6 @@ import type { StructuredAgentSessionEventSink } from '../native-chat/agent-sessi
 import type { ProviderTimelineSink } from '../native-chat/agent-session-timeline/provider-timeline-plan'
 import { providerTimelineSink } from '../native-chat/agent-session-timeline/provider-timeline-plan'
 import { createProviderTimelineAssembler } from '../native-chat/agent-session-timeline/provider-timeline-assembler'
-import { createLegacyProviderTimelineIdentityScheme } from '../native-chat/agent-session-timeline/provider-timeline-identity'
 import type { ProviderTimelineEvent } from '../native-chat/agent-session-timeline/provider-timeline-event'
 import { ZcodeTimelineTranslator } from './zcode-timeline-translator'
 import { mapZcodeProtocolQuestions } from './zcode-protocol-questions'
@@ -38,11 +37,13 @@ const NO_TIMELINE_EVENT_SINK = {
 export type ZcodeDispatchSettlement = {
   sessionId: string
   clientMessageId: string
+  /** The send's provider item. zcode never echoes the user message as its own
+   *  row, so the submission's own identity stands in — the journal's dispatch
+   *  alias then maps the id to itself. Naming the turn row here would alias it
+   *  to the submission and make the turn-end batch write a stale revision. */
   providerIdentity: {
-    provider: 'legacy'
-    agent: string
-    sessionId: string
-    recordId: string
+    provider: 'orca'
+    clientMessageId: string
   }
 }
 
@@ -72,21 +73,19 @@ export class ZcodeStructuredLane {
   /** A fast turn can start AND end before session/send's reply returns: the
    *  dispatch still in flight needs the identity of the turn that already ran. */
   private settledTurn: string | null = null
+  /** The send the settled turn answered, so its provider identity survives the settle. */
+  private settledSend: string | null = null
 
-  /** The journal identity of the turn the armed send opened (or that already
+  /** The send's provider identity once a turn opened under it (or already
    *  settled under it, when the whole turn raced the send's reply). */
   armedTurnIdentity(): ZcodeDispatchSettlement['providerIdentity'] | null {
     const turn = this.armedTurn ?? this.settledTurn
-    if (turn === null) {
+    const send = this.armedSend ?? this.settledSend
+    if (turn === null || send === null) {
       return null
     }
-    return this.identity.turn({
-      namespace: this.namespace,
-      key: { source: 'provider', value: turn }
-    }) as ZcodeDispatchSettlement['providerIdentity']
+    return { provider: 'orca', clientMessageId: send }
   }
-  private readonly identity: ReturnType<typeof createLegacyProviderTimelineIdentityScheme>
-  private namespace = ''
   private sessionId = ''
 
   constructor(
@@ -99,11 +98,6 @@ export class ZcodeStructuredLane {
     }
   ) {
     this.sessionId = input.sessionId
-    this.namespace = input.providerSessionId
-    this.identity = createLegacyProviderTimelineIdentityScheme({
-      agent: 'zcode',
-      sessionId: input.sessionId
-    })
     const sink = (providerTimelineSink(input.events ?? NO_TIMELINE_EVENT_SINK) ??
       noTimelineSink()) as ProviderTimelineSink
     this.assembler = createProviderTimelineAssembler({
@@ -189,6 +183,7 @@ export class ZcodeStructuredLane {
   inputAccepted(clientMessageId: string, requestedAt: number): void {
     this.armedSend = clientMessageId
     this.settledTurn = null
+    this.settledSend = null
     this.assembler.apply({ type: 'input.accepted', clientMessageId, requestedAt })
   }
 
@@ -275,15 +270,12 @@ export class ZcodeStructuredLane {
         this.armedTurn !== null &&
         this.onDispatchSettled !== undefined
       ) {
-        const identity = this.identity.turn({
-          namespace: this.namespace,
-          key: { source: 'provider', value: this.armedTurn }
-        })
         this.settledTurn = this.armedTurn
+        this.settledSend = this.armedSend
         this.onDispatchSettled({
           sessionId: this.sessionId,
           clientMessageId: this.armedSend,
-          providerIdentity: identity as ZcodeDispatchSettlement['providerIdentity']
+          providerIdentity: { provider: 'orca', clientMessageId: this.armedSend }
         })
         this.armedSend = null
         this.armedTurn = null

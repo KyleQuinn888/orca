@@ -46,6 +46,39 @@ const FAKE_ZCODE_APP_SERVER = String.raw`
     }
     if (message.method === 'session/send') {
       const s = message.params.sessionId
+      if (message.params.content === 'ASK') {
+        // A turn that blocks on AskUserQuestion: the tool opens, then the
+        // server asks the client to answer; the turn ends only once answered.
+        const ts = Date.now()
+        const questions = [
+          {
+            question: '你喝什么？',
+            header: '饮品',
+            multiSelect: false,
+            options: [
+              { value: '咖啡', label: '咖啡' },
+              { value: '茶', label: '茶' }
+            ]
+          }
+        ]
+        send({ method: 'session/event', params: { type: 'turn.started', turnId: 'turn_a', sessionId: s, seq: 1, timestamp: ts, payload: {} } })
+        send({ method: 'session/event', params: { type: 'model.streaming', turnId: 'turn_a', sessionId: s, seq: 2, timestamp: ts, payload: { toolCallId: 'call_ask', kind: 'tool_call', toolName: 'AskUserQuestion', input: { questions } } } })
+        send({ method: 'session/event', params: { type: 'tool.updated', turnId: 'turn_a', sessionId: s, seq: 3, timestamp: ts, payload: { toolCallId: 'call_ask', toolName: 'AskUserQuestion' } } })
+        send({
+          id: 'ask-1',
+          method: 'interaction/requestUserInput',
+          params: {
+            requestId: 'perm_ask1',
+            sessionId: s,
+            turnId: 'turn_a',
+            toolCallId: 'call_ask',
+            toolName: 'AskUserQuestion',
+            prompt: 'Tool AskUserQuestion requires user interaction',
+            questions
+          }
+        })
+        return send({ id: message.id, result: { accepted: true } })
+      }
       const ts = Date.now()
       send({ method: 'session/event', params: { type: 'turn.started', turnId: 'turn_1', sessionId: s, seq: 1, timestamp: ts, payload: { input: message.params.content } } })
       // The real protocol streams reasoning and reply under ONE message id.
@@ -53,6 +86,16 @@ const FAKE_ZCODE_APP_SERVER = String.raw`
       send({ method: 'session/event', params: { type: 'model.streaming', turnId: 'turn_1', sessionId: s, seq: 3, timestamp: ts, payload: { assistantMessageId: 'msg_reply', delta: 'hello back', kind: 'text_delta' } } })
       send({ method: 'session/event', params: { type: 'turn.completed', turnId: 'turn_1', sessionId: s, seq: 4, timestamp: ts, payload: { response: 'hello back', resultType: 'success', duration: 5 } } })
       return send({ id: message.id, result: { accepted: true } })
+    }
+    if (message.id === 'ask-1') {
+      // The client answered the interaction request: finish the tool and turn
+      // with the answer echoed back, so the test can assert what we sent.
+      const s = message.params?.sessionId ?? 'sess_provider_1'
+      const ts = Date.now()
+      const answer = JSON.stringify(message.result ?? message.error ?? null)
+      send({ method: 'session/event', params: { type: 'tool.updated', turnId: 'turn_a', sessionId: s, seq: 4, timestamp: ts, payload: { toolCallId: 'call_ask', toolName: 'AskUserQuestion', result: { success: true, content: { head: 'answered ' + answer, byteLength: answer.length, truncated: false } } } } })
+      send({ method: 'session/event', params: { type: 'turn.completed', turnId: 'turn_a', sessionId: s, seq: 5, timestamp: ts, payload: { response: 'the user chose ' + answer, resultType: 'success', duration: 1 } } })
+      return
     }
     if (message.method === 'session/stop') {
       return send({ id: message.id, result: {} })
@@ -183,6 +226,96 @@ describe('Zcode behind the real structured-session host', () => {
       await rig.host.close(SESSION, 'user-close')
     }
   })
+
+  it('answers an AskUserQuestion card through the host and delivers the answers to the server', async () => {
+    const rig = await openZcodeHostRig()
+    try {
+      await expect(rig.host.attach(CALLER, attachParams())).resolves.toMatchObject({ ok: true })
+      const ask = {
+        kind: 'message' as const,
+        role: 'user' as const,
+        blocks: [{ type: 'text' as const, text: 'ASK' }]
+      }
+      await rig.host.send(CALLER, {
+        envelope: envelope('agentSession.send', { body: ask }),
+        body: ask
+      })
+      const card = await vi.waitFor(
+        async () => {
+          const items = (await rig.host.history({ sessionId: SESSION, direction: 'tail' })).page
+            .items
+          const question = items.find((row) => row.body.kind === 'question')
+          expect(question).toBeDefined()
+          return question as { itemId: string; revision: number }
+        },
+        { timeout: 10_000 }
+      )
+      // The renderer's exact path: answer with the card's revision, as answers.
+      const answers = [{ questionId: 'q0', optionIds: ['咖啡'] }]
+      const fields = { itemId: card.itemId, expectedRevision: card.revision, answers }
+      const result = await rig.host.respondToPrompt(CALLER, {
+        envelope: envelope('agentSession.respondTo:question', fields),
+        kind: 'question',
+        ...fields
+      })
+      expect(result).toMatchObject({
+        ok: true,
+        value: { resolution: { state: 'resolved', answers } }
+      })
+      // The server received the answers-by-question-text shape and the turn
+      // it unblocked completes with the answer echoed in the reply.
+      await vi.waitFor(
+        async () => {
+          const messages = await rig.messages()
+          expect(messages.join('\n')).toContain('the user chose')
+          expect(messages.join('\n')).toContain('咖啡')
+        },
+        { timeout: 10_000 }
+      )
+      // The turn's completion is asserted against the journal itself: the
+      // conversation can wind down the moment the last dispatch settles, after
+      // which the host's history reads refuse ownership. The batch that ends
+      // the turn must carry the row's NEXT revision — a same-or-lower revision
+      // replays as stale and the turn row would run forever.
+      await vi.waitFor(
+        () => {
+          const { DatabaseSync } = require('node:sqlite')
+          const db = new DatabaseSync(
+            require('node:path').join(rig.state.root, 'agent-session-journal.db'),
+            { readOnly: true }
+          )
+          const rows = db
+            .prepare(
+              "select row_json from journal_rows where session_id = ? and row_json like '%lifecycle-batch%' order by seq"
+            )
+            .all(SESSION) as { row_json: string }[]
+          db.close()
+          const ended = rows
+            .map(
+              (row) =>
+                JSON.parse(row.row_json) as {
+                  mutations?: {
+                    itemId?: string
+                    revision?: number
+                    body?: { kind?: string; state?: string }
+                  }[]
+                }
+            )
+            .flatMap((batch) => batch.mutations ?? [])
+            .find(
+              (mutation) =>
+                mutation.itemId?.includes('turn-lifecycle') &&
+                mutation.body?.kind === 'turn' &&
+                mutation.body?.state === 'completed'
+            )
+          expect(ended?.revision).toBe(2)
+        },
+        { timeout: 20_000 }
+      )
+    } finally {
+      await rig.host.close(SESSION, 'user-close')
+    }
+  }, 45_000)
 
   it('attaches and delivers a send end to end', async () => {
     const rig = await openZcodeHostRig()
