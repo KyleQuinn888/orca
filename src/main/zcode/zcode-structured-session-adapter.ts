@@ -135,6 +135,14 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       session.lane.userInputRequest(request.id, request.params)
       return
     }
+    // No browser backend yet: discovery reads an honest empty list.
+    if (request.method === 'interaction/browserList') {
+      connection.respond(request.id, { browsers: [] })
+      return
+    }
+    if (request.method === 'interaction/browserExecute') {
+      return connection.respondWithError(request.id, -32001, 'no browser backend in this host')
+    }
     if (request.method.startsWith('automation/')) {
       answerZcodeAutomationRequest(this.automationStore, sessionId, request, connection)
       return
