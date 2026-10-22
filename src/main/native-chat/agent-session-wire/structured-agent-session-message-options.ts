@@ -28,14 +28,6 @@ export async function writeStructuredAgentSessionOption(
     publish: () => session && context.publish(sessionId, session.journal)
   }
   const child = session?.child
-  console.info(
-    '[opt-debug]',
-    input.key,
-    input.value,
-    'child:',
-    child?.phase ?? 'none',
-    child?.close !== undefined ? 'closing' : 'open'
-  )
   // An agent whose protocol carries a live mode change applies the setting at
   // once; every other one records the intent for its next start.
   const livePermissionMode = Boolean(

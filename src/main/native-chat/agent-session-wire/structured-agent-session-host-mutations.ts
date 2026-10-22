@@ -234,16 +234,7 @@ export async function setStructuredAgentSessionOption(
           get conversationWrite() {
             return atRest() ? (true as const) : undefined
           },
-          run: async (ctx) => {
-            const outcome = await writeStructuredAgentSessionOption(context, ctx, params)
-            console.info(
-              '[opt-result]',
-              params.key,
-              params.value,
-              JSON.stringify(outcome).slice(0, 200)
-            )
-            return outcome
-          }
+          run: (ctx) => writeStructuredAgentSessionOption(context, ctx, params)
         },
         (ledger) =>
           atRest()

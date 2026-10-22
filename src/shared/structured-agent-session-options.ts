@@ -279,11 +279,8 @@ export function commitStructuredAgentSessionOption(
   if (!state.catalog) {
     return state
   }
-  const effectiveModel = resolveEffectiveNativeChatModelId(
-    state.catalog,
-    state.catalog.models,
-    state.record
-  )
+  const { catalog, record } = state
+  const effectiveModel = resolveEffectiveNativeChatModelId(catalog, catalog.models, record)
   const decoded = decodeStructuredAgentSessionOptionValue(id, value)
   if (decoded === null) {
     return { ...state, pendingId: null }
@@ -309,7 +306,9 @@ export function commitStructuredAgentSessionOptionValues(
       next = commitStructuredAgentSessionOption(next, id, value)
     }
   }
-  return next
+  // The picker reads state.permissionMode, not the record: a pick must land there too.
+  const permission = values[AGENT_CHAT_PERMISSION_MODE_OPTION_ID]
+  return typeof permission === 'string' ? { ...next, permissionMode: permission } : next
 }
 
 export type StructuredSessionOptionPick = {
