@@ -154,9 +154,6 @@ function createZcodeAdapter(context: StructuredAgentAdapterContext): StructuredA
             personsMessage: true
           }
         )
-        .then((result: unknown) => {
-          console.info('[zcode-auto-fire]', JSON.stringify(result).slice(0, 240))
-        })
         .catch(() => {
           // A fire that cannot reach its session fails the automation honestly.
           record.lifecycleStatus = 'failed'
