@@ -125,6 +125,15 @@ export class ZcodeStructuredLane {
       return
     }
     if (method === 'session/event') {
+      // A delivery mode may batch several envelopes into one notification;
+      // each keeps its own seq, guarded exactly like a lone envelope.
+      const batch = (params as { events?: unknown[] } | null | undefined)?.events
+      if (Array.isArray(batch)) {
+        for (const one of batch) {
+          this.notification('session/event', one)
+        }
+        return
+      }
       const envelope = params as { type?: unknown; seq?: unknown }
       if (typeof envelope.seq === 'number') {
         if (envelope.seq <= this.lastSeq) {
