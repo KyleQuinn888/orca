@@ -26,4 +26,9 @@ export type AgentSessionCapabilities = {
    * WHEN it asks, so only what it asks about is covered, never a sandbox.
    */
   approvalEnforcement: 'provider' | 'orca'
+  /**
+   * The permission mode can be applied to a RUNNING session through setOption (the protocol
+   * carries a live mode-change method); absent means the setting only shapes the next start.
+   */
+  livePermissionMode?: boolean
 }

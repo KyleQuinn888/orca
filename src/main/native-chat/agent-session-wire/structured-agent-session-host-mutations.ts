@@ -209,7 +209,11 @@ export async function setStructuredAgentSessionOption(
   caller: StructuredAgentSessionCaller,
   params: { envelope: AgentSessionMutationEnvelope; key: string; value: string }
 ): Promise<AgentSessionMutationResult<AgentSessionOptionResult>> {
-  const recordOnly = params.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID
+  const recordOnly =
+    params.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID &&
+    !context.deps.agents.capabilities(
+      context.deps.store.getRecord(params.envelope.sessionId)?.provider ?? ''
+    )?.livePermissionMode
   const plan = setOptionPlan(params)
   const atRest = () => {
     const child = context.sessions.get(params.envelope.sessionId)?.child

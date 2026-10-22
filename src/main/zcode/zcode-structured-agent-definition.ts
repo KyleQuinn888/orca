@@ -43,7 +43,9 @@ export const ZCODE_STRUCTURED_AGENT: DirectoryAccountAgentDefinition = {
     // session/send answers -32010 while a turn runs; the host queues behind it.
     steering: 'queue',
     // Approvals ride on interaction/requestPermission; the server enforces.
-    approvalEnforcement: 'provider'
+    approvalEnforcement: 'provider',
+    // session/setMode changes a live session's permission mode.
+    livePermissionMode: true
   },
   restingOptions: {
     acceptsKey: isZcodeStructuredOptionKey,

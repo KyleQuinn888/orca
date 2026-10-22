@@ -279,7 +279,12 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
   }
 
   setOption = (input: StructuredAgentSessionSetOptionInput): Promise<void> =>
-    setZcodeSessionOption(this.live(input.sessionId), input.key, input.value)
+    setZcodeSessionOption(
+      this.live(input.sessionId),
+      // The chat's permission picker names the Orca mode; the protocol option is 'mode'.
+      input.key === 'permissionMode' ? 'mode' : input.key,
+      input.value
+    )
 
   readOptions = (input: { sessionId: string; fence: number }) =>
     Promise.resolve(readZcodeLiveOptions(this.live(input.sessionId)))

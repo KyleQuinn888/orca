@@ -28,8 +28,14 @@ export async function writeStructuredAgentSessionOption(
     publish: () => session && context.publish(sessionId, session.journal)
   }
   const child = session?.child
+  // An agent whose protocol carries a live mode change applies the setting at
+  // once; every other one records the intent for its next start.
+  const livePermissionMode = Boolean(
+    context.deps.agents.capabilities(context.deps.store.getRecord(sessionId)?.provider ?? '')
+      ?.livePermissionMode
+  )
   if (
-    input.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID ||
+    (input.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID && !livePermissionMode) ||
     !child ||
     child.phase === 'starting' ||
     child.close !== undefined
