@@ -15,12 +15,8 @@ function wireRecord(record: ZcodeAutomationRecord): Record<string, unknown> {
     ...(record.targetTaskId !== undefined ? { targetTaskId: record.targetTaskId } : {}),
     enabled: record.enabled,
     lifecycleStatus: record.lifecycleStatus,
-    ...(record.nextRunAt !== undefined
-      ? { nextRunAt: new Date(record.nextRunAt).toISOString() }
-      : {}),
-    ...(record.lastRunAt !== undefined
-      ? { lastRunAt: new Date(record.lastRunAt).toISOString() }
-      : {}),
+    ...(record.nextRunAt !== undefined ? { nextRunAt: record.nextRunAt } : {}),
+    ...(record.lastRunAt !== undefined ? { lastRunAt: record.lastRunAt } : {}),
     runCount: record.runCount,
     recurring: record.recurring,
     ...(record.maxRuns !== undefined ? { maxRuns: record.maxRuns } : {})
