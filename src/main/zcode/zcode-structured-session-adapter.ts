@@ -278,13 +278,25 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     session.connection.respond(held[0].requestId, session.lane.answerFor(held[0], input.response))
   }
 
-  setOption = (input: StructuredAgentSessionSetOptionInput): Promise<void> =>
-    setZcodeSessionOption(
-      this.live(input.sessionId),
-      // The chat's permission picker names the Orca mode; the protocol option is 'mode'.
+  setOption = async (
+    input: StructuredAgentSessionSetOptionInput
+  ): Promise<Readonly<Record<string, string>>> => {
+    const session = this.live(input.sessionId)
+    // The chat's permission picker names the Orca mode; the protocol option is 'mode'.
+    await setZcodeSessionOption(
+      session,
       input.key === 'permissionMode' ? 'mode' : input.key,
       input.value
     )
+    // The full updated set: the host persists what this returns, and a void
+    // here would wipe every other option the session holds.
+    // Only the string-valued options persist; the rest of the report is display state.
+    return Object.fromEntries(
+      Object.entries(readZcodeLiveOptions(session).current).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string'
+      )
+    )
+  }
 
   readOptions = (input: { sessionId: string; fence: number }) =>
     Promise.resolve(readZcodeLiveOptions(this.live(input.sessionId)))
