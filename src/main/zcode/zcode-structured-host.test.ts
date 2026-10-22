@@ -46,6 +46,23 @@ const FAKE_ZCODE_APP_SERVER = String.raw`
     }
     if (message.method === 'session/send') {
       const s = message.params.sessionId
+        if (message.params.content === 'AUTO') {
+          const s = message.params.sessionId
+          const ts = Date.now()
+          send({ method: 'session/event', params: { type: 'turn.started', turnId: 'turn_auto', sessionId: s, seq: 1, timestamp: ts, payload: {} } })
+          send({
+            id: 'auto-1',
+            method: 'automation/create',
+            params: {
+              title: 'greeter',
+              prompt: 'say hi',
+              cronExpr: '* * * * *',
+              recurring: true,
+              targetTaskId: s
+            }
+          })
+          return send({ id: message.id, result: { accepted: true } })
+        }
       if (message.params.content === 'ASK') {
         // A turn that blocks on AskUserQuestion: the tool opens, then the
         // server asks the client to answer; the turn ends only once answered.
@@ -125,6 +142,14 @@ const FAKE_ZCODE_APP_SERVER = String.raw`
       const answer = JSON.stringify(message.result ?? message.error ?? null)
       send({ method: 'session/event', params: { type: 'tool.updated', turnId: 'turn_a', sessionId: s, seq: 4, timestamp: ts, payload: { toolCallId: 'call_ask', toolName: 'AskUserQuestion', result: { success: true, content: { head: 'answered ' + answer, byteLength: answer.length, truncated: false } } } } })
       send({ method: 'session/event', params: { type: 'turn.completed', turnId: 'turn_a', sessionId: s, seq: 5, timestamp: ts, payload: { response: 'the user chose ' + answer, resultType: 'success', duration: 1 } } })
+      return
+    }
+    if (message.id === 'auto-1') {
+      // The client answered automation/create: finish the turn.
+      const s = 'sess_provider_1'
+      const ts = Date.now()
+      const answer = JSON.stringify(message.result ?? message.error ?? null)
+      send({ method: 'session/event', params: { type: 'turn.completed', turnId: 'turn_auto', sessionId: s, seq: 2, timestamp: ts, payload: { response: 'created ' + answer, resultType: 'success', duration: 1 } } })
       return
     }
     if (message.method === 'session/stop') {
@@ -474,6 +499,40 @@ describe('Zcode behind the real structured-session host', () => {
         },
         { timeout: 10_000 }
       )
+    } finally {
+      await rig.host.close(SESSION, 'user-close')
+    }
+  }, 45_000)
+
+  it('answers automation/create in the wire record shape and lists it back', async () => {
+    const rig = await openZcodeHostRig()
+    try {
+      await expect(rig.host.attach(CALLER, attachParams())).resolves.toMatchObject({ ok: true })
+      const auto = {
+        kind: 'message' as const,
+        role: 'user' as const,
+        blocks: [{ type: 'text' as const, text: 'AUTO' }]
+      }
+      await rig.host.send(CALLER, {
+        envelope: envelope('agentSession.send', { body: auto }),
+        body: auto
+      })
+      await vi.waitFor(
+        async () => {
+          const messages = await rig.messages()
+          expect(messages.join('\n')).toContain('created')
+        },
+        { timeout: 10_000 }
+      )
+      // The store answered the wire contract; the adapter's own store is the default idle one,
+      // and the turn the fake child completed carried the record.
+      const adapter = rig.adapter as unknown as {
+        automationStore: { list(): { title: string; lifecycleStatus: string }[] }
+      }
+      const listed = adapter.automationStore.list()
+      expect(
+        listed.some((record) => record.title === 'greeter' && record.lifecycleStatus === 'active')
+      ).toBe(true)
     } finally {
       await rig.host.close(SESSION, 'user-close')
     }
