@@ -4,6 +4,7 @@ import { claudeStructuredLaunchPart } from '../claude/claude-structured-launch-r
 import { createClaudeCommandCatalogProbe } from '../claude/claude-command-catalog-probe'
 import { CodexStructuredSessionAdapter } from '../codex/codex-structured-session-adapter'
 import { ZcodeStructuredSessionAdapter } from '../zcode/zcode-structured-session-adapter'
+import { createHash } from 'node:crypto'
 import { ZcodeAutomationStore } from '../zcode/zcode-automation-store'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import {
@@ -141,7 +142,7 @@ function createZcodeAdapter(context: StructuredAgentAdapterContext): StructuredA
           {
             envelope: {
               sessionId,
-              clientOperationId: `zcode-automation-${record.automationId}-${record.runCount}`,
+              clientOperationId: `${record.lastRunAt}-${createHash('sha256').update(`${record.automationId}:${record.runCount}`).digest('hex').slice(0, 32)}`,
               expectedRuntimeFence: context.store.getRecord(sessionId)?.lease.runtimeFence ?? 1,
               payloadFingerprint: computeAgentSessionPayloadFingerprint({
                 method: 'agentSession.send',
@@ -153,6 +154,9 @@ function createZcodeAdapter(context: StructuredAgentAdapterContext): StructuredA
             personsMessage: true
           }
         )
+        .then((result: unknown) => {
+          console.info('[zcode-auto-fire]', JSON.stringify(result).slice(0, 240))
+        })
         .catch(() => {
           // A fire that cannot reach its session fails the automation honestly.
           record.lifecycleStatus = 'failed'
