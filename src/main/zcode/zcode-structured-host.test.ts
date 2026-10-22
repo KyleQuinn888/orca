@@ -49,7 +49,14 @@ const FAKE_ZCODE_APP_SERVER = String.raw`
       if (message.params.content === 'ASK') {
         // A turn that blocks on AskUserQuestion: the tool opens, then the
         // server asks the client to answer; the turn ends only once answered.
-        const ts = Date.now()
+        if (message.params.content === 'LONG') {
+        // A long turn: opens and streams, and only the server's stop ends it.
+        const s = message.params.sessionId
+        send({ method: 'session/event', params: { type: 'turn.started', turnId: 'turn_long', sessionId: s, seq: 1, timestamp: Date.now(), payload: {} } })
+        send({ method: 'session/event', params: { type: 'model.streaming', turnId: 'turn_long', sessionId: s, seq: 2, timestamp: Date.now(), payload: { assistantMessageId: 'msg_long', delta: 'working', kind: 'text_delta' } } })
+        return send({ id: message.id, result: { accepted: true } })
+      }
+      const ts = Date.now()
         const questions = [
           {
             question: '你喝什么？',
@@ -121,6 +128,8 @@ const FAKE_ZCODE_APP_SERVER = String.raw`
       return
     }
     if (message.method === 'session/stop') {
+      const s = message.params?.sessionId ?? 'sess_provider_1'
+      send({ method: 'session/event', params: { type: 'turn.failed', turnId: 'turn_long', sessionId: s, seq: 3, timestamp: Date.now(), payload: { error: 'stopped by user' } } })
       return send({ id: message.id, result: {} })
     }
     if (message.method === 'session/goal') {
@@ -367,6 +376,103 @@ describe('Zcode behind the real structured-session host', () => {
           expect(ended?.revision).toBe(2)
         },
         { timeout: 20_000 }
+      )
+    } finally {
+      await rig.host.close(SESSION, 'user-close')
+    }
+  }, 45_000)
+
+  it('switches the live permission mode of a running session and reads it back', async () => {
+    const rig = await openZcodeHostRig()
+    try {
+      await expect(rig.host.attach(CALLER, attachParams())).resolves.toMatchObject({ ok: true })
+      const ask = {
+        kind: 'message' as const,
+        role: 'user' as const,
+        blocks: [{ type: 'text' as const, text: 'hello' }]
+      }
+      await rig.host.send(CALLER, {
+        envelope: envelope('agentSession.send', { body: ask }),
+        body: ask
+      })
+      await vi.waitFor(
+        async () => {
+          const messages = await rig.messages()
+          expect(messages.join('\n')).toContain('hello back')
+        },
+        { timeout: 10_000 }
+      )
+      // The chat starts full-access; a live pick switches the running session.
+      const fields = { key: 'permissionMode', value: 'ask' }
+      const result = await rig.host.setOption(CALLER, {
+        envelope: envelope('agentSession.setOption', fields),
+        ...fields
+      })
+      expect(result).toMatchObject({ ok: true })
+      // The options read answers with the LIVE mode, not the launch intent.
+      const options = await rig.host.readOptions(SESSION)
+      expect(options.current.permissionMode).toBe('ask')
+    } finally {
+      await rig.host.close(SESSION, 'user-close')
+    }
+  }, 45_000)
+
+  it('settles a stopped turn and takes the next send', async () => {
+    const rig = await openZcodeHostRig()
+    try {
+      await expect(rig.host.attach(CALLER, attachParams())).resolves.toMatchObject({ ok: true })
+      const long = {
+        kind: 'message' as const,
+        role: 'user' as const,
+        blocks: [{ type: 'text' as const, text: 'LONG' }]
+      }
+      await rig.host.send(CALLER, {
+        envelope: envelope('agentSession.send', { body: long }),
+        body: long
+      })
+      // The long turn is running when the person stops it.
+      await vi.waitFor(
+        async () => {
+          const turns = (
+            await rig.host.history({ sessionId: SESSION, direction: 'tail' })
+          ).page.items.filter((row) => row.body.kind === 'turn')
+          expect(turns.length).toBeGreaterThan(0)
+        },
+        { timeout: 10_000 }
+      )
+      const stopped = await rig.host.cancel(CALLER, {
+        envelope: envelope('agentSession.cancel', {})
+      })
+      expect(stopped.ok).toBe(true)
+      // The stopped turn settles as interrupted (never stuck running), and the
+      // working clock stops.
+      await vi.waitFor(
+        async () => {
+          const turns = (
+            await rig.host.history({ sessionId: SESSION, direction: 'tail' })
+          ).page.items.filter((row) => row.body.kind === 'turn')
+          const turn = turns.at(-1)?.body as { state?: string } | undefined
+          // A person's stop is a clean end: completed or interrupted, never running.
+          expect(turn?.state === 'completed' || turn?.state === 'interrupted').toBe(true)
+        },
+        { timeout: 10_000 }
+      )
+      // The session still takes the next send after a stop.
+      const again = {
+        kind: 'message' as const,
+        role: 'user' as const,
+        blocks: [{ type: 'text' as const, text: 'hello' }]
+      }
+      await rig.host.send(CALLER, {
+        envelope: envelope('agentSession.send', { body: again }),
+        body: again
+      })
+      await vi.waitFor(
+        async () => {
+          const messages = await rig.messages()
+          expect(messages.join('\n')).toContain('hello back')
+        },
+        { timeout: 10_000 }
       )
     } finally {
       await rig.host.close(SESSION, 'user-close')
