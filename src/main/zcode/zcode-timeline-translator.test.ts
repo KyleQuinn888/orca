@@ -137,6 +137,56 @@ describe('ZcodeTimelineTranslator', () => {
     ])
   })
 
+  it('keeps every text segment of a multi-segment turn, closing the earlier one', () => {
+    const translator = new ZcodeTimelineTranslator()
+    const events = [
+      // Segment one streams, then a tool call intervenes under a NEW id.
+      ...translator.translate({
+        type: 'model.streaming',
+        turnId: 'turn_m',
+        timestamp: 1,
+        payload: { assistantMessageId: 'msg_a', delta: 'first ', kind: 'text_delta' }
+      }),
+      ...translator.translate({
+        type: 'model.streaming',
+        turnId: 'turn_m',
+        timestamp: 2,
+        payload: { assistantMessageId: 'msg_a', delta: 'segment', kind: 'text_delta' }
+      }),
+      ...translator.translate({
+        type: 'model.streaming',
+        turnId: 'turn_m',
+        timestamp: 3,
+        payload: { assistantMessageId: 'msg_b', delta: 'second segment', kind: 'text_delta' }
+      }),
+      ...translator.translate({
+        type: 'turn.completed',
+        turnId: 'turn_m',
+        timestamp: 4,
+        payload: { response: 'second segment', resultType: 'success', duration: 1 }
+      })
+    ].flat()
+    const closed = events.filter((event) => event.type === 'text.close')
+    expect(
+      closed.some(
+        (event) => event.type === 'text.close' && (event.item as { id: string }).id === 'msg_a'
+      )
+    ).toBe(true)
+    expect(
+      events.some(
+        (event) =>
+          event.type === 'text.delta' &&
+          (event.item as { id: string }).id === 'msg_a' &&
+          event.text.includes('segment')
+      )
+    ).toBe(true)
+    expect(
+      events.some(
+        (event) => event.type === 'text.delta' && (event.item as { id: string }).id === 'msg_b'
+      )
+    ).toBe(true)
+  })
+
   it('renders an AskUserQuestion request as grouped question options, not the flat fallback', () => {
     const translator = new ZcodeTimelineTranslator()
     const events = translator.translate({

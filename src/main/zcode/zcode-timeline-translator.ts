@@ -88,6 +88,8 @@ export class ZcodeTimelineTranslator {
   /** The last assistantMessageId that streamed text, per turn: turn.completed's
    *  response closes it, or an anonymous stream when nothing streamed. */
   private readonly lastStreamedByTurn = new Map<string, string>()
+  /** The text stream each turn and channel currently holds open, by item id. */
+  private readonly openTextStreams = new Map<string, string>()
   /** The reasoning row still streaming into a turn: its close keeps what streamed. */
   private readonly reasoningStreamByTurn = new Map<string, string>()
 
@@ -147,15 +149,23 @@ export class ZcodeTimelineTranslator {
       const channel = kind === 'text_delta' ? 'assistant' : 'reasoning'
       const itemId =
         channel === 'assistant' ? assistantMessageId : `${assistantMessageId}-reasoning`
-      return [
-        {
-          type: 'text.delta',
-          item: { id: itemId },
-          channel,
-          text: asString(streaming.delta) ?? '',
-          ...join
-        }
-      ]
+      // A turn carries several text segments (one around each tool call), each
+      // under its own message id. The timeline holds one open text stream per
+      // turn and channel: the earlier segment must close before the next one
+      // opens, or its buffered text is dropped when the stream is replaced.
+      const streamKey = `${turnId ?? ''}:${channel}`
+      const streamed = this.openTextStreams.get(streamKey)
+      this.openTextStreams.set(streamKey, itemId)
+      const delta: ProviderTimelineEvent = {
+        type: 'text.delta',
+        item: { id: itemId },
+        channel,
+        text: asString(streaming.delta) ?? '',
+        ...join
+      }
+      return streamed !== undefined && streamed !== itemId
+        ? [{ type: 'text.close', item: { id: streamed }, ...join }, delta]
+        : [delta]
     }
     const toolCallId = asString(streaming.toolCallId)
     if (toolCallId !== null && (kind === 'tool_input_delta' || kind === 'tool_call')) {
