@@ -32,6 +32,8 @@ import {
 } from './zcode-app-server-connection'
 import { zcodeProviderHandle } from './zcode-structured-agent-definition'
 import { cancelZcodeTurn, compactZcodeTurn, dispatchZcodeTurn } from './zcode-structured-turns'
+import { ZcodeAutomationStore } from './zcode-automation-store'
+import { answerZcodeAutomationRequest } from './zcode-automation-answers'
 import { ZcodeStructuredLane } from './zcode-structured-lane'
 import { supportsZcodeStructuredLocation } from './zcode-structured-location-support'
 import {
@@ -86,6 +88,8 @@ export type ZcodeStructuredSessionAdapterDeps = {
   onDispatchSettledLate?: (
     settlement: Parameters<StructuredAgentSessionHost['settleLateDispatch']>[0]
   ) => void
+  /** automation/* answers; defaults to an idle store. */
+  automation?: ZcodeAutomationStore
   /** Held sends changed with no row: every reader re-derives current work. */
   onWorkChanged?: (sessionId: string) => void
 }
@@ -98,6 +102,10 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
   private readonly sessions = new Map<string, ZcodeSession>()
 
   constructor(private readonly deps: ZcodeStructuredSessionAdapterDeps) {}
+  private readonly defaultAutomation = new ZcodeAutomationStore({ fire: () => {} })
+  private get automationStore(): ZcodeAutomationStore {
+    return this.deps.automation ?? this.defaultAutomation
+  }
 
   /** Server requests: interaction requests journal through the lane; everything
    *  else declines with -32601, which the ZCode Protocol documents as the
@@ -125,6 +133,10 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     }
     if (request.method === 'interaction/requestUserInput') {
       session.lane.userInputRequest(request.id, request.params)
+      return
+    }
+    if (request.method.startsWith('automation/')) {
+      answerZcodeAutomationRequest(this.automationStore, sessionId, request, connection)
       return
     }
     session.connection.respondWithError(request.id, -32601, `Method not found: ${request.method}`)
@@ -290,11 +302,8 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     // The full updated set: the host persists what this returns, and a void
     // here would wipe every other option the session holds.
     // Only the string-valued options persist; the rest of the report is display state.
-    return Object.fromEntries(
-      Object.entries(readZcodeLiveOptions(session).current).filter(
-        (entry): entry is [string, string] => typeof entry[1] === 'string'
-      )
-    )
+    const strings = (e: unknown[]): e is [string, string] => typeof e[1] === 'string'
+    return Object.fromEntries(Object.entries(readZcodeLiveOptions(session).current).filter(strings))
   }
 
   readOptions = (input: { sessionId: string; fence: number }) =>
@@ -322,11 +331,10 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
    *  its turn stays open on the provider's side, blocked on a person. */
   holdsDispatch = (sessionId: string): boolean => {
     const session = this.sessions.get(sessionId)
-    return (
-      session !== undefined &&
-      !session.ended &&
-      (session.lane.assembler.openTurnId !== null || session.lane.pendingPrompts.size > 0)
-    )
+    if (session === undefined || session.ended) {
+      return false
+    }
+    return session.lane.assembler.openTurnId !== null || session.lane.pendingPrompts.size > 0
   }
 
   closeSession = async (sessionId: string): Promise<boolean> => {
@@ -346,9 +354,8 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     this.sessions.delete(sessionId)
   }
 
-  closeAll = async (): Promise<void> => {
-    await Promise.all([...this.sessions.keys()].map((sessionId) => this.closeSession(sessionId)))
-  }
+  closeAll = async (): Promise<void> =>
+    void (await Promise.all([...this.sessions.keys()].map((id) => this.closeSession(id))))
 
   private live(sessionId: string): ZcodeSession {
     const session = this.sessions.get(sessionId)
