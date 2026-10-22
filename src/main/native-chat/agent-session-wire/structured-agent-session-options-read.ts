@@ -256,10 +256,13 @@ export async function readStructuredAgentSessionOptions(
   const capabilities = agents.capabilities(agent)
   const floor = session.journal.context.floor()
   const contextFloor = floor ? { contextFloor: floor } : {}
-  // What a start launches now, live or at rest: a child never reports it.
-  const permissionMode = record
-    ? await structuredAgentSessionLaunchPermission(context.deps, record)
-    : null
+  // What a start launches now, live or at rest — unless the agent's child
+  // reports its own live mode (livePermissionMode), which outranks the launch
+  // intent: the running session has already moved past it.
+  const reported =
+    capabilities?.livePermissionMode === true ? options.current.permissionMode : undefined
+  const permissionMode =
+    reported ?? (record ? await structuredAgentSessionLaunchPermission(context.deps, record) : null)
   const saved = record?.options
   const selected =
     live && (saved?.model !== undefined || saved?.effort !== undefined)
