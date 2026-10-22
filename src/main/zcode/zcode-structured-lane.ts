@@ -253,11 +253,12 @@ export class ZcodeStructuredLane {
       | { kind: 'answers'; answers: { questionId: string; optionIds: string[]; other?: string }[] }
   ): Record<string, unknown> {
     if (pending.kind === 'approval') {
-      // The server resolves a permission answer by looking the response's
-      // optionId up in the request's own options; anything else is a deny.
-      // The card's option ids ARE the request's optionIds, so the chosen one
-      // passes straight through.
-      return response.kind === 'option' ? { optionId: response.optionId } : { optionId: 'deny' }
+      // The wire result schema is strict: {decision, reason?}. The card's
+      // deny option (and only it) is a denial; allow_once, allow_project and
+      // approvals of every other name all read as allow.
+      return {
+        decision: response.kind === 'option' && response.optionId === 'deny' ? 'deny' : 'allow'
+      }
     }
     if (response.kind !== 'answers') {
       return { action: 'decline' }

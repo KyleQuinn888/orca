@@ -88,11 +88,11 @@ describe('ZcodeStructuredLane held prompts', () => {
     const pending = subject.pendingPrompts.get('44')!
     expect(pending.kind).toBe('approval')
     expect(pending.toolCallId).toBe('call_plan')
-    expect(subject.answerFor(pending, { kind: 'option', optionId: 'allowOnce' })).toEqual({
-      optionId: 'allowOnce'
+    expect(subject.answerFor(pending, { kind: 'option', optionId: 'allow_once' })).toEqual({
+      decision: 'allow'
     })
     expect(subject.answerFor(pending, { kind: 'option', optionId: 'deny' })).toEqual({
-      optionId: 'deny'
+      decision: 'deny'
     })
   })
 

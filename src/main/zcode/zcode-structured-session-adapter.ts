@@ -116,9 +116,8 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       // Full access (protocol yolo) auto-allows: a card would only race the
       // server's request timeout and die as "handled elsewhere".
       if (session.reportedOptions.mode === 'yolo') {
-        // The server resolves permission answers by optionId; allowOnce is the
-        // shape its fallback reads as an approval.
-        session.connection.respond(request.id, { optionId: 'allowOnce' })
+        // The wire result schema is strict {decision}; allow is the approval.
+        session.connection.respond(request.id, { decision: 'allow' })
         return
       }
       session.lane.permissionRequest(session.connection, request.id, request.params)
