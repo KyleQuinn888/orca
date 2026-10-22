@@ -4,6 +4,8 @@ import { claudeStructuredLaunchPart } from '../claude/claude-structured-launch-r
 import { createClaudeCommandCatalogProbe } from '../claude/claude-command-catalog-probe'
 import { CodexStructuredSessionAdapter } from '../codex/codex-structured-session-adapter'
 import { ZcodeStructuredSessionAdapter } from '../zcode/zcode-structured-session-adapter'
+import { ZcodeAutomationStore } from '../zcode/zcode-automation-store'
+import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import {
   withSupportedZcodeCli,
   zcodeStructuredLaunchPart
@@ -120,7 +122,45 @@ function createClaudeAdapter(
 
 function createZcodeAdapter(context: StructuredAgentAdapterContext): StructuredAgentRuntimeAdapter {
   const { deps, followUps, host } = context
+  const automation = new ZcodeAutomationStore({
+    fire: (record) => {
+      const live = host()
+      const sessionId = record.orcaSessionId
+      if (!live || sessionId === undefined) {
+        return
+      }
+      const body = {
+        kind: 'message' as const,
+        role: 'user' as const,
+        blocks: [{ type: 'text' as const, text: record.prompt }]
+      }
+      const fields = { body }
+      void live
+        .send(
+          { callerKey: 'zcode-automation' },
+          {
+            envelope: {
+              sessionId,
+              clientOperationId: `zcode-automation-${record.automationId}-${record.runCount}`,
+              expectedRuntimeFence: context.store.getRecord(sessionId)?.lease.runtimeFence ?? 1,
+              payloadFingerprint: computeAgentSessionPayloadFingerprint({
+                method: 'agentSession.send',
+                sessionId,
+                fields
+              })
+            },
+            body,
+            personsMessage: true
+          }
+        )
+        .catch(() => {
+          // A fire that cannot reach its session fails the automation honestly.
+          record.lifecycleStatus = 'failed'
+        })
+    }
+  })
   return new ZcodeStructuredSessionAdapter({
+    automation,
     resolveLaunch: withSupportedZcodeCli(
       composeStructuredLaunch(
         ZCODE_STRUCTURED_AGENT,
