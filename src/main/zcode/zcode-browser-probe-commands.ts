@@ -92,6 +92,60 @@ export abstract class ZcodeBrowserProbeCommands extends ZcodeBrowserPointerComma
     return { ok: true, elapsedMs: Date.now() - startedAt }
   }
 
+  /** Reads the page's open JS dialog; null when none. */
+  async getDialog(
+    sessionId: string,
+    tab: ZcodeBrowserTab,
+    startedAt: number
+  ): Promise<ZcodeBrowserCommandResult> {
+    void sessionId
+    const status = (await this.writeSurface().browserDialogStatus({
+      page: tab.browserPageId
+    })) as { hasDialog?: unknown; type?: unknown; message?: unknown; defaultPrompt?: unknown }
+    if (!status || status.hasDialog !== true) {
+      return { ok: true, dialog: null, elapsedMs: Date.now() - startedAt }
+    }
+    const type = typeof status.type === 'string' ? status.type : 'alert'
+    const message = typeof status.message === 'string' ? status.message : ''
+    const defaultPrompt =
+      typeof status.defaultPrompt === 'string' && status.defaultPrompt.length > 0
+        ? status.defaultPrompt
+        : undefined
+    return {
+      ok: true,
+      dialog: {
+        type: (['alert', 'confirm', 'prompt', 'beforeunload'].includes(type) ? type : 'alert') as
+          | 'alert'
+          | 'confirm'
+          | 'prompt'
+          | 'beforeunload',
+        message,
+        ...(defaultPrompt !== undefined ? { defaultPrompt } : {})
+      },
+      elapsedMs: Date.now() - startedAt
+    }
+  }
+
+  /** Accepts or dismisses the open JS dialog, with prompt text for accepts. */
+  async handleDialog(
+    sessionId: string,
+    tab: ZcodeBrowserTab,
+    command: Record<string, unknown>,
+    startedAt: number
+  ): Promise<ZcodeBrowserCommandResult> {
+    void sessionId
+    if (command.accept === true) {
+      const promptText = typeof command.promptText === 'string' ? command.promptText : undefined
+      await this.writeSurface().browserDialogAccept({
+        ...(promptText !== undefined ? { text: promptText } : {}),
+        page: tab.browserPageId
+      })
+    } else {
+      await this.writeSurface().browserDialogDismiss({ page: tab.browserPageId })
+    }
+    return { ok: true, elapsedMs: Date.now() - startedAt }
+  }
+
   /** The playwright actions this backend really answers, shaped like the CLI's. */
   async playwrightAction(
     sessionId: string,

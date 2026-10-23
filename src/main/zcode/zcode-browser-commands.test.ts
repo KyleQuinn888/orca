@@ -88,15 +88,16 @@ describe('ZcodeBrowserBackend.execute write commands', () => {
     expect(calls.pressed).toEqual([`${expectedPrimary}+Shift+Enter`])
   })
 
-  it('select forwards the first value to the surface', async () => {
+  it('select scrolls into view before the surface select', async () => {
     const calls = surfaceCalls()
     const backend = await snappedBackend(calls)
     const result = await backend.execute({
       sessionId: 'sess_1',
       browserId: backend.browserId,
-      command: { method: 'select', ref: 'e2', values: ['a', 'b'] }
+      command: { method: 'select', ref: 'e2', values: ['a'] }
     })
     expect(result.ok).toBe(true)
+    expect(calls.scrolledIntoView).toEqual(['body > input:nth-of-type(1)'])
     expect(calls.selected).toEqual([{ element: 'body > input:nth-of-type(1)', value: 'a' }])
   })
 
@@ -395,5 +396,142 @@ describe('ZcodeBrowserBackend.execute playwright evaluate kinds', () => {
       }
     })
     expect(calls.evals).toContain('document.title')
+  })
+})
+
+describe('ZcodeBrowserBackend.execute dialogs', () => {
+  it('getDialog maps the daemon status to the contract shape', async () => {
+    const calls = surfaceCalls()
+    const backend = await snappedBackend(calls)
+    const result = await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      command: { method: 'getDialog' }
+    })
+    expect(result.ok).toBe(true)
+    expect(result.dialog).toEqual({ type: 'confirm', message: 'Proceed with deletion?' })
+  })
+
+  it('getDialog answers null when no dialog is open', async () => {
+    const calls = surfaceCalls()
+    const surface = fakeSurface(calls, {
+      browserDialogStatus: vi.fn(async () => ({ hasDialog: false })) as never
+    })
+    const backend = new ZcodeBrowserBackend(() => surface)
+    await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      command: { method: 'newTab' }
+    })
+    const result = await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      command: { method: 'getDialog' }
+    })
+    expect(result.dialog).toBeNull()
+  })
+
+  it('handleDialog accept forwards the prompt text', async () => {
+    const calls = surfaceCalls()
+    const backend = await snappedBackend(calls)
+    const result = await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      command: { method: 'handleDialog', accept: true, promptText: 'yes' }
+    })
+    expect(result.ok).toBe(true)
+    expect(calls.dialogs).toEqual(['accept:yes'])
+  })
+
+  it('handleDialog dismiss forwards without text', async () => {
+    const calls = surfaceCalls()
+    const backend = await snappedBackend(calls)
+    await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      command: { method: 'handleDialog', accept: false }
+    })
+    expect(calls.dialogs).toEqual(['dismiss'])
+  })
+})
+
+describe('ZcodeBrowserBackend.execute workspace binding', () => {
+  it('newTab binds the page to the wire workspace path', async () => {
+    const calls = surfaceCalls()
+    const backend = new ZcodeBrowserBackend(() => fakeSurface(calls))
+    const result = await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      workspacePath: 'C:/work/chat-space',
+      command: { method: 'newTab' }
+    })
+    expect(result.ok).toBe(true)
+    expect(calls.created).toEqual([{ url: 'about:blank' }])
+  })
+
+  it('navigate without a tab binds through the workspace too', async () => {
+    const calls = surfaceCalls()
+    const backend = new ZcodeBrowserBackend(() => fakeSurface(calls))
+    await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      workspacePath: 'C:/work/chat-space',
+      command: { method: 'navigate', url: 'https://example.org' }
+    })
+    expect(calls.created).toEqual([{ url: 'https://example.org' }])
+  })
+
+  it('falls back to an unbound tab when the workspace create fails', async () => {
+    const calls = surfaceCalls()
+    let createCalls = 0
+    const surface = fakeSurface(calls, {
+      browserTabCreate: (async (params: { url?: string; worktree?: string }) => {
+        createCalls += 1
+        calls.created.push({ url: params.url ?? 'about:blank' })
+        if (params.worktree !== undefined) {
+          throw Object.assign(new Error('Browser profile was not found'), {
+            code: 'invalid_argument'
+          })
+        }
+        return { browserPageId: `page-${createCalls}` }
+      }) as never
+    })
+    const backend = new ZcodeBrowserBackend(() => surface)
+    const result = await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      workspacePath: 'C:/nowhere',
+      command: { method: 'newTab' }
+    })
+    expect(result.ok).toBe(true)
+    expect(calls.created).toHaveLength(2)
+  })
+})
+
+describe('ZcodeBrowserBackend.execute multi-select', () => {
+  it('one value goes through the surface select', async () => {
+    const calls = surfaceCalls()
+    const backend = await snappedBackend(calls)
+    await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      command: { method: 'select', ref: 'e2', values: ['a'] }
+    })
+    expect(calls.selected).toEqual([{ element: 'body > input:nth-of-type(1)', value: 'a' }])
+  })
+
+  it('several values mark options in-page with change events', async () => {
+    const calls = surfaceCalls()
+    const backend = await snappedBackend(calls)
+    const result = await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      command: { method: 'select', ref: 'e2', values: ['a', 'b'] }
+    })
+    expect(result.ok).toBe(true)
+    expect(calls.selected).toHaveLength(0)
+    const multi = calls.evals.find((expression) => expression.includes('el.options'))
+    expect(multi).toContain('["a","b"]')
+    expect(multi).toContain("new Event('change'")
   })
 })

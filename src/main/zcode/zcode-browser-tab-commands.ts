@@ -45,10 +45,23 @@ export abstract class ZcodeBrowserTabCommands extends ZcodeBrowserProbeCommands 
   }
 
   protected async newTab(
-    input: { sessionId: string },
+    input: { sessionId: string; workspacePath?: string },
     startedAt: number
   ): Promise<ZcodeBrowserCommandResult> {
-    const created = await this.writeSurface().browserTabCreate({ url: 'about:blank' })
+    let created: { browserPageId: string }
+    if (typeof input.workspacePath === 'string' && input.workspacePath) {
+      try {
+        created = await this.writeSurface().browserTabCreate({
+          url: 'about:blank',
+          worktree: input.workspacePath
+        })
+      } catch {
+        // An unresolvable workspace selector falls back to an unbound tab.
+        created = await this.writeSurface().browserTabCreate({ url: 'about:blank' })
+      }
+    } else {
+      created = await this.writeSurface().browserTabCreate({ url: 'about:blank' })
+    }
     const tab = this.tabRegistry().registerTab(input.sessionId, created.browserPageId)
     return {
       ok: true,

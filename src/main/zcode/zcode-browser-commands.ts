@@ -29,6 +29,8 @@ export type ZcodeBrowserDispatchInput = {
   browserId: string
   browserGeneration: number
   command: Record<string, unknown>
+  /** The chat's workspace path from the wire; tabs bind to it when it resolves. */
+  workspacePath?: string
 }
 
 /**
@@ -146,6 +148,14 @@ export class ZcodeBrowserCommandDispatcher extends ZcodeBrowserTabCommands {
           )
         case 'playwrightWaitForTimeout':
           return await this.playwrightWaitForTimeout(command, startedAt)
+        case 'getDialog':
+          return await this.withTab(input.sessionId, tabId, startedAt, (tab) =>
+            this.getDialog(input.sessionId, tab, startedAt)
+          )
+        case 'handleDialog':
+          return await this.withTab(input.sessionId, tabId, startedAt, (tab) =>
+            this.handleDialog(input.sessionId, tab, command, startedAt)
+          )
         case 'turnEnded':
           // Lifecycle ping the broker relays at turn end; no work to do here.
           return { ok: true, elapsedMs: Date.now() - startedAt }
@@ -241,13 +251,30 @@ export class ZcodeBrowserCommandDispatcher extends ZcodeBrowserTabCommands {
     return this.navigationResult(input, tab, startedAt)
   }
 
+  /** Creates the tab inside the chat's workspace when the wire named one; a
+   *  selector the host cannot resolve falls back to an unbound tab rather than
+   *  failing the navigation. */
+  private async createTabBoundToWorkspace(
+    input: ZcodeBrowserDispatchInput,
+    url: string
+  ): Promise<{ browserPageId: string }> {
+    if (typeof input.workspacePath === 'string' && input.workspacePath) {
+      try {
+        return await this.surface.browserTabCreate({ url, worktree: input.workspacePath })
+      } catch {
+        // The workspace selector not resolving must not cost the agent its page.
+      }
+    }
+    return this.surface.browserTabCreate({ url })
+  }
+
   /** navigate with no tab: the managed-CDP contract creates the default tab. */
   private async implicitNewTabNavigate(
     input: ZcodeBrowserDispatchInput,
     url: string,
     startedAt: number
   ): Promise<ZcodeBrowserCommandResult> {
-    const created = await this.surface.browserTabCreate({ url })
+    const created = await this.createTabBoundToWorkspace(input, url)
     const tab = this.tabs.registerTab(input.sessionId, created.browserPageId)
     tab.navigationDepth = url === 'about:blank' ? 0 : 1
     return {

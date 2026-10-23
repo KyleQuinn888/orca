@@ -235,14 +235,20 @@ export abstract class ZcodeBrowserWriteCommands extends ZcodeBrowserReadCommands
     if (values.length === 0) {
       return zcodeBrowserMissingTarget('select', startedAt)
     }
-    // agent-browser select takes one value; multi-select narrowing is D2 work.
+    // One value goes through the surface's select; several need an accumulation
+    // semantics the surface does not offer, so they set options in-page and
+    // dispatch the change events a real interaction fires.
     const surface = this.writeSurface()
     await this.intoView(surface, element.selector, tab.browserPageId)
-    await surface.browserSelect({
-      element: element.selector,
-      value: values[0],
-      page: tab.browserPageId
-    })
+    if (values.length === 1) {
+      await surface.browserSelect({
+        element: element.selector,
+        value: values[0],
+        page: tab.browserPageId
+      })
+      return this.writeOkMeta(sessionId, tab, startedAt)
+    }
+    await this.markSelectOptions(element.selector, values, tab.browserPageId)
     return this.writeOkMeta(sessionId, tab, startedAt)
   }
 

@@ -79,6 +79,7 @@ type SurfaceCalls = {
   mouse: string[]
   waited: unknown[]
   scrolledIntoView: string[]
+  dialogs: string[]
 }
 
 function fakeSurface(
@@ -231,7 +232,27 @@ function fakeSurface(
       }),
     browserMouseDown:
       overrides.browserMouseDown ?? vi.fn(async () => (calls.mouse.push('down'), {})),
-    browserMouseUp: overrides.browserMouseUp ?? vi.fn(async () => (calls.mouse.push('up'), {}))
+    browserMouseUp: overrides.browserMouseUp ?? vi.fn(async () => (calls.mouse.push('up'), {})),
+    browserDialogAccept:
+      overrides.browserDialogAccept ??
+      vi.fn(async (params: { text?: string }) => {
+        calls.dialogs.push(params.text ? `accept:${params.text}` : 'accept')
+        return {}
+      }),
+    browserDialogDismiss:
+      overrides.browserDialogDismiss ??
+      vi.fn(async () => {
+        calls.dialogs.push('dismiss')
+        return {}
+      }),
+    browserDialogStatus:
+      overrides.browserDialogStatus ??
+      vi.fn(async () => ({
+        hasDialog: true,
+        type: 'confirm',
+        message: 'Proceed with deletion?',
+        defaultPrompt: ''
+      }))
   } as unknown as ZcodeBrowserCommandSurface
 }
 
@@ -253,7 +274,8 @@ function surfaceCalls(): SurfaceCalls {
     dragged: [],
     mouse: [],
     waited: [],
-    scrolledIntoView: []
+    scrolledIntoView: [],
+    dialogs: []
   }
 }
 

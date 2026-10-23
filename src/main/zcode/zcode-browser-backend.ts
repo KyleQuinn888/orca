@@ -43,6 +43,7 @@ export class ZcodeBrowserBackend {
       browserId?: unknown
       browserGeneration?: unknown
       command?: unknown
+      workspacePath?: unknown
     }
     const surface = this.resolveSurface()
     if (!surface) {
@@ -76,11 +77,14 @@ export class ZcodeBrowserBackend {
         ? envelope.browserGeneration
         : 0
     const dispatcher = this.dispatcherFor(surface)
+    const workspacePath =
+      typeof envelope.workspacePath === 'string' ? envelope.workspacePath : undefined
     return dispatcher.execute({
       sessionId: envelope.sessionId,
       browserId: this.browserId,
       browserGeneration: generation,
-      command: envelope.command as Record<string, unknown>
+      command: envelope.command as Record<string, unknown>,
+      ...(workspacePath ? { workspacePath } : {})
     })
   }
 
@@ -146,8 +150,7 @@ export class ZcodeBrowserBackend {
         'PlaywrightLocator.textContent': false,
         'PlaywrightLocator.type': false,
         'PlaywrightLocator.waitFor': false,
-        // Dialog and viewport commands are not dispatched by this backend.
-        'Tab.getJsDialog': false,
+        // Viewport commands are not dispatched by this backend (dialogs are).
         'Tab.setViewportSize': false,
         'Tab.viewportSize': false
       },

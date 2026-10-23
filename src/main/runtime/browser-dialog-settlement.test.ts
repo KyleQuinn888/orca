@@ -41,7 +41,8 @@ function createCommands(settleDialog: (accept: boolean, promptText?: string) => 
   const bridge = {
     getRegisteredTabs: () => new Map([[PAGE_ID, 7]]),
     dialogAccept: vi.fn(async () => ({ via: 'bridge' })),
-    dialogDismiss: vi.fn(async () => ({ via: 'bridge' }))
+    dialogDismiss: vi.fn(async () => ({ via: 'bridge' })),
+    dialogStatus: vi.fn(async () => ({ hasDialog: false }))
   }
   const activeScreencastsByPageId = new Map<string, ActiveBrowserScreencastPage>()
   const commands = new RuntimeBrowserDialogs(

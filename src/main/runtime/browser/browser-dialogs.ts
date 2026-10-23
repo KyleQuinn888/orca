@@ -4,7 +4,10 @@ import { browserDialogSettledResult, type BrowserDialogResult } from '../browser
 import type { BrowserCommandTargetParams } from './browser-command-contracts'
 import type { RuntimeBrowserCommandTargets } from './browser-command-targets'
 type BrowserDialogTargets = Pick<RuntimeBrowserCommandTargets, 'resolveBrowserCommandTarget'> & {
-  requireAgentBrowserBridge(): Pick<AgentBrowserBridge, 'dialogAccept' | 'dialogDismiss'>
+  requireAgentBrowserBridge(): Pick<
+    AgentBrowserBridge,
+    'dialogAccept' | 'dialogDismiss' | 'dialogStatus'
+  >
 }
 
 export class RuntimeBrowserDialogs {
@@ -12,6 +15,14 @@ export class RuntimeBrowserDialogs {
     private readonly targets: BrowserDialogTargets,
     private readonly screencasts: Pick<RuntimeBrowserScreencasts, 'settleDialog'>
   ) {}
+
+  /** Reads the current JS dialog without settling it; null-shaped when none. */
+  async browserDialogStatus(params: BrowserCommandTargetParams): Promise<unknown> {
+    const target = await this.targets.resolveBrowserCommandTarget(params)
+    return this.targets
+      .requireAgentBrowserBridge()
+      .dialogStatus(target.worktreeId, target.browserPageId)
+  }
 
   async browserDialogAccept(
     params: { text?: string } & BrowserCommandTargetParams

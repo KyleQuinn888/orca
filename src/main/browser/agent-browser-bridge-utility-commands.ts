@@ -28,6 +28,13 @@ export abstract class AgentBrowserBridgeUtilityCommands extends AgentBrowserBrid
 
   // ── Dialog commands ──
 
+  /** Whether a JS dialog is open, with its type/message/default prompt. */
+  async dialogStatus(worktreeId?: string, browserPageId?: string): Promise<unknown> {
+    return this.enqueueTargetedCommand(worktreeId, browserPageId, async (sessionName) => {
+      return await this.execAgentBrowser(sessionName, ['dialog', 'status'])
+    })
+  }
+
   async dialogAccept(text?: string, worktreeId?: string, browserPageId?: string): Promise<unknown> {
     return this.enqueueTargetedCommand(worktreeId, browserPageId, async (sessionName) => {
       const args = ['dialog', 'accept']

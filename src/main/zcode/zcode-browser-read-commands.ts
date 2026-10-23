@@ -149,6 +149,34 @@ export abstract class ZcodeBrowserReadCommands {
     return snapshot
   }
 
+  /** Multi-select accumulation the surface lacks: marks every matching option
+   *  selected and fires input+change, all in page space. */
+  protected async markSelectOptions(
+    selector: string,
+    values: string[],
+    page: string
+  ): Promise<void> {
+    const expression = `(() => {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el || !el.options) { return null }
+      const wanted = ${JSON.stringify(values)};
+      let marked = 0;
+      for (const option of Array.from(el.options)) {
+        option.selected = wanted.includes(option.value) || wanted.includes(option.text) || wanted.includes(option.label);
+        if (option.selected) { marked += 1 }
+      }
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+      return marked;
+    })()`
+    const read = await this.surfaceEval(expression, page)
+    if (!read.result || read.result === 'null') {
+      throw Object.assign(new Error(`Select element ${selector} is no longer available`), {
+        code: 'browser_error'
+      })
+    }
+  }
+
   protected async readState(tab: ZcodeBrowserTab): Promise<ZcodePageState> {
     const snapshot = await this.collect(tab, {})
     return zcodePageStateFrom(snapshot, tab.navigationDepth > 0, false)

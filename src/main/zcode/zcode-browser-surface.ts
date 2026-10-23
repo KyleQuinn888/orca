@@ -36,6 +36,9 @@ export type ZcodeBrowserCommandSurface = Pick<
   | 'browserMouseMove'
   | 'browserMouseDown'
   | 'browserMouseUp'
+  | 'browserDialogAccept'
+  | 'browserDialogDismiss'
+  | 'browserDialogStatus'
 >
 
 /** Resolves lazily so a runtime assembled before its browser engine still boots. */
