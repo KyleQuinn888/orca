@@ -13,6 +13,21 @@ const task = (content: string, status: NativeChatTask['status'] = 'pending'): Na
 })
 const list = (...tasks: NativeChatTask[]): NativeChatTaskList => ({ tasks })
 
+describe('native-chat task list priority', () => {
+  it('carries a TodoWrite priority through and drops unknown values', () => {
+    const kept = normalizeNativeChatTaskList('TodoWrite', {
+      todos: [
+        { content: 'A', status: 'pending', priority: 'high' },
+        { content: 'B', status: 'pending', priority: 'urgent' },
+        { content: 'C', status: 'pending' }
+      ]
+    })
+    expect(kept?.tasks[0]).toMatchObject({ content: 'A', priority: 'high' })
+    expect(kept?.tasks[1]?.priority).toBeUndefined()
+    expect(kept?.tasks[2]?.priority).toBeUndefined()
+  })
+})
+
 describe('normalizeNativeChatTaskList', () => {
   it('normalizes Claude tasks and uses activeForm only while in progress', () => {
     const result = normalizeNativeChatTaskList('TodoWrite', {

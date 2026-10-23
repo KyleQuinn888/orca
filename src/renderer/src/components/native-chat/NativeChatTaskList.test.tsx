@@ -22,6 +22,22 @@ const current: TaskList = {
 }
 
 describe('NativeChatTaskList', () => {
+  it('marks task priority with a colored dot', () => {
+    const withPriority: TaskList = {
+      tasks: [
+        { content: 'Urgent', status: 'pending', priority: 'high' },
+        { content: 'Later', status: 'pending', priority: 'low' },
+        { content: 'Plain', status: 'pending' }
+      ]
+    }
+    const { container } = render(<NativeChatTaskList list={withPriority} />)
+    const dots = container.querySelectorAll('span.rounded-full')
+    expect(dots).toHaveLength(2)
+    expect(dots[0]).toHaveAttribute('aria-label', 'high')
+    expect(dots[0]).toHaveClass('bg-red-500')
+    expect(dots[1]).toHaveAttribute('aria-label', 'low')
+  })
+
   it('shows tri-state glyphs, progress, and activeForm in the first checklist', () => {
     const { container } = render(<NativeChatTaskList list={current} />)
     expect(screen.getByText('Read')).toHaveClass('line-through')

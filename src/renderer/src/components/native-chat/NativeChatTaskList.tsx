@@ -41,6 +41,12 @@ function changeLabel(change: NativeChatTaskChange): string {
   }
 }
 
+const PRIORITY_STYLE: Record<NonNullable<NativeChatTask['priority']>, string> = {
+  high: 'bg-red-500',
+  medium: 'bg-amber-500',
+  low: 'bg-border'
+}
+
 function TaskRow({ task, label }: { task: NativeChatTask; label?: string }): React.JSX.Element {
   const Icon =
     task.status === 'completed' ? CircleCheck : task.status === 'in_progress' ? CircleDot : Circle
@@ -52,6 +58,13 @@ function TaskRow({ task, label }: { task: NativeChatTask; label?: string }): Rea
       )}
     >
       <Icon aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+      {task.priority !== undefined && (
+        <span
+          aria-label={task.priority}
+          title={task.priority}
+          className={cn('mt-1.5 size-1.5 shrink-0 rounded-full', PRIORITY_STYLE[task.priority])}
+        />
+      )}
       <span className="sr-only">{statusLabel(task)}: </span>
       <span
         className={cn(

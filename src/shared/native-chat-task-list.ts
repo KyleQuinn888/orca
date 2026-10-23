@@ -2,6 +2,7 @@ export type NativeChatTaskStatus = 'pending' | 'in_progress' | 'completed'
 export type NativeChatTask = {
   content: string
   status: NativeChatTaskStatus
+  priority?: 'high' | 'medium' | 'low'
   activeForm?: string
 }
 export type NativeChatTaskList = { tasks: NativeChatTask[]; explanation?: string }
@@ -60,7 +61,16 @@ export function normalizeNativeChatTaskList(
           ? 'completed'
           : 'pending'
     const activeForm = tool === 'todowrite' ? nonemptyString(item.activeForm) : undefined
-    tasks.push({ content, status, ...(activeForm ? { activeForm } : {}) })
+    const priority =
+      item.priority === 'high' || item.priority === 'medium' || item.priority === 'low'
+        ? item.priority
+        : undefined
+    tasks.push({
+      content,
+      status,
+      ...(activeForm ? { activeForm } : {}),
+      ...(priority ? { priority } : {})
+    })
   }
   if (entries.length > 0 && tasks.length === 0) {
     return null
