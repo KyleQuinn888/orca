@@ -54,7 +54,8 @@ jobs:
         uses: ./.github/actions/install-mobile-dependencies
 
       - name: Build Windows installer
-        run: pnpm run build:win
+        # --publish never: the fork uploads the artifact here, not to a release.
+        run: pnpm run build:win -- --publish never
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
