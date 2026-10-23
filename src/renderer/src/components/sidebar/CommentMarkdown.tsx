@@ -6,8 +6,10 @@ import {
 import Markdown, { defaultUrlTransform, type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
+import remarkMath from 'remark-math'
 import rehypeRaw from 'rehype-raw'
 import rehypeSanitize, { defaultSchema, type Options as SanitizeSchema } from 'rehype-sanitize'
+import rehypeKatex from 'rehype-katex'
 import remend from 'remend'
 import { cn } from '@/lib/utils'
 import {
@@ -80,7 +82,7 @@ const commentMarkdownFileUriUrlTransform: UrlTransform = (value, key, node) => {
 // plain-text renderer used whitespace-pre-wrap which preserved them. Adding
 // remark-breaks converts single newlines to <br>, keeping backward compat
 // with existing plain-text comments that rely on newline formatting.
-const remarkPlugins = [remarkGfm, remarkGitHubCallouts, remarkBreaks]
+const remarkPlugins = [remarkGfm, remarkGitHubCallouts, remarkBreaks, remarkMath]
 
 const GITHUB_REFERENCE_PATTERN = /(?:\b([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+))?#([1-9][0-9]*)\b/g
 
@@ -201,7 +203,11 @@ const commentMarkdownSanitizeSchema = {
 
 // Why: GitHub comments often include safe raw HTML (`<sub>`, `<details>`,
 // `<br />`). Parse it, then sanitize immediately before React renders it.
-const rehypePlugins: MarkdownPlugins = [rehypeRaw, [rehypeSanitize, commentMarkdownSanitizeSchema]]
+const rehypePlugins: MarkdownPlugins = [
+  rehypeRaw,
+  [rehypeSanitize, commentMarkdownSanitizeSchema],
+  rehypeKatex
+]
 
 /**
  * A surface-specific markdown addition: its own remark plugins, the element attributes those
