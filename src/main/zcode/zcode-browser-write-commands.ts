@@ -40,6 +40,20 @@ export abstract class ZcodeBrowserWriteCommands extends ZcodeBrowserReadCommands
 
   protected abstract resolveRef(tab: ZcodeBrowserTab, ref: string): ZcodeSnapshotElement | null
 
+  /**
+   * agent-browser clicks/fills at the element's viewport coordinates without
+   * scrolling it into view first; below the fold the input lands outside the
+   * view surface and is silently ignored (verified against 0.27.0). Every
+   * positional selector action scrolls first.
+   */
+  private async intoView(
+    surface: ZcodeBrowserCommandSurface,
+    selector: string,
+    page: string
+  ): Promise<void> {
+    await surface.browserScrollIntoView({ element: selector, page })
+  }
+
   async click(
     sessionId: string,
     tab: ZcodeBrowserTab,
@@ -54,6 +68,7 @@ export abstract class ZcodeBrowserWriteCommands extends ZcodeBrowserReadCommands
       if (!element) {
         return zcodeBrowserRefNotFound(command.ref, startedAt)
       }
+      await this.intoView(surface, element.selector, tab.browserPageId)
       const target = { element: element.selector, page: tab.browserPageId }
       await (command.doubleClick === true
         ? surface.browserDblclick(target)
@@ -67,6 +82,9 @@ export abstract class ZcodeBrowserWriteCommands extends ZcodeBrowserReadCommands
     await surface.browserMouseClick({
       x: point.x,
       y: point.y,
+      // A radius routes the click through the bridge's in-page DOM activation,
+      // which resolves the point in page space — immune to pane zoom/DPR.
+      radius: 24,
       ...(button ? { button } : {}),
       ...(modifiers ? { modifiers: pointerModifiers(modifiers) } : {}),
       page: tab.browserPageId
@@ -84,7 +102,9 @@ export abstract class ZcodeBrowserWriteCommands extends ZcodeBrowserReadCommands
     if (!element) {
       return zcodeBrowserRefNotFound(command.ref, startedAt)
     }
-    await this.writeSurface().browserFill({
+    const surface = this.writeSurface()
+    await this.intoView(surface, element.selector, tab.browserPageId)
+    await surface.browserFill({
       element: element.selector,
       value: typeof command.value === 'string' ? command.value : '',
       page: tab.browserPageId
@@ -104,6 +124,7 @@ export abstract class ZcodeBrowserWriteCommands extends ZcodeBrowserReadCommands
       if (!element) {
         return zcodeBrowserRefNotFound(command.ref, startedAt)
       }
+      await this.intoView(surface, element.selector, tab.browserPageId)
       await surface.browserFocus({ element: element.selector, page: tab.browserPageId })
     }
     await surface.browserType({
@@ -129,6 +150,7 @@ export abstract class ZcodeBrowserWriteCommands extends ZcodeBrowserReadCommands
       if (!element) {
         return zcodeBrowserRefNotFound(command.ref, startedAt)
       }
+      await this.intoView(surface, element.selector, tab.browserPageId)
       await surface.browserFocus({ element: element.selector, page: tab.browserPageId })
     }
     const combo = keyCombo([...(readModifiers(command.modifiers) ?? []), key])
@@ -169,7 +191,9 @@ export abstract class ZcodeBrowserWriteCommands extends ZcodeBrowserReadCommands
       return zcodeBrowserMissingTarget('select', startedAt)
     }
     // agent-browser select takes one value; multi-select narrowing is D2 work.
-    await this.writeSurface().browserSelect({
+    const surface = this.writeSurface()
+    await this.intoView(surface, element.selector, tab.browserPageId)
+    await surface.browserSelect({
       element: element.selector,
       value: values[0],
       page: tab.browserPageId
@@ -187,7 +211,9 @@ export abstract class ZcodeBrowserWriteCommands extends ZcodeBrowserReadCommands
     if (!element) {
       return zcodeBrowserRefNotFound(command.ref, startedAt)
     }
-    await this.writeSurface().browserCheck({
+    const surface = this.writeSurface()
+    await this.intoView(surface, element.selector, tab.browserPageId)
+    await surface.browserCheck({
       element: element.selector,
       checked: command.checked !== false,
       page: tab.browserPageId
@@ -206,7 +232,9 @@ export abstract class ZcodeBrowserWriteCommands extends ZcodeBrowserReadCommands
       if (!element) {
         return zcodeBrowserRefNotFound(command.ref, startedAt)
       }
-      await this.writeSurface().browserHover({ element: element.selector, page: tab.browserPageId })
+      const surface = this.writeSurface()
+      await this.intoView(surface, element.selector, tab.browserPageId)
+      await surface.browserHover({ element: element.selector, page: tab.browserPageId })
       return this.writeOkMeta(sessionId, tab, startedAt)
     }
     const point = readPoint(command)
@@ -228,7 +256,10 @@ export abstract class ZcodeBrowserWriteCommands extends ZcodeBrowserReadCommands
     if (!from || !to) {
       return zcodeBrowserRefNotFound(command.fromRef ?? command.toRef, startedAt)
     }
-    await this.writeSurface().browserDrag({
+    const surface = this.writeSurface()
+    await this.intoView(surface, from.selector, tab.browserPageId)
+    await this.intoView(surface, to.selector, tab.browserPageId)
+    await surface.browserDrag({
       from: from.selector,
       to: to.selector,
       page: tab.browserPageId

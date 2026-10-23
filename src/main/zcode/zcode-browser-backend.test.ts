@@ -56,6 +56,7 @@ type SurfaceCalls = {
   dragged: { from: string; to: string }[]
   mouse: string[]
   waited: unknown[]
+  scrolledIntoView: string[]
 }
 
 function fakeSurface(
@@ -159,7 +160,12 @@ function fakeSurface(
         calls.hovered.push(params.element)
         return { hovered: params.element }
       }),
-    browserScrollIntoView: overrides.browserScrollIntoView ?? vi.fn(async () => ({})),
+    browserScrollIntoView:
+      overrides.browserScrollIntoView ??
+      vi.fn(async (params: { element: string }) => {
+        calls.scrolledIntoView.push(params.element)
+        return {}
+      }),
     browserDrag:
       overrides.browserDrag ??
       vi.fn(async (params: { from: string; to: string }) => {
@@ -213,7 +219,8 @@ function surfaceCalls(): SurfaceCalls {
     hovered: [],
     dragged: [],
     mouse: [],
-    waited: []
+    waited: [],
+    scrolledIntoView: []
   }
 }
 
@@ -716,5 +723,31 @@ describe('ZcodeBrowserBackend.execute write commands', () => {
     })
     expect(result.ok).toBe(false)
     expect(result.error?.code).toBe('capability_unsupported')
+  })
+})
+
+describe('ZcodeBrowserBackend.execute viewport hygiene', () => {
+  it('scrolls the element into view before a positional click', async () => {
+    const calls = surfaceCalls()
+    const backend = await snappedBackend(calls)
+    const result = await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      command: { method: 'click', ref: 'e1' }
+    })
+    expect(result.ok).toBe(true)
+    expect(calls.scrolledIntoView).toEqual(['body > a:nth-of-type(1)'])
+    expect(calls.clicked).toEqual(['body > a:nth-of-type(1)'])
+  })
+
+  it('answers listUserTabs with an honest empty array', async () => {
+    const calls = surfaceCalls()
+    const backend = new ZcodeBrowserBackend(() => fakeSurface(calls))
+    const result = await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      command: { method: 'listUserTabs' }
+    })
+    expect(result).toMatchObject({ ok: true, userTabs: [] })
   })
 })

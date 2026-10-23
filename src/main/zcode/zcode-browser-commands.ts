@@ -91,6 +91,9 @@ export class ZcodeBrowserCommandDispatcher extends ZcodeBrowserTabCommands {
       switch (method) {
         case 'list':
           return this.list(input, startedAt)
+        case 'listUserTabs':
+          // This backend owns every tab it exposes; no human tabs to claim.
+          return { ok: true, userTabs: [], elapsedMs: Date.now() - startedAt }
         case 'newTab':
           return await this.newTab(input, startedAt)
         case 'activateTab':

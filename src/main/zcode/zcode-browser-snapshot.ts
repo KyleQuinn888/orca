@@ -110,8 +110,10 @@ const selector = (element) => {
   let current = element;
   for (let depth = 0; current && depth < 6; depth += 1) {
     const tag = current.tagName.toLowerCase();
+    // Why the max: <html> has no parentElement, so the sibling lookup yields -1 and
+    // nth-of-type(0) — an index CSS treats as matching nothing. The root is always 1.
     const siblings = current.parentElement ? Array.from(current.parentElement.children).filter((c) => c.tagName === current.tagName) : [];
-    parts.unshift(tag + ":nth-of-type(" + (siblings.indexOf(current) + 1) + ")");
+    parts.unshift(tag + ":nth-of-type(" + Math.max(1, siblings.indexOf(current) + 1) + ")");
     current = current.parentElement;
   }
   return parts.join(" > ");
