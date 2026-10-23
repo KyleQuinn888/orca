@@ -117,11 +117,7 @@ export async function dispatchZcodeTurn(
   // chat reads working forever.
   session.lane.inputAccepted(input.clientMessageId, input.requestedAt ?? Date.now())
   try {
-    await session.connection.request(
-      'session/send',
-      { sessionId: session.providerSessionId, content: text },
-      { timeoutMs }
-    )
+    await sendZcodePromptWithBusyRetry(session, text, timeoutMs)
   } catch (error) {
     // The provider refused its own answer: words for the person, never a retry.
     if (isZcodeAppServerRequestError(error)) {
@@ -144,6 +140,50 @@ export async function dispatchZcodeTurn(
     return { state: 'accepted', providerIdentity: armedTurnIdentity }
   }
   return { state: 'admitted' }
+}
+
+const SEND_BUSY_RETRY_INTERVAL_MS = 1_000
+const SEND_BUSY_RETRY_WINDOW_MS = 30_000
+
+/** The server's words for a second prompt while its turn is still closing. */
+function isPromptStillRunningRefusal(error: unknown): boolean {
+  return (
+    isZcodeAppServerRequestError(error) &&
+    error.message.toLowerCase().includes('prompt is already running')
+  )
+}
+
+/**
+ * `session/send` with a bounded busy-retry. Orca can read a turn as settled
+ * (its journal turn-end landed) while the server is still closing that turn —
+ * the queue drains into exactly that window. The refusal is a "try again
+ * shortly", not the person's answer, so the send backs off and retries inside
+ * a bounded window before it surfaces as a rejection.
+ */
+async function sendZcodePromptWithBusyRetry(
+  session: ZcodeSessionLike,
+  text: string,
+  timeoutMs: number
+): Promise<void> {
+  const deadline = Date.now() + Math.min(timeoutMs, SEND_BUSY_RETRY_WINDOW_MS)
+  for (;;) {
+    try {
+      await session.connection.request(
+        'session/send',
+        { sessionId: session.providerSessionId, content: text },
+        { timeoutMs }
+      )
+      return
+    } catch (error) {
+      if (
+        !isPromptStillRunningRefusal(error) ||
+        Date.now() + SEND_BUSY_RETRY_INTERVAL_MS > deadline
+      ) {
+        throw error
+      }
+      await new Promise((resolve) => setTimeout(resolve, SEND_BUSY_RETRY_INTERVAL_MS))
+    }
+  }
 }
 
 export async function compactZcodeTurn(
