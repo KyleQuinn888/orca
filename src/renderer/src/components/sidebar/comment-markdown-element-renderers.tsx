@@ -30,16 +30,33 @@ export type DocumentCodeBlockRenderer = (props: {
   sourceLine?: number
 }) => React.JSX.Element
 
+/**
+ * Hosts whose images render inline: the model provider's own delivery CDN.
+ * The model's own uploads came from this machine already, so rendering them
+ * adds no new party; every other https image stays a link (it would leak the
+ * reader's address to an arbitrary host).
+ */
+const INLINE_IMAGE_HOSTS = ['maas-log-prod.cn-wlcb.ufileos.com']
+
 export function isTrustedCompactImageSrc(src: string | undefined): src is string {
   if (!src) {
     return false
   }
   const normalized = src.trim().toLowerCase()
-  return (
+  if (
     jiraImageReference(src) !== null ||
     normalized.startsWith('blob:') ||
     /^data:image\/(?:png|jpe?g|gif|webp);base64,/.test(normalized)
-  )
+  ) {
+    return true
+  }
+  try {
+    return (
+      normalized.startsWith('https://') && INLINE_IMAGE_HOSTS.includes(new URL(normalized).hostname)
+    )
+  } catch {
+    return false
+  }
 }
 
 function handleMarkdownAnchorClick(
