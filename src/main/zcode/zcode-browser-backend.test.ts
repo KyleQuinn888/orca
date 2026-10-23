@@ -751,3 +751,64 @@ describe('ZcodeBrowserBackend.execute viewport hygiene', () => {
     expect(result).toMatchObject({ ok: true, userTabs: [] })
   })
 })
+
+describe('ZcodeBrowserBackend.execute click false-negative recovery', () => {
+  it('reports success when a failed click demonstrably navigated', async () => {
+    const calls = surfaceCalls()
+    const surface = fakeSurface(calls, {
+      browserClick: vi.fn(async () => {
+        throw Object.assign(new Error("Cannot read properties of null (reading 'clientWidth')"), {
+          code: 'browser_error'
+        })
+      }) as never,
+      browserEval: (() => {
+        // The navigate before the click still collects a snapshot; only the
+        // post-click verification read must see the navigated URL.
+        let evals = 0
+        return vi.fn(async () => {
+          evals += 1
+          return evals <= 1
+            ? { result: sampleEvalResult(), origin: 'https://example.org' }
+            : {
+                result: '"https://www.iana.org/help/example-domains"',
+                origin: 'https://www.iana.org'
+              }
+        })
+      })() as never
+    })
+    const backend = new ZcodeBrowserBackend(() => surface)
+    await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      command: { method: 'navigate', url: 'https://example.org' }
+    })
+    const result = await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      command: { method: 'click', ref: 'e1' }
+    })
+    expect(result.ok).toBe(true)
+  })
+
+  it('keeps the error when the page did not move', async () => {
+    const calls = surfaceCalls()
+    const surface = fakeSurface(calls, {
+      browserClick: vi.fn(async () => {
+        throw new Error('click exploded without navigating')
+      }) as never
+    })
+    const backend = new ZcodeBrowserBackend(() => surface)
+    await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      command: { method: 'navigate', url: 'https://example.org' }
+    })
+    const result = await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      command: { method: 'click', ref: 'e1' }
+    })
+    expect(result.ok).toBe(false)
+    expect(result.error?.message).toContain('click exploded')
+  })
+})

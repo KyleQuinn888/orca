@@ -70,9 +70,16 @@ export abstract class ZcodeBrowserWriteCommands extends ZcodeBrowserReadCommands
       }
       await this.intoView(surface, element.selector, tab.browserPageId)
       const target = { element: element.selector, page: tab.browserPageId }
-      await (command.doubleClick === true
-        ? surface.browserDblclick(target)
-        : surface.browserClick(target))
+      try {
+        await (command.doubleClick === true
+          ? surface.browserDblclick(target)
+          : surface.browserClick(target))
+      } catch (error) {
+        // agent-browser's post-click verification crashes on the element a
+        // navigating click detached (floating-ui reads clientWidth of null) —
+        // a false negative. If the page actually moved, the click landed.
+        return await this.clickLandedOrThrow(sessionId, tab, error, startedAt)
+      }
       return this.writeOkMeta(sessionId, tab, startedAt)
     }
     const point = readPoint(command)
@@ -89,6 +96,31 @@ export abstract class ZcodeBrowserWriteCommands extends ZcodeBrowserReadCommands
       ...(modifiers ? { modifiers: pointerModifiers(modifiers) } : {}),
       page: tab.browserPageId
     })
+    return this.writeOkMeta(sessionId, tab, startedAt)
+  }
+
+  /** False-negative recovery: navigation proves the click landed. */
+  private async clickLandedOrThrow(
+    sessionId: string,
+    tab: ZcodeBrowserTab,
+    error: unknown,
+    startedAt: number
+  ) {
+    const before = tab.pageInfo.url
+    let landed = false
+    try {
+      const read = await this.surfaceEval('location.href', tab.browserPageId)
+      const url = JSON.parse(read.result) as string
+      if (typeof url === 'string' && url !== before && url !== 'about:blank') {
+        landed = true
+        tab.pageInfo = { url, title: tab.pageInfo.title }
+      }
+    } catch {
+      // The verification read itself failing leaves the original error.
+    }
+    if (!landed) {
+      throw error
+    }
     return this.writeOkMeta(sessionId, tab, startedAt)
   }
 

@@ -124,7 +124,35 @@ export class ZcodeBrowserBackend {
         'PlaywrightLocator.downloadMedia': false,
         'PlaywrightLocator.evaluate': false,
         'CUAAPI.downloadMedia': false,
-        'DomCUAAPI.downloadMedia': false
+        'DomCUAAPI.downloadMedia': false,
+        // The playwright surface is not implemented here at all; hiding it
+        // upfront spares the agent a wall-bump per member to discover that.
+        'PlaywrightAPI.domSnapshot': false,
+        'PlaywrightAPI.elementInfo': false,
+        'PlaywrightAPI.elementScreenshot': false,
+        'PlaywrightAPI.evaluate': false,
+        'PlaywrightAPI.waitForLoadState': false,
+        'PlaywrightAPI.waitForURL': false,
+        'PlaywrightAPI.waitForTimeout': false,
+        'PlaywrightLocator.allTextContents': false,
+        'PlaywrightLocator.click': false,
+        'PlaywrightLocator.count': false,
+        'PlaywrightLocator.dblclick': false,
+        'PlaywrightLocator.fill': false,
+        'PlaywrightLocator.getAttribute': false,
+        'PlaywrightLocator.innerText': false,
+        'PlaywrightLocator.isEnabled': false,
+        'PlaywrightLocator.isVisible': false,
+        'PlaywrightLocator.press': false,
+        'PlaywrightLocator.selectOption': false,
+        'PlaywrightLocator.setChecked': false,
+        'PlaywrightLocator.textContent': false,
+        'PlaywrightLocator.type': false,
+        'PlaywrightLocator.waitFor': false,
+        // Dialog and viewport commands are not dispatched by this backend.
+        'Tab.getJsDialog': false,
+        'Tab.setViewportSize': false,
+        'Tab.viewportSize': false
       },
       metadata: {
         provider: 'orca',
