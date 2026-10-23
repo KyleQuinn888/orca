@@ -123,8 +123,21 @@ export class ZcodeAutomationStore {
       now?: () => number
       /** Fires wait for this; absent (a test) means every fire is due at once. */
       running?: () => boolean
+      /** Whole-store persistence: read adopts persisted records, write saves on change. */
+      persistence?: {
+        read(): ZcodeAutomationRecord[] | null
+        write(records: readonly ZcodeAutomationRecord[]): void
+      }
     }
-  ) {}
+  ) {
+    const persisted = deps.persistence?.read()
+    if (persisted) {
+      for (const record of persisted) {
+        this.automations.set(record.automationId, record)
+        this.seq += 1
+      }
+    }
+  }
 
   create(
     params: {
@@ -173,6 +186,7 @@ export class ZcodeAutomationStore {
       record.lifecycleStatus = 'failed'
     }
     this.automations.set(record.automationId, record)
+    this.deps.persistence?.write(this.list())
     this.ensureTimer()
     return record
   }
@@ -232,11 +246,16 @@ export class ZcodeAutomationStore {
         record.nextRunAt = due
       }
     }
+    this.deps.persistence?.write(this.list())
     return record
   }
 
   delete(automationId: string): boolean {
-    return this.automations.delete(automationId)
+    const deleted = this.automations.delete(automationId)
+    if (deleted) {
+      this.deps.persistence?.write(this.list())
+    }
+    return deleted
   }
 
   boundTo(targetTaskId: string): boolean {
@@ -267,6 +286,7 @@ export class ZcodeAutomationStore {
 
   private tick(): void {
     const now = (this.deps.now ?? Date.now)()
+    let firedAny = false
     for (const record of this.automations.values()) {
       if (
         !record.enabled ||
@@ -280,6 +300,7 @@ export class ZcodeAutomationStore {
       }
       record.lastRunAt = now
       record.runCount += 1
+      firedAny = true
       try {
         this.deps.fire(record)
       } catch {
@@ -296,6 +317,9 @@ export class ZcodeAutomationStore {
       }
       const due = nextFire(record.schedule, now)
       record.nextRunAt = due === null ? undefined : due
+    }
+    if (firedAny) {
+      this.deps.persistence?.write(this.list())
     }
   }
 }

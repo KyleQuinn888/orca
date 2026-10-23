@@ -5,7 +5,10 @@ import { createClaudeCommandCatalogProbe } from '../claude/claude-command-catalo
 import { CodexStructuredSessionAdapter } from '../codex/codex-structured-session-adapter'
 import { ZcodeStructuredSessionAdapter } from '../zcode/zcode-structured-session-adapter'
 import { createHash } from 'node:crypto'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { ZcodeAutomationStore } from '../zcode/zcode-automation-store'
+import { readZcodeAutomations, writeZcodeAutomations } from '../zcode/zcode-automation-persistence'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import {
   withSupportedZcodeCli,
@@ -123,7 +126,14 @@ function createClaudeAdapter(
 
 function createZcodeAdapter(context: StructuredAgentAdapterContext): StructuredAgentRuntimeAdapter {
   const { deps, followUps, host } = context
+  // The account home the zcode runtime already pins: automations survive
+  // restarts beside it, and a missed run within grace still fires once.
+  const automationPath = join(homedir(), '.zcode', 'orca-automations.json')
   const automation = new ZcodeAutomationStore({
+    persistence: {
+      read: () => readZcodeAutomations(automationPath),
+      write: (records) => writeZcodeAutomations(automationPath, records)
+    },
     fire: (record) => {
       const live = host()
       const sessionId = record.orcaSessionId
