@@ -35,6 +35,7 @@ import { cancelZcodeTurn, compactZcodeTurn, dispatchZcodeTurn } from './zcode-st
 import { ZcodeAutomationStore } from './zcode-automation-store'
 import type { ZcodeBrowserBackend } from './zcode-browser-backend'
 import { routeZcodeServerRequest } from './zcode-server-requests'
+import { zcodeProviderOpen } from './zcode-structured-open'
 import { ZcodeStructuredLane } from './zcode-structured-lane'
 import { supportsZcodeStructuredLocation } from './zcode-structured-location-support'
 import {
@@ -53,7 +54,7 @@ import type {
 } from '../runtime/structured-agent-launch-composition'
 
 /** One live zcode child and everything its turns need. */
-type ZcodeSession = {
+export type ZcodeSession = {
   sessionId: string
   /** The ZCode protocol session this chat drives (`sess_...`). */
   providerSessionId: string
@@ -242,8 +243,8 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       }
       return {
         process: await identity.read(connection.pid),
-        link,
-        providerChildPhase: 'ready'
+        acquisitionGeneration: session.acquisitionGeneration,
+        link
       }
     } catch (error) {
       await connection.close()
@@ -303,6 +304,8 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
   }) => readZcodeRestingOptions(this.sessions.get(input.sessionId), input.priorOptions)
 
   readCommands = (sessionId: string) => readZcodeCommands(this.sessions.get(sessionId))
+
+  open = zcodeProviderOpen(this.sessions)
 
   holdsLiveProviderProcess = (sessionId: string, acquisitionGeneration: string): boolean => {
     const session = this.sessions.get(sessionId)

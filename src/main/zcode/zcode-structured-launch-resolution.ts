@@ -8,7 +8,7 @@
 import { agentSessionProviderHandleChainHead } from '../../shared/agent-session-provider-handle'
 import { requireLegacyAgentSessionAccountHome } from '../../shared/agent-session-account-home'
 import type { resolveCliCommand } from '../../shared/node-cli-command-resolution'
-import { probeAgentCliVersion } from '../agent-cli-version-probe'
+import { checkAgentCliVersion, launchableRelease } from '../agent-cli-version-probe'
 import {
   resolveAgainAfterRefreshOnMissingProgram,
   resolveStructuredAgentCommand
@@ -81,27 +81,18 @@ async function readZcodeStructuredInvocation(
 // ZCode's `-NN` is a build number, not a prerelease, so the shared stable-line
 // gate would refuse every release; the floor is the oldest package that speaks
 // session/subscribe with desktop-continuous delivery.
-const ZCODE_MIN_APP_CLI_VERSION = { major: 3, minor: 14, patch: 5 } as const
+/** The ascending floors a `zcode --version` must reach, per major line. */
+export const ZCODE_MINIMUM_VERSIONS = ['3.14.5'] as const
 
-function zcodeVersionReached(version: string): boolean {
-  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version)
-  if (!match) {
-    return false
-  }
-  const [major, minor, patch] = [Number(match[1]), Number(match[2]), Number(match[3])]
-  const floor = ZCODE_MIN_APP_CLI_VERSION
-  return (
-    major > floor.major ||
-    (major === floor.major &&
-      (minor > floor.minor || (minor === floor.minor && patch >= floor.patch)))
-  )
-}
-
-export function zcodeVersionSupported(
-  launch: { command: string; cwd: string; env: Record<string, string> },
-  probe: typeof probeAgentCliVersion = probeAgentCliVersion
-): Promise<boolean> {
-  return probe({ program: launch.command, cwd: launch.cwd, env: launch.env }, zcodeVersionReached)
+export function zcodeVersionSupported(launch: {
+  command: string
+  cwd: string
+  env: Record<string, string>
+}): Promise<boolean> {
+  return checkAgentCliVersion(
+    { program: launch.command, cwd: launch.cwd, env: launch.env },
+    ZCODE_MINIMUM_VERSIONS
+  ).then(launchableRelease)
 }
 
 /** ZCode's part of a launch: its binary and the account home; the workspace

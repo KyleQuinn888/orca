@@ -7,7 +7,10 @@
 // admitted without the writer lease; the delivery loop starts the provider child a send needs, and
 // an operation only the provider can perform starts it before admission.
 
-import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../shared/agent-chat-permission-mode'
+import { latestNativeChatUsageLimitCut } from '../../../shared/native-chat-usage-limit-cut'
+import { refuse } from '../../../shared/agent-session-wire'
+import { contextStructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
+import { shouldQueueStructuredAgentSessionSend } from './structured-agent-session-queued-messages'
 import type { AgentJournalMessageItem } from '../../../shared/agent-session-journal-types'
 import type {
   AgentSessionCancelResult,
@@ -58,6 +61,7 @@ import {
   type StructuredAgentSessionOptionsReader
 } from './structured-agent-session-options-read'
 import { writeStructuredAgentSessionOption } from './structured-agent-session-message-options'
+import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../shared/agent-chat-permission-mode'
 import { settleStructuredAgentSessionLateDispatch } from './structured-agent-session-late-dispatch'
 
 export function sendStructuredAgentSessionTurn(
@@ -71,6 +75,7 @@ export function sendStructuredAgentSessionTurn(
     /** Host-local: whether the sending client can manage an image card. */
     queuedImageCards?: boolean
     options?: Readonly<Record<string, string>>
+    usageLimitContinuationOfTurnItemId?: string
     /** Host-local, set only by the client-facing `agentSession.send` RPC (the
      *  renderer's launch prompt included): recorded as the submission's `client`
      *  origin, so a restart or a close keeps it as a card if it never reached the
@@ -92,15 +97,35 @@ export function sendStructuredAgentSessionTurn(
       params.envelope,
       {
         ...plan,
-        run: (ctx) =>
-          runQueueableStructuredAgentSessionSend(
-            context,
-            ctx,
-            params,
-            async () =>
-              structuredAgentSessionSendBlock(context.deps.store.getRecord(ctx.sessionId)) ??
-              (await plan.run(ctx))
-          )
+        run: async (ctx) => {
+          const record = context.deps.store.getRecord(ctx.sessionId)
+          const blocked = structuredAgentSessionSendBlock(record)
+          if (blocked) {
+            return blocked
+          }
+          if (params.usageLimitContinuationOfTurnItemId !== undefined) {
+            const snapshot = ctx.journal.snapshot()
+            const cut = latestNativeChatUsageLimitCut(snapshot.items, snapshot.submissions)
+            if (
+              cut?.turnItemId !== params.usageLimitContinuationOfTurnItemId ||
+              shouldQueueStructuredAgentSessionSend({
+                record,
+                journal: ctx.journal,
+                work: contextStructuredAgentSessionCurrentWork(ctx)
+              })
+            ) {
+              return {
+                ok: false as const,
+                refusal: refuse(
+                  'agent_session_operation_invalid',
+                  { reason: 'continuationSuperseded' },
+                  'This chat has moved on. Check the latest messages before continuing.'
+                )
+              }
+            }
+          }
+          return runQueueableStructuredAgentSessionSend(context, ctx, params, () => plan.run(ctx))
+        }
       },
       sendPreparation(context, params.envelope, arrival, selection)
     )
@@ -148,12 +173,13 @@ export function cancelStructuredAgentSessionTurn(
   }
   const plan = cancelPlan(params)
   const { prompt } = params
-  if (!prompt && params.turnId === undefined) {
-    abortAcquireForStop(context, caller, params.envelope, plan)
-  }
+  const stoppedPrePrompt =
+    !prompt && params.turnId === undefined
+      ? abortProviderWaitForStop(context, caller, params.envelope, plan)
+      : false
   // A card's Cancel stops whatever the chat has in flight, as the Stop button does; it reaches the
   // Stop only for a card the live turn raised (`cancelStructuredAgentSessionPrompt`).
-  const stopped = prompt ? { envelope: params.envelope } : params
+  const stopped = prompt ? { envelope: params.envelope } : { ...params, stoppedPrePrompt }
   return mutateWithChatStop(context, caller, stopped, plan, (ctx, stop) =>
     prompt
       ? cancelStructuredAgentSessionPrompt(
@@ -169,12 +195,12 @@ export function cancelStructuredAgentSessionTurn(
  *  queue is waiting on stops now, as a close's does, and the Stop's own step then finds no child.
  *  Only a Stop admission would run now; one naming a turn is about a child already gone, so it
  *  leaves a newer start alone. */
-function abortAcquireForStop(
+function abortProviderWaitForStop(
   context: StructuredAgentSessionMutationContext,
   caller: StructuredAgentSessionCaller,
   envelope: AgentSessionMutationEnvelope,
   plan: MutationPlan<AgentSessionCancelResult>
-): void {
+): boolean {
   const { store } = context.deps
   if (
     !agentSessionMutationAdmitsNow({
@@ -185,9 +211,9 @@ function abortAcquireForStop(
       now: context.now
     })
   ) {
-    return
+    return false
   }
-  context.acquireAborts.abort(envelope.sessionId, 'stopped while starting')
+  return context.acquireAborts.abort(envelope.sessionId, 'stopped while starting')
 }
 
 export function respondToStructuredAgentSessionPrompt(
@@ -242,11 +268,8 @@ export async function setStructuredAgentSessionOption(
             : openWithReadyStructuredAgentSessionChild(context, params.envelope, selection)(ledger)
       ),
     {
-      needsAgent: () => {
-        const child = context.sessions.get(params.envelope.sessionId)?.child
-        return !recordOnly && Boolean(child && !child.close)
-      },
-      runAfterAgentEnds: true
+      needsAgent: () =>
+        !recordOnly && Boolean(context.sessions.get(params.envelope.sessionId)?.child?.close === undefined && context.sessions.get(params.envelope.sessionId)?.child)
     }
   )
 }
@@ -267,10 +290,11 @@ export async function changeStructuredAgentSessionThreadGoal(
         context,
         caller,
         params.envelope,
-        plan,
+        threadGoalPlan({ ...params, signal: selection.signal }),
         openWithReadyStructuredAgentSessionChild(context, params.envelope, selection)
       ),
     {
+      goal: true,
       beforeAgent: (record) =>
         refuseThreadGoalUnsupported(context.deps.adapter, context.deps.agents, record?.provider)
     }

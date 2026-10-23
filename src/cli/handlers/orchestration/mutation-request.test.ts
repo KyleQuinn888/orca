@@ -176,7 +176,7 @@ describe('callOrchestrationMutation runtime_unavailable retry', () => {
     })
   })
 
-  // Why: the fake runtime listens on a Unix socket path, which Windows does not accept.
+  // Windows cannot use this temporary Unix socket path.
   it.skipIf(process.platform === 'win32')(
     'reaches a runtime that comes back after the first attempt found it down',
     async () => {
@@ -191,7 +191,7 @@ describe('callOrchestrationMutation runtime_unavailable retry', () => {
           if (request.method === 'orchestration.send') {
             sendRequestIds.push(String(request.orchestrationRequestId))
             if (sendRequestIds.length === 1) {
-              // A runtime that drops the connection mid-request leaves the outcome unknown.
+              // Dropping the connection mid-request leaves the mutation outcome unknown.
               socket.destroy()
               return
             }
@@ -219,7 +219,7 @@ describe('callOrchestrationMutation runtime_unavailable retry', () => {
         undefined,
         RETRY_MS
       )
-      // The runtime is down for the first attempt: no metadata, so even the contract probe fails.
+      // Initial attempts have no metadata, so the contract probe fails until this runtime starts.
       await new Promise<void>((resolve) => server.listen(endpoint, resolve))
       writeFileSync(
         join(userDataPath, 'orca-runtime.json'),

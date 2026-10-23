@@ -57,7 +57,7 @@ import {
   runtimeVisibleRepos,
   withoutHiddenHosts
 } from '../runtime-visible-catalog'
-import { isStructuredAttentionWorkspaceHidden } from '../structured-attention-hidden-workspace'
+import { isWorkspaceNotificationMuted } from '../workspace-notification-mute'
 
 export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktreePsDependencies {
   async getWorktreePs(
@@ -93,6 +93,7 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
       tabs: this.tabs,
       session,
       getPaneKey: (leaf) => this.makeRuntimePaneKey(leaf),
+      paneOf: (pty) => this.paneOfPty(pty),
       getTitleDisplayClear: (ptyId) => this.getPtyTitleDisplayClear(ptyId),
       getSummary
     })
@@ -110,6 +111,7 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
         repoById,
         ptysById: this.ptysById,
         tabs: this.tabs,
+        paneOf: (pty) => this.paneOfPty(pty),
         getTerminalHandlesForPty: (ptyId) => this.getExistingTerminalHandlesForPtyId(ptyId),
         getSummary
       })
@@ -196,6 +198,18 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
         this.notifyReposChanged()
       }
     })
+  }
+
+  /** The host pushes no phone notification for this workspace; see the module. */
+  isWorkspaceNotificationMuted(workspaceId: string): boolean {
+    const store = this.store
+    return (
+      !!store &&
+      isWorkspaceNotificationMuted(
+        { store, resolvedWorktrees: this.resolvedWorktrees.peek()?.worktrees ?? null },
+        workspaceId
+      )
+    )
   }
 
   /** The durable record store alone, without the chat host: launch admission needs only its
@@ -286,20 +300,14 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
         )
       },
       ...(this.structuredAgentStatusSinkFn ? { statusSink: this.structuredAgentStatusSinkFn } : {}),
+      conversationNaming: nameChat,
       // A closed chat settles the Dispatch it was working, as a closed terminal does.
       onSessionTabHidden: (sessionId) => this.onStructuredSessionTabHidden(sessionId),
       attentionDelivery: createStructuredAttentionMobileDelivery({
         readNotificationSettings: () => this.requireStore().getSettings().notifications,
         readWorkspaceLabels: (scope) =>
           readStructuredAttentionWorkspaceLabels(this.requireStore(), scope),
-        isWorkspaceHidden: (scope) =>
-          isStructuredAttentionWorkspaceHidden(
-            {
-              store: this.requireStore(),
-              resolvedWorktrees: this.resolvedWorktrees.peek()?.worktrees ?? null
-            },
-            scope
-          ),
+        isWorkspaceMuted: (scope) => this.isWorkspaceNotificationMuted(scope.workspaceId),
         dispatch: (event) => this.mobileNotifications.dispatch(event),
         reconcile: (state) => this.mobileNotifications.reconcileStructuredPromptAttention(state),
         now: () => Date.now()

@@ -16,6 +16,11 @@ import {
   structuredAgentSessionGoalObjective
 } from '../../../../shared/structured-agent-session-composer'
 
+import {
+  admitNativeChatPastedText,
+  resolveNativeChatPastedText
+} from './native-chat-composer-pasted-text-references'
+
 const GOAL_COMMAND = 'goal'
 
 export type NativeChatComposerGoalMode = {
@@ -42,11 +47,13 @@ export function useNativeChatComposerSubmit(args: {
   disabled: boolean
   sendPty: () => void
   sendStructured: (text: string, attachments: readonly NativeChatComposerImageAttachment[]) => void
+  /** Runs a command Orca owns, like `/resume`; true means the draft never reaches the agent. */
+  consumeOrcaCommand?: (draft: string) => boolean
   setDraft: (value: string) => void
   setCaret: (caret: number) => void
 }): { send: () => void; goalMode: NativeChatComposerGoalMode } {
   const { caret, disabled, draft, draftScopeKey, imageAttachments, sendPty, sendStructured } = args
-  const { setCaret, setDraft, structuredTransport } = args
+  const { consumeOrcaCommand, setCaret, setDraft, structuredTransport } = args
   const threadGoal = structuredTransport?.threadGoal
   const [entered, setEntered] = useState(false)
   const active = entered && threadGoal !== undefined
@@ -73,7 +80,9 @@ export function useNativeChatComposerSubmit(args: {
   // In-flight changes are serialized by the session's goal controller, which
   // answers false to a second submit while the first is unsettled.
   const setGoal = useCallback(() => {
-    const objective = structuredAgentSessionGoalObjective(draft)
+    const objective = structuredAgentSessionGoalObjective(
+      resolveNativeChatPastedText(draftScopeKey, draft)
+    )
     if (!threadGoal || !structuredTransport || objective === '') {
       return
     }
@@ -102,6 +111,16 @@ export function useNativeChatComposerSubmit(args: {
   }, [draft, draftScopeKey, imageAttachments.length, setCaret, structuredTransport, threadGoal])
 
   const send = useCallback(() => {
+    // Before goal mode too: a navigation command must never become an objective.
+    if (consumeOrcaCommand?.(draft)) {
+      return
+    }
+    if (
+      structuredTransport &&
+      !admitNativeChatPastedText(draftScopeKey, draft, structuredTransport.onError)
+    ) {
+      return
+    }
     if (nativeChatImagesHoldSend(imageAttachments)) {
       return
     }
@@ -122,8 +141,10 @@ export function useNativeChatComposerSubmit(args: {
     }
   }, [
     active,
+    consumeOrcaCommand,
     disabled,
     draft,
+    draftScopeKey,
     imageAttachments,
     sendPty,
     sendStructured,

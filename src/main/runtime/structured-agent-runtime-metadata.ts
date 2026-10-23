@@ -7,15 +7,12 @@ import { ZCODE_SESSION_HISTORY } from '../native-chat/zcode-cli-conversations'
 import { applyStructuredCodexWorkspaceTrust } from '../agent-workspace-trust-spawn'
 import { ACP_LAUNCH_SPECS, type AcpLaunchSpec } from '../acp/acp-launch-specs'
 import { acpStructuredAgentDefinition } from '../acp/acp-structured-agent-definitions'
-import {
-  acpLaunchVersionSupported,
-  resolveAcpLaunchCommand
-} from '../acp/acp-structured-launch-resolution'
+import { resolveAcpLaunchCommand } from '../acp/acp-structured-launch-resolution'
 import { CODEX_STRUCTURED_AGENT } from '../codex/codex-structured-agent-definition'
 import { ZCODE_STRUCTURED_AGENT } from '../zcode/zcode-structured-agent-definition'
 import {
   resolveZcodeStructuredInvocation,
-  zcodeVersionSupported
+  ZCODE_MINIMUM_VERSIONS
 } from '../zcode/zcode-structured-launch-resolution'
 import { createZcodeModelCatalogProbe } from '../zcode/zcode-model-catalog-probe'
 import { CLAUDE_STRUCTURED_AGENT } from '../claude/claude-structured-agent-definition'
@@ -45,10 +42,11 @@ export type StructuredAgentRuntimeCatalogEntry =
   | { kind: 'acp'; metadata: StructuredAgentRuntimeMetadata; spec: AcpLaunchSpec }
 
 function acpMetadata(spec: AcpLaunchSpec): StructuredAgentRuntimeMetadata {
+  const { minimumVersions } = spec
   return {
     definition: acpStructuredAgentDefinition(spec),
     supportsLocation: (location) => supportsAcpStructuredLocation(spec, location),
-    ...(spec.supportsVersion
+    ...(minimumVersions
       ? {
           launchCheck: {
             resolveLaunch: (shellEnv, commandSettings) => {
@@ -59,7 +57,7 @@ function acpMetadata(spec: AcpLaunchSpec): StructuredAgentRuntimeMetadata {
               })
               return { command, env }
             },
-            supportsVersion: (launch) => acpLaunchVersionSupported(spec, launch)
+            minimumVersions
           }
         }
       : {}),
@@ -161,7 +159,7 @@ export const STRUCTURED_AGENT_RUNTIME_CATALOG: readonly StructuredAgentRuntimeCa
           }),
           env: shellEnv
         }),
-        supportsVersion: zcodeVersionSupported
+        minimumVersions: ZCODE_MINIMUM_VERSIONS
       },
       resolveAccountHome: async ({ launchEnv }) =>
         agentSessionAccountHome(

@@ -16,10 +16,7 @@
 
 import { mapZcodeProtocolQuestions } from './zcode-protocol-questions'
 import type { ProviderTimelineEvent } from '../native-chat/agent-session-timeline/provider-timeline-event'
-import {
-  boundPayload,
-  DEFAULT_JOURNAL_PAYLOAD_LIMITS
-} from '../native-chat/agent-session-journal/journal-payload-bounds'
+import { journalPayload } from '../native-chat/agent-session-journal/journal-payload-bounds'
 import type { AgentJournalBoundedPayload } from '../../shared/agent-session-journal-types'
 
 /** One session/event envelope as the transport delivers it. */
@@ -59,11 +56,11 @@ const asString = (value: unknown): string | null => (typeof value === 'string' ?
 
 const asNumber = (value: unknown): number | null => (typeof value === 'number' ? value : null)
 
-/** Bounded output for a tool result, as the journal's payload bounds spell it. */
+/** A tool result is saved whole, as the journal's payload bounds now spell it. */
 function boundedOutput(content: unknown): AgentJournalBoundedPayload | undefined {
   const text =
     content == null ? undefined : typeof content === 'string' ? content : JSON.stringify(content)
-  return text === undefined ? undefined : boundPayload(text, DEFAULT_JOURNAL_PAYLOAD_LIMITS)
+  return text === undefined ? undefined : journalPayload(text)
 }
 
 /**

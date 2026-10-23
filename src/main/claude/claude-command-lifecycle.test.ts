@@ -203,7 +203,7 @@ async function replayCapture(
           body: { kind: 'message', role: 'user', blocks: [{ type: 'text', text: event.text }] },
           fence: 7
         })
-      ).resolves.toEqual({ state: 'admitted' })
+      ).resolves.toMatchObject({ state: 'admitted' })
       uuidMap.set(event.sentUuid, String(connection.sent.at(-1)!.uuid))
     } else if (event.kind === 'control') {
       const answerAt = capture.findIndex(
@@ -251,6 +251,7 @@ async function replayCapture(
 
 const WITHDRAWN = {
   state: 'rejected',
+  unrun: true,
   reason: DISPATCH_REJECTED_CANCELLED,
   rejection: { kind: 'cancelled' }
 }
@@ -514,7 +515,7 @@ describe('a send the CLI ended before starting it', () => {
     })
 
     expect(replay.settlementsFor('client-B')).toEqual([
-      { state: 'rejected', ...claudeDispatchRejection(agentSessionFailureFact(kind)) }
+      { state: 'rejected', unrun: true, ...claudeDispatchRejection(agentSessionFailureFact(kind)) }
     ])
     expect(replay.settlementsFor('client-A')).toEqual([acceptedAs(replay.liveUuid('client-A'))])
   })

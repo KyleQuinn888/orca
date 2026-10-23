@@ -89,7 +89,6 @@ describe('ZcodeStructuredSessionAdapter', () => {
     try {
       expect(acquisition.link?.handle.nativeId).toBe('sess_provider_1')
       expect(acquisition.link?.origin).toBe('created')
-      expect(acquisition.providerChildPhase).toBe('ready')
       expect(acquisition.process.pid).toBeGreaterThan(0)
     } finally {
       await adapter.closeAll()

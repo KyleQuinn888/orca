@@ -1,4 +1,4 @@
-import { AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY } from './runtime-capability-constants'
+import { AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY } from './agent-session-runtime-capabilities'
 
 // Why: a host's structured agents are the ones it registered, not a list every build ships. A host
 // advertising this accepts any agent it lists through `agentSession.agents` (with each agent's
@@ -21,6 +21,10 @@ export const STRUCTURED_AGENT_SESSION_HOLD_RUNTIME_CAPABILITY =
 // negotiation rather than by calling and reading a refusal it cannot distinguish from a real one.
 export const STRUCTURED_AGENT_SESSION_REVEAL_RUNTIME_CAPABILITY =
   'agent-session.structured.reveal.v1' as const
+// Why: a client offers "Regenerate name" on a chat whose naming failed only to a host that has
+// `agentSession.regenerateName`; an older host still publishes nothing a client must act on.
+export const STRUCTURED_AGENT_SESSION_REGENERATE_NAME_RUNTIME_CAPABILITY =
+  'agent-session.structured.regenerate-name.v1' as const
 // Why: `agentSession.create` gains an optional `resumeFrom`, and its params are a STRICT union — an
 // older host rejects the unknown key as a schema error, which a client cannot tell from a real
 // refusal. Worse, without probing, a client cannot know whether a host that accepted the call
@@ -37,8 +41,17 @@ export const AGENT_SESSION_MODEL_CATALOG_SAVED_ONLY_RUNTIME_CAPABILITY =
 /** Strict create source identity is sent only after host negotiation. */
 export const STRUCTURED_AGENT_SESSION_CLI_SOURCE_RUNTIME_CAPABILITY =
   'agent-session.structured.cli-source.v1' as const
+// Why: `agentSession.subscribeAvailability` is a new stream with strict params; a decoder drops an
+// unknown opcode silently, so a client subscribes only to a host advertising this and otherwise
+// shows its own facts, leaving the host's verdict to the click's createSupport.
+export const STRUCTURED_AGENT_SESSION_AVAILABILITY_RUNTIME_CAPABILITY =
+  'agent-session.structured.availability.v1' as const
+
+export const AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY =
+  'agent-session.coherent-model-catalog.v1' as const
 
 export const STRUCTURED_AGENT_SESSION_SURFACE_RUNTIME_CAPABILITIES = [
+  AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY,
   STRUCTURED_AGENT_SESSION_HOLD_RUNTIME_CAPABILITY,
   // Mid-turn sends become queued cards: the zcode protocol refuses a second
   // prompt while a turn runs, so an immediate send mid-turn surfaces as a
@@ -49,5 +62,7 @@ export const STRUCTURED_AGENT_SESSION_SURFACE_RUNTIME_CAPABILITIES = [
   PI_STRUCTURED_DIALOGS_RUNTIME_CAPABILITY,
   STRUCTURED_AGENT_SESSION_RESUME_HISTORY_RUNTIME_CAPABILITY,
   STRUCTURED_AGENT_SESSION_CLI_SOURCE_RUNTIME_CAPABILITY,
-  AGENT_SESSION_MODEL_CATALOG_SAVED_ONLY_RUNTIME_CAPABILITY
+  AGENT_SESSION_MODEL_CATALOG_SAVED_ONLY_RUNTIME_CAPABILITY,
+  STRUCTURED_AGENT_SESSION_AVAILABILITY_RUNTIME_CAPABILITY,
+  STRUCTURED_AGENT_SESSION_REGENERATE_NAME_RUNTIME_CAPABILITY
 ] as const
