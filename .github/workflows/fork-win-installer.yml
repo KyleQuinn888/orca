@@ -1,0 +1,67 @@
+name: Fork Windows Installer
+
+# Builds the unsigned Windows installer for this fork's branch on demand.
+# The upstream dev-channel build is gated to stablyai/orca, so this is the
+# fork's own path to a runnable NSIS installer (personal use; the artifact is
+# unsigned — the installed app itself is identical to a local build).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup pnpm
+        uses: pnpm/setup@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: package.json
+          cache: pnpm
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            mobile/pnpm-lock.yaml
+
+      - name: Cache electron-builder downloads
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\electron-builder\Cache
+          key: electron-builder-win-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-builder-win-
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
+      # Why retried: pnpm install triggers electron's postinstall, which pulls the
+      # binary dist; a cold cache can time out once before it warms.
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Mobile web bundle deps
+        uses: ./.github/actions/install-mobile-dependencies
+
+      - name: Build Windows installer
+        run: pnpm run build:win
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: orca-win-installer
+          path: |
+            dist/*.exe
+            dist/*.yml
+          if-no-files-found: error
+          retention-days: 14
