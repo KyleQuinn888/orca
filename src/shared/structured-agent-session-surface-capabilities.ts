@@ -1,3 +1,5 @@
+import { AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY } from './runtime-capability-constants'
+
 // Why: a host's structured agents are the ones it registered, not a list every build ships. A host
 // advertising this accepts any agent it lists through `agentSession.agents` (with each agent's
 // capability record) in `agentSession.*` params, and refuses one it did not register; a client
@@ -38,6 +40,10 @@ export const STRUCTURED_AGENT_SESSION_CLI_SOURCE_RUNTIME_CAPABILITY =
 
 export const STRUCTURED_AGENT_SESSION_SURFACE_RUNTIME_CAPABILITIES = [
   STRUCTURED_AGENT_SESSION_HOLD_RUNTIME_CAPABILITY,
+  // Mid-turn sends become queued cards: the zcode protocol refuses a second
+  // prompt while a turn runs, so an immediate send mid-turn surfaces as a
+  // provider rejection instead of the queue the chat UI promises.
+  AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY,
   STRUCTURED_AGENT_SESSION_REVEAL_RUNTIME_CAPABILITY,
   STRUCTURED_AGENT_SESSION_REGISTERED_AGENTS_RUNTIME_CAPABILITY,
   PI_STRUCTURED_DIALOGS_RUNTIME_CAPABILITY,
