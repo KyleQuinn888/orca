@@ -3,9 +3,8 @@
 // A missed run within the grace window still fires once after restart; one
 // older than that skips forward to the next occurrence instead of piling up.
 
-import { readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
-import { mkdirSync } from 'node:fs'
 
 import type { ZcodeAutomationRecord } from './zcode-automation-store'
 import { readZcodeSchedule, type ZcodeAutomationSchedule } from './zcode-automation-schedule'

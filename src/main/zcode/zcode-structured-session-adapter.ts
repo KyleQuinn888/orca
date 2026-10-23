@@ -33,7 +33,8 @@ import {
 import { zcodeProviderHandle } from './zcode-structured-agent-definition'
 import { cancelZcodeTurn, compactZcodeTurn, dispatchZcodeTurn } from './zcode-structured-turns'
 import { ZcodeAutomationStore } from './zcode-automation-store'
-import { answerZcodeAutomationRequest } from './zcode-automation-answers'
+import type { ZcodeBrowserBackend } from './zcode-browser-backend'
+import { routeZcodeServerRequest } from './zcode-server-requests'
 import { ZcodeStructuredLane } from './zcode-structured-lane'
 import { supportsZcodeStructuredLocation } from './zcode-structured-location-support'
 import {
@@ -90,6 +91,8 @@ export type ZcodeStructuredSessionAdapterDeps = {
   ) => void
   /** automation/* answers; defaults to an idle store. */
   automation?: ZcodeAutomationStore
+  /** browser-use answers; absent degrades to an honest empty discovery. */
+  browser?: ZcodeBrowserBackend
   /** Held sends changed with no row: every reader re-derives current work. */
   onWorkChanged?: (sessionId: string) => void
 }
@@ -120,34 +123,10 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
       connection.respondWithError(request.id, -32601, `Method not found: ${request.method}`)
       return
     }
-    if (request.method === 'interaction/requestPermission') {
-      // Full access (protocol yolo) auto-allows: a card would only race the
-      // server's request timeout and die as "handled elsewhere".
-      if (session.reportedOptions.mode === 'yolo') {
-        // The wire result schema is strict {decision}; allow is the approval.
-        session.connection.respond(request.id, { decision: 'allow' })
-        return
-      }
-      session.lane.permissionRequest(session.connection, request.id, request.params)
-      return
-    }
-    if (request.method === 'interaction/requestUserInput') {
-      session.lane.userInputRequest(request.id, request.params)
-      return
-    }
-    // No browser backend yet: discovery reads an honest empty list.
-    if (request.method === 'interaction/browserList') {
-      connection.respond(request.id, { browsers: [] })
-      return
-    }
-    if (request.method === 'interaction/browserExecute') {
-      return connection.respondWithError(request.id, -32001, 'no browser backend in this host')
-    }
-    if (request.method.startsWith('automation/')) {
-      answerZcodeAutomationRequest(this.automationStore, sessionId, request, connection)
-      return
-    }
-    session.connection.respondWithError(request.id, -32601, `Method not found: ${request.method}`)
+    routeZcodeServerRequest(session, sessionId, request, connection, {
+      automation: this.automationStore,
+      ...(this.deps.browser ? { browser: this.deps.browser } : {})
+    })
   }
 
   acquire = async (input: StructuredAgentSessionAcquireInput): Promise<AgentSessionAcquisition> => {
@@ -352,6 +331,8 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     }
     this.sessions.delete(sessionId)
     session.ended = true
+    // The provider session is gone: its browser pages are nobody's to keep.
+    void this.deps.browser?.releaseSession(session.providerSessionId)
     const closed = await session.connection.close()
     return closed
   }

@@ -63,6 +63,7 @@ import {
 import type { ClaudeCliFlagSupport } from '../claude/claude-cli-flag-support'
 import { migrateLegacyNativeChatVisualsFolders } from '../native-chat/native-chat-scratch-folder-migration'
 import { scheduleNativeChatVisualsSweep } from '../native-chat/native-chat-visuals-sweep'
+import type { ZcodeBrowserSurfaceProvider } from '../zcode/zcode-browser-surface'
 import { readJournalSessionLastActivityAt } from '../native-chat/agent-session-journal/journal-row-table'
 
 /** Whether this profile holds a structured chat: a record or tab in the journal database. */
@@ -135,6 +136,9 @@ export type StructuredAgentSessionRuntimeDeps = StructuredAgentSessionTransportO
   /** The account home a structured launch would pin right now, for catalog
    *  reads with no session record. Absent disables the catalog surface. */
   resolveAgentAccountHome?: RuntimeAgentAccountHomeResolver
+  /** Lends the zcode bridge Orca's browser commands; absent keeps browser-use
+   *  discovery honestly empty for zcode chats on that host. */
+  zcodeBrowserSurface?: ZcodeBrowserSurfaceProvider
 }
 
 let installing: Promise<InstalledRuntime> | null = null

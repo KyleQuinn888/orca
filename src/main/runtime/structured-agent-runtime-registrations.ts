@@ -9,6 +9,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { ZcodeAutomationStore } from '../zcode/zcode-automation-store'
 import { readZcodeAutomations, writeZcodeAutomations } from '../zcode/zcode-automation-persistence'
+import { ZcodeBrowserBackend } from '../zcode/zcode-browser-backend'
 import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
 import {
   withSupportedZcodeCli,
@@ -172,6 +173,9 @@ function createZcodeAdapter(context: StructuredAgentAdapterContext): StructuredA
   })
   return new ZcodeStructuredSessionAdapter({
     automation,
+    // Orca's own browser pages back the zcode agent's browser-use commands; a
+    // host that lends no surface keeps discovery empty (honest degradation).
+    browser: new ZcodeBrowserBackend(deps.zcodeBrowserSurface ?? (() => null)),
     resolveLaunch: withSupportedZcodeCli(
       composeStructuredLaunch(
         ZCODE_STRUCTURED_AGENT,

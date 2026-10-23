@@ -307,7 +307,10 @@ export abstract class OrcaRuntimeWithGetWorktreePs extends OrcaRuntimeWithWorktr
       // Read per sweep tick from the orchestration database: a worker whose dispatch is open keeps
       // its agent running. No database answers no.
       hasOpenDispatch: (record) =>
-        structuredWorkerOwesWork(this.getOrchestrationDbIfAvailable?.() ?? null, record)
+        structuredWorkerOwesWork(this.getOrchestrationDbIfAvailable?.() ?? null, record),
+      // The runtime's own browser engine backs the zcode agent's browser-use
+      // commands; the lazy provider keeps startup free of the Chromium cluster.
+      zcodeBrowserSurface: () => this.browserCommands
     })
   }
 }

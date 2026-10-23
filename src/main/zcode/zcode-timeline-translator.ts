@@ -65,11 +65,9 @@ function asNumber(value: unknown): number | null {
 
 /** Bounded output for a tool result, as the journal's payload bounds spell it. */
 function boundedOutput(content: unknown): AgentJournalBoundedPayload | undefined {
-  if (content === undefined || content === null) {
-    return undefined
-  }
-  const text = typeof content === 'string' ? content : JSON.stringify(content)
-  return boundPayload(text, DEFAULT_JOURNAL_PAYLOAD_LIMITS)
+  const text =
+    content == null ? undefined : typeof content === 'string' ? content : JSON.stringify(content)
+  return text === undefined ? undefined : boundPayload(text, DEFAULT_JOURNAL_PAYLOAD_LIMITS)
 }
 
 /**
