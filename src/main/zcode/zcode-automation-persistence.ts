@@ -169,7 +169,7 @@ function cronMatchesLoose(expr: string, at: Date): boolean {
     fieldLoose(fields[1]!, at.getUTCHours(), 0) &&
     fieldLoose(fields[2]!, at.getUTCDate(), 1) &&
     fieldLoose(fields[3]!, at.getUTCMonth() + 1, 1) &&
-    fieldLoose(fields[4]!.replace(/7/g, '0'), at.getUTCDay(), 0, 6)
+    fieldLoose(fields[4]!.replace(/7/g, '0'), at.getUTCDay(), 0)
   )
 }
 
