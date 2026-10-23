@@ -227,7 +227,13 @@ function extensionRehypePlugins(extension: CommentMarkdownExtension): MarkdownPl
   for (const [tagName, names] of Object.entries(extension.sanitizeAttributes)) {
     attributes[tagName] = [...(attributes[tagName] ?? []), ...names]
   }
-  return [rehypeRaw, [rehypeSanitize, { ...commentMarkdownSanitizeSchema, attributes }]]
+  // The chat always carries the visual extension: its pipeline must expand
+  // math exactly like the base one, or remark-math nodes reach the page raw.
+  return [
+    rehypeRaw,
+    [rehypeSanitize, { ...commentMarkdownSanitizeSchema, attributes }],
+    rehypeKatex
+  ]
 }
 
 type CommentMarkdownProps = React.ComponentPropsWithoutRef<'div'> & {

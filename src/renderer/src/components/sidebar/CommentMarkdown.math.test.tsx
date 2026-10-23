@@ -14,6 +14,9 @@ vi.mock('./CommentMermaidBlock', () => ({ default: boundaryMocks.mermaid }))
 
 // Why: a literal dollar in source invites template-literal escaping drift.
 const DOLLAR = String.fromCharCode(36)
+const NL = String.fromCharCode(10)
+const DD = DOLLAR + DOLLAR
+const LATEX_BLOCK = [DD, '\\int_0^1 x\\,dx', DD].join('')
 
 afterEach(() => {
   cleanup()
@@ -22,12 +25,35 @@ afterEach(() => {
 
 describe('CommentMarkdown math', () => {
   it('renders inline and block LaTeX through KaTeX, not as raw dollars', () => {
-    const { container } = render(
-      <CommentMarkdown content={'Inline $E = mc^2$ and block:\n\n$$\\int_0^1 x\\,dx$$'} />
-    )
+    const content = [
+      'Inline ',
+      DOLLAR,
+      'E = mc^2',
+      DOLLAR,
+      ' and block:',
+      NL,
+      NL,
+      LATEX_BLOCK
+    ].join('')
+    const { container } = render(<CommentMarkdown content={content} />)
     const katex = container.querySelectorAll('.katex')
     expect(katex.length).toBeGreaterThanOrEqual(2)
-    expect(container.innerHTML).not.toContain('$E = mc^2$')
+    expect(container.innerHTML).not.toContain('mc^2$')
+  })
+
+  it('renders math with the chat visual extension active (the real assistant path)', () => {
+    const content = ['Inline ', DOLLAR, 'E = mc^2', DOLLAR, ' and:', NL, NL, LATEX_BLOCK].join('')
+    const { container } = render(
+      <CommentMarkdown
+        content={content}
+        extension={{
+          remarkPlugins: [],
+          sanitizeAttributes: {},
+          components: {}
+        }}
+      />
+    )
+    expect(container.querySelectorAll('.katex').length).toBeGreaterThanOrEqual(2)
   })
 
   it('leaves an unpaired dollar alone', () => {
