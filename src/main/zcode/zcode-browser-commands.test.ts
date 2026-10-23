@@ -361,3 +361,39 @@ describe('ZcodeBrowserBackend.execute playwright action subset', () => {
     expect(result.error?.code).toBe('capability_unsupported')
   })
 })
+
+describe('ZcodeBrowserBackend.execute playwright evaluate kinds', () => {
+  it('wraps function-kind expressions with their arg', async () => {
+    const calls = surfaceCalls()
+    const backend = await snappedBackend(calls)
+    const result = await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      command: {
+        method: 'playwright',
+        action: {
+          name: 'evaluate',
+          expression: '(x) => x + 1',
+          expressionKind: 'function',
+          arg: 41
+        }
+      }
+    })
+    expect(result.ok).toBe(true)
+    expect(calls.evals).toContain('((x) => x + 1)(41)')
+  })
+
+  it('passes string-kind expressions through untouched', async () => {
+    const calls = surfaceCalls()
+    const backend = await snappedBackend(calls)
+    await backend.execute({
+      sessionId: 'sess_1',
+      browserId: backend.browserId,
+      command: {
+        method: 'playwright',
+        action: { name: 'evaluate', expression: 'document.title', expressionKind: 'string' }
+      }
+    })
+    expect(calls.evals).toContain('document.title')
+  })
+})

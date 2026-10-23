@@ -148,11 +148,15 @@ export abstract class ZcodeBrowserProbeCommands extends ZcodeBrowserPointerComma
       return { ok: true, value: ariaStyleSnapshot(snapshot), elapsedMs: Date.now() - startedAt }
     }
     if (name === 'evaluate') {
-      return this.evaluate(
-        tab,
-        { expression: typeof action.expression === 'string' ? action.expression : '' },
-        startedAt
-      )
+      // Function-kind expressions are a page function to CALL with arg, not a
+      // statement to run — evaluating them bare returns undefined (the agent
+      // sees silent empty results). Same wrapping as the CLI reference.
+      const expression = typeof action.expression === 'string' ? action.expression : ''
+      const source =
+        action.expressionKind === 'function' && expression
+          ? `(${expression})(${JSON.stringify(action.arg ?? null)})`
+          : expression
+      return this.evaluate(tab, { expression: source }, startedAt)
     }
     return zcodeBrowserUnsupported(`playwright(${name})`, startedAt)
   }
