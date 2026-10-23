@@ -19,6 +19,23 @@ export type ZcodeBrowserCommandSurface = Pick<
   | 'browserEval'
   | 'browserScreenshot'
   | 'browserFullScreenshot'
+  | 'browserClick'
+  | 'browserDblclick'
+  | 'browserFill'
+  | 'browserType'
+  | 'browserFocus'
+  | 'browserKeypress'
+  | 'browserSelect'
+  | 'browserCheck'
+  | 'browserHover'
+  | 'browserScrollIntoView'
+  | 'browserDrag'
+  | 'browserWait'
+  | 'browserMouseClick'
+  | 'browserMouseWheel'
+  | 'browserMouseMove'
+  | 'browserMouseDown'
+  | 'browserMouseUp'
 >
 
 /** Resolves lazily so a runtime assembled before its browser engine still boots. */

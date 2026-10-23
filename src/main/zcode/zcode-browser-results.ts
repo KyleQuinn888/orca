@@ -120,3 +120,36 @@ export function zcodeBrowserUnsupported(
     startedAt
   )
 }
+
+/** A ref the last snapshot never minted, or one whose page has none cached. */
+export function zcodeBrowserRefNotFound(
+  ref: unknown,
+  startedAt: number
+): ZcodeBrowserCommandResult {
+  return zcodeBrowserErrorResult(
+    {
+      code: 'ref_not_found',
+      message: `Browser ref '${String(ref)}' is stale or unavailable. Take a fresh snapshot before retrying.`
+    },
+    startedAt
+  )
+}
+
+/** An action that needs a target arrived with neither ref nor coordinates. */
+export function zcodeBrowserMissingTarget(
+  method: string,
+  startedAt: number
+): ZcodeBrowserCommandResult {
+  return zcodeBrowserErrorResult(
+    {
+      code: 'execution_error',
+      message: `Browser action requires a ref or x/y coordinates: ${method}`
+    },
+    startedAt
+  )
+}
+
+/** Numeric command field with a fallback; NaN never reaches the page. */
+export function zcodeBrowserNumberOr(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}

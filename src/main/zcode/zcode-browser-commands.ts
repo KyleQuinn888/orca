@@ -1,7 +1,7 @@
 import type { ZcodeBrowserCommandSurface } from './zcode-browser-surface'
 import type { ZcodeBrowserSessionTabs, ZcodeBrowserTab } from './zcode-browser-session'
-import type { ZcodePageState } from './zcode-browser-snapshot'
-import { ZcodeBrowserReadCommands } from './zcode-browser-read-commands'
+import type { ZcodePageState, ZcodeSnapshotElement } from './zcode-browser-snapshot'
+import { ZcodeBrowserTabCommands } from './zcode-browser-tab-commands'
 import {
   zcodeBrowserErrorResult,
   zcodeBrowserUnsupported,
@@ -36,7 +36,7 @@ export type ZcodeBrowserDispatchInput = {
  * validates the returned JSON; unknown/malformed commands answer structured
  * errors rather than throwing so the agent loop can carry on.
  */
-export class ZcodeBrowserCommandDispatcher extends ZcodeBrowserReadCommands {
+export class ZcodeBrowserCommandDispatcher extends ZcodeBrowserTabCommands {
   constructor(
     private readonly surface: ZcodeBrowserCommandSurface,
     private readonly tabs: ZcodeBrowserSessionTabs,
@@ -45,8 +45,8 @@ export class ZcodeBrowserCommandDispatcher extends ZcodeBrowserReadCommands {
     super()
   }
 
-  protected requireTab(sessionId: string, tabId: string | undefined): ZcodeBrowserTab | null {
-    return this.tabs.resolveTab(sessionId, tabId)
+  protected writeSurface(): ZcodeBrowserCommandSurface {
+    return this.surface
   }
 
   protected async surfaceEval(expression: string, page: string): Promise<{ result: string }> {
@@ -60,6 +60,22 @@ export class ZcodeBrowserCommandDispatcher extends ZcodeBrowserReadCommands {
     return fullPage
       ? this.surface.browserFullScreenshot({ format: 'png', page })
       : this.surface.browserScreenshot({ format: 'png', page })
+  }
+
+  protected resolveRef(tab: ZcodeBrowserTab, ref: string): ZcodeSnapshotElement | null {
+    return tab.snapshot?.elements.find((element) => element.ref === ref) ?? null
+  }
+
+  protected requireTab(sessionId: string, tabId: string | undefined): ZcodeBrowserTab | null {
+    return this.tabs.resolveTab(sessionId, tabId)
+  }
+
+  protected tabRegistry(): ZcodeBrowserSessionTabs {
+    return this.tabs
+  }
+
+  protected browserIdentity(): { browserId: string; browserGeneration: number } {
+    return this.identity
   }
 
   protected metaFor(sessionId: string, tab: ZcodeBrowserTab): ZcodeBrowserMeta {
@@ -95,6 +111,32 @@ export class ZcodeBrowserCommandDispatcher extends ZcodeBrowserReadCommands {
           return await this.snapshot(input.sessionId, tabId, command, startedAt)
         case 'screenshot':
           return await this.screenshot(input.sessionId, tabId, command, startedAt)
+        case 'click':
+        case 'fill':
+        case 'type':
+        case 'press':
+        case 'cuaKeypress':
+        case 'scroll':
+        case 'cuaScroll':
+        case 'domCuaScroll':
+        case 'hover':
+        case 'select':
+        case 'check':
+        case 'drag':
+        case 'cuaDrag':
+          return await this.writeCommand(method, input, tabId, command, startedAt)
+        case 'elementInfo':
+          return await this.withTab(input.sessionId, tabId, startedAt, (tab) =>
+            this.elementInfo(tab, command, startedAt)
+          )
+        case 'evaluate':
+          return await this.withTab(input.sessionId, tabId, startedAt, (tab) =>
+            this.evaluate(tab, command, startedAt)
+          )
+        case 'waitFor':
+          return await this.withTab(input.sessionId, tabId, startedAt, (tab) =>
+            this.waitFor(tab, command, startedAt)
+          )
         case 'turnEnded':
           // Lifecycle ping the broker relays at turn end; no work to do here.
           return { ok: true, elapsedMs: Date.now() - startedAt }
@@ -106,83 +148,64 @@ export class ZcodeBrowserCommandDispatcher extends ZcodeBrowserReadCommands {
     }
   }
 
-  private buildMeta(
-    input: { sessionId: string; browserId: string; browserGeneration: number },
-    tab?: ZcodeBrowserTab | null
-  ): ZcodeBrowserMeta {
-    return {
-      browserUse: true,
-      backendType: 'cdp',
-      browserId: input.browserId,
-      browserGeneration: input.browserGeneration,
-      openTabIds: this.tabs.listTabs(input.sessionId).map((entry) => entry.tabId),
-      ...(tab ? { tabId: tab.tabId, currentUrl: tab.pageInfo.url, lifecycle: 'active' } : {})
-    }
+  /** Tab-scoped write commands: every family member takes (sessionId, tab, …). */
+  private readonly writers: Record<
+    string,
+    (
+      sessionId: string,
+      tab: ZcodeBrowserTab,
+      command: Record<string, unknown>,
+      startedAt: number
+    ) => Promise<ZcodeBrowserCommandResult>
+  > = {
+    click: (sessionId, tab, command, startedAt) => this.click(sessionId, tab, command, startedAt),
+    fill: (sessionId, tab, command, startedAt) => this.fill(sessionId, tab, command, startedAt),
+    type: (sessionId, tab, command, startedAt) => this.type(sessionId, tab, command, startedAt),
+    press: (sessionId, tab, command, startedAt) => this.press(sessionId, tab, command, startedAt),
+    cuaKeypress: (sessionId, tab, command, startedAt) =>
+      this.cuaKeypress(sessionId, tab, command, startedAt),
+    scroll: (sessionId, tab, command, startedAt) => this.scroll(sessionId, tab, command, startedAt),
+    cuaScroll: (sessionId, tab, command, startedAt) =>
+      this.cuaScroll(sessionId, tab, command, startedAt),
+    domCuaScroll: (sessionId, tab, command, startedAt) =>
+      this.domCuaScroll(sessionId, tab, command, startedAt),
+    hover: (sessionId, tab, command, startedAt) => this.hover(sessionId, tab, command, startedAt),
+    select: (sessionId, tab, command, startedAt) => this.select(sessionId, tab, command, startedAt),
+    check: (sessionId, tab, command, startedAt) => this.check(sessionId, tab, command, startedAt),
+    drag: (sessionId, tab, command, startedAt) => this.drag(sessionId, tab, command, startedAt),
+    cuaDrag: (sessionId, tab, command, startedAt) =>
+      this.cuaDrag(sessionId, tab, command, startedAt)
   }
 
-  private list(input: ZcodeBrowserDispatchInput, startedAt: number): ZcodeBrowserCommandResult {
-    const all = this.tabs.listTabs(input.sessionId)
-    const activeId = this.tabs.resolveTab(input.sessionId)?.tabId ?? null
-    return {
-      ok: true,
-      tabs: all.map((tab) => zcodeTabSummary(tab, tab.tabId === activeId)),
-      meta: this.buildMeta(input),
-      elapsedMs: Date.now() - startedAt
-    }
-  }
-
-  private async newTab(
-    input: ZcodeBrowserDispatchInput,
-    startedAt: number
-  ): Promise<ZcodeBrowserCommandResult> {
-    const created = await this.surface.browserTabCreate({ url: 'about:blank' })
-    const tab = this.tabs.registerTab(input.sessionId, created.browserPageId)
-    return {
-      ok: true,
-      tab: zcodeTabSummary(tab, true),
-      meta: this.buildMeta(input, tab),
-      elapsedMs: Date.now() - startedAt
-    }
-  }
-
-  private async activateTab(
-    input: ZcodeBrowserDispatchInput,
-    rawTabId: unknown,
-    startedAt: number
-  ): Promise<ZcodeBrowserCommandResult> {
-    const tabId = typeof rawTabId === 'string' ? rawTabId : ''
-    const tab = this.tabs.resolveTab(input.sessionId, tabId)
-    if (!tab) {
-      return zcodeBrowserErrorResult(
-        { code: 'ref_not_found', message: `Browser tab '${tabId}' is unavailable` },
-        startedAt
-      )
-    }
-    await this.surface.browserTabShow({ page: tab.browserPageId })
-    this.tabs.activate(input.sessionId, tab.tabId)
-    return {
-      ok: true,
-      tab: zcodeTabSummary(tab, true),
-      meta: this.buildMeta(input, tab),
-      elapsedMs: Date.now() - startedAt
-    }
-  }
-
-  private async close(
+  private async writeCommand(
+    method: string,
     input: ZcodeBrowserDispatchInput,
     tabId: string | undefined,
+    command: Record<string, unknown>,
     startedAt: number
   ): Promise<ZcodeBrowserCommandResult> {
-    const tab = this.tabs.resolveTab(input.sessionId, tabId)
+    const writer = this.writers[method]
+    return this.withTab(input.sessionId, tabId, startedAt, (tab) =>
+      writer(input.sessionId, tab, command, startedAt)
+    )
+  }
+
+  private withTab<T>(
+    sessionId: string,
+    tabId: string | undefined,
+    startedAt: number,
+    run: (tab: ZcodeBrowserTab) => Promise<T> | T
+  ): Promise<T | ZcodeBrowserCommandResult> {
+    const tab = this.tabs.resolveTab(sessionId, tabId)
     if (!tab) {
-      return zcodeBrowserErrorResult(
-        { code: 'ref_not_found', message: 'Browser tab is unavailable' },
-        startedAt
+      return Promise.resolve(
+        zcodeBrowserErrorResult(
+          { code: 'ref_not_found', message: 'Browser tab is unavailable' },
+          startedAt
+        )
       )
     }
-    await this.surface.browserTabClose({ page: tab.browserPageId })
-    this.tabs.dropTab(input.sessionId, tab.tabId)
-    return { ok: true, meta: this.buildMeta(input), elapsedMs: Date.now() - startedAt }
+    return Promise.resolve(run(tab))
   }
 
   private async navigate(
@@ -218,14 +241,13 @@ export class ZcodeBrowserCommandDispatcher extends ZcodeBrowserReadCommands {
     const created = await this.surface.browserTabCreate({ url })
     const tab = this.tabs.registerTab(input.sessionId, created.browserPageId)
     tab.navigationDepth = url === 'about:blank' ? 0 : 1
-    const result = {
-      ok: true as const,
+    return {
+      ok: true,
       state: await this.readState(tab),
       tab: zcodeTabSummary(tab, true),
       meta: this.buildMeta(input, tab),
       elapsedMs: Date.now() - startedAt
     }
-    return result
   }
 
   private async traverse(

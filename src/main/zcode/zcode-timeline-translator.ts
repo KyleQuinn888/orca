@@ -55,13 +55,9 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : null
 }
 
-function asString(value: unknown): string | null {
-  return typeof value === 'string' ? value : null
-}
+const asString = (value: unknown): string | null => (typeof value === 'string' ? value : null)
 
-function asNumber(value: unknown): number | null {
-  return typeof value === 'number' ? value : null
-}
+const asNumber = (value: unknown): number | null => (typeof value === 'number' ? value : null)
 
 /** Bounded output for a tool result, as the journal's payload bounds spell it. */
 function boundedOutput(content: unknown): AgentJournalBoundedPayload | undefined {
