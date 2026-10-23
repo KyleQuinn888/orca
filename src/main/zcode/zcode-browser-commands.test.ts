@@ -9,7 +9,7 @@ import {
 } from './zcode-browser-test-surface'
 
 describe('ZcodeBrowserBackend.execute write commands', () => {
-  it('click by ref forwards the snapshot selector', async () => {
+  it('click by ref resolves in-page geometry and mouse-activates', async () => {
     const calls = surfaceCalls()
     const backend = await snappedBackend(calls)
     const result = await backend.execute({
@@ -18,7 +18,11 @@ describe('ZcodeBrowserBackend.execute write commands', () => {
       command: { method: 'click', ref: 'e1' }
     })
     expect(result.ok).toBe(true)
-    expect(calls.clicked).toEqual(['body > a:nth-of-type(1)'])
+    expect(calls.evals.some((expression) => expression.includes('scrollIntoViewIfNeeded'))).toBe(
+      true
+    )
+    expect(calls.mouse).toEqual(['click@28,28'])
+    expect(calls.clicked).toHaveLength(0)
   })
 
   it('click by coordinates goes through the mouse path', async () => {
@@ -212,17 +216,17 @@ describe('ZcodeBrowserBackend.execute write commands', () => {
 })
 
 describe('ZcodeBrowserBackend.execute viewport hygiene', () => {
-  it('scrolls the element into view before a positional click', async () => {
+  it('scrolls the element into view before a daemon dblclick', async () => {
     const calls = surfaceCalls()
     const backend = await snappedBackend(calls)
     const result = await backend.execute({
       sessionId: 'sess_1',
       browserId: backend.browserId,
-      command: { method: 'click', ref: 'e1' }
+      command: { method: 'click', ref: 'e1', doubleClick: true }
     })
     expect(result.ok).toBe(true)
     expect(calls.scrolledIntoView).toEqual(['body > a:nth-of-type(1)'])
-    expect(calls.clicked).toEqual(['body > a:nth-of-type(1)'])
+    expect(calls.clicked).toEqual(['dbl:body > a:nth-of-type(1)'])
   })
 
   it('answers listUserTabs with an honest empty array', async () => {
@@ -237,49 +241,15 @@ describe('ZcodeBrowserBackend.execute viewport hygiene', () => {
   })
 })
 
-describe('ZcodeBrowserBackend.execute click false-negative recovery', () => {
-  it('reports success when a failed click demonstrably navigated', async () => {
+describe('ZcodeBrowserBackend.execute click geometry path', () => {
+  it('answers ref_not_found when the geometry probe misses', async () => {
     const calls = surfaceCalls()
     const surface = fakeSurface(calls, {
-      browserClick: vi.fn(async () => {
-        throw Object.assign(new Error("Cannot read properties of null (reading 'clientWidth')"), {
-          code: 'browser_error'
-        })
-      }) as never,
-      browserEval: (() => {
-        // The navigate before the click still collects a snapshot; only the
-        // post-click verification read must see the navigated URL.
-        let evals = 0
-        return vi.fn(async () => {
-          evals += 1
-          return evals <= 1
-            ? { result: sampleEvalResult(), origin: 'https://example.org' }
-            : {
-                result: '"https://www.iana.org/help/example-domains"',
-                origin: 'https://www.iana.org'
-              }
-        })
-      })() as never
-    })
-    const backend = new ZcodeBrowserBackend(() => surface)
-    await backend.execute({
-      sessionId: 'sess_1',
-      browserId: backend.browserId,
-      command: { method: 'navigate', url: 'https://example.org' }
-    })
-    const result = await backend.execute({
-      sessionId: 'sess_1',
-      browserId: backend.browserId,
-      command: { method: 'click', ref: 'e1' }
-    })
-    expect(result.ok).toBe(true)
-  })
-
-  it('keeps the error when the page did not move', async () => {
-    const calls = surfaceCalls()
-    const surface = fakeSurface(calls, {
-      browserClick: vi.fn(async () => {
-        throw new Error('click exploded without navigating')
+      browserEval: vi.fn(async (params: { expression: string }) => {
+        calls.evals.push(params.expression)
+        return params.expression.includes('querySelectorAll')
+          ? { result: sampleEvalResult(), origin: 'https://example.org' }
+          : { result: 'null', origin: 'https://example.org' }
       }) as never
     })
     const backend = new ZcodeBrowserBackend(() => surface)
@@ -294,7 +264,7 @@ describe('ZcodeBrowserBackend.execute click false-negative recovery', () => {
       command: { method: 'click', ref: 'e1' }
     })
     expect(result.ok).toBe(false)
-    expect(result.error?.message).toContain('click exploded')
+    expect(result.error?.code).toBe('ref_not_found')
   })
 })
 

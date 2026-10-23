@@ -68,18 +68,28 @@ export abstract class ZcodeBrowserWriteCommands extends ZcodeBrowserReadCommands
       if (!element) {
         return zcodeBrowserRefNotFound(command.ref, startedAt)
       }
-      await this.intoView(surface, element.selector, tab.browserPageId)
-      const target = { element: element.selector, page: tab.browserPageId }
-      try {
-        await (command.doubleClick === true
-          ? surface.browserDblclick(target)
-          : surface.browserClick(target))
-      } catch (error) {
-        // agent-browser's post-click verification crashes on the element a
-        // navigating click detached (floating-ui reads clientWidth of null) —
-        // a false negative. If the page actually moved, the click landed.
-        return await this.clickLandedOrThrow(sessionId, tab, error, startedAt)
+      // Why not agent-browser's selector click: its daemon retires after an
+      // idle window and a cold restart binds to a stale page view — the click
+      // then no-ops (verified live). In-page geometry + the bridge's DOM
+      // activation path stay correct across daemon restarts. Double clicks
+      // keep the daemon path: the bridge's synthetic mouse has no clickCount.
+      if (command.doubleClick === true) {
+        await this.intoView(surface, element.selector, tab.browserPageId)
+        await surface.browserDblclick({ element: element.selector, page: tab.browserPageId })
+        return this.writeOkMeta(sessionId, tab, startedAt)
       }
+      const center = await this.elementCenter(element.selector, tab.browserPageId)
+      if (!center) {
+        return zcodeBrowserRefNotFound(command.ref, startedAt)
+      }
+      await surface.browserMouseClick({
+        x: center.x,
+        y: center.y,
+        radius: 24,
+        ...(button ? { button } : {}),
+        ...(modifiers ? { modifiers: pointerModifiers(modifiers) } : {}),
+        page: tab.browserPageId
+      })
       return this.writeOkMeta(sessionId, tab, startedAt)
     }
     const point = readPoint(command)
@@ -99,29 +109,32 @@ export abstract class ZcodeBrowserWriteCommands extends ZcodeBrowserReadCommands
     return this.writeOkMeta(sessionId, tab, startedAt)
   }
 
-  /** False-negative recovery: navigation proves the click landed. */
-  private async clickLandedOrThrow(
-    sessionId: string,
-    tab: ZcodeBrowserTab,
-    error: unknown,
-    startedAt: number
-  ) {
-    const before = tab.pageInfo.url
-    let landed = false
+  /** Scroll the element into view and read its center, all in page space. */
+  private async elementCenter(
+    selector: string,
+    page: string
+  ): Promise<{ x: number; y: number } | null> {
+    const expression = `(() => {
+      const el = document.querySelector(${JSON.stringify(selector)});
+      if (!el) { return null }
+      if (el.scrollIntoViewIfNeeded) { el.scrollIntoViewIfNeeded() }
+      else if (el.scrollIntoView) { el.scrollIntoView({ block: 'center' }) }
+      const r = el.getBoundingClientRect();
+      return JSON.stringify({ x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) });
+    })()`
+    const read = await this.surfaceEval(expression, page)
+    if (!read.result || read.result === 'null') {
+      return null
+    }
     try {
-      const read = await this.surfaceEval('location.href', tab.browserPageId)
-      const url = JSON.parse(read.result) as string
-      if (typeof url === 'string' && url !== before && url !== 'about:blank') {
-        landed = true
-        tab.pageInfo = { url, title: tab.pageInfo.title }
+      const parsed = JSON.parse(read.result) as { x?: unknown; y?: unknown }
+      if (typeof parsed?.x === 'number' && typeof parsed?.y === 'number') {
+        return { x: parsed.x, y: parsed.y }
       }
     } catch {
-      // The verification read itself failing leaves the original error.
+      // Unreadable geometry reads as a miss.
     }
-    if (!landed) {
-      throw error
-    }
-    return this.writeOkMeta(sessionId, tab, startedAt)
+    return null
   }
 
   async fill(

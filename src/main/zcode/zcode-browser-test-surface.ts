@@ -125,11 +125,13 @@ function fakeSurface(
         // collector expression gets the sample snapshot object.
         const result = params.expression.includes('querySelectorAll')
           ? sampleEvalResult()
-          : params.expression.includes('document.readyState')
-            ? '"complete"'
-            : params.expression.includes('location.href')
-              ? '"https://example.org/page"'
-              : sampleEvalResult()
+          : params.expression.includes('scrollIntoViewIfNeeded')
+            ? '{"x":28,"y":28}'
+            : params.expression.includes('document.readyState')
+              ? '"complete"'
+              : params.expression.includes('location.href')
+                ? '"https://example.org/page"'
+                : sampleEvalResult()
         return { result, origin: 'https://example.org' }
       }),
     browserScreenshot:
