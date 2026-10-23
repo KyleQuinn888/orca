@@ -125,15 +125,12 @@ export class ZcodeBrowserBackend {
         'PlaywrightLocator.evaluate': false,
         'CUAAPI.downloadMedia': false,
         'DomCUAAPI.downloadMedia': false,
-        // The playwright surface is not implemented here at all; hiding it
-        // upfront spares the agent a wall-bump per member to discover that.
-        'PlaywrightAPI.domSnapshot': false,
+        // Locator actions stay unimplemented and hidden; the action-level
+        // playwright surface (waits, domSnapshot, evaluate) is answered for
+        // real, so the skill's goto→waitForLoadState→domSnapshot workflow
+        // runs without a single wall-bump.
         'PlaywrightAPI.elementInfo': false,
         'PlaywrightAPI.elementScreenshot': false,
-        'PlaywrightAPI.evaluate': false,
-        'PlaywrightAPI.waitForLoadState': false,
-        'PlaywrightAPI.waitForURL': false,
-        'PlaywrightAPI.waitForTimeout': false,
         'PlaywrightLocator.allTextContents': false,
         'PlaywrightLocator.click': false,
         'PlaywrightLocator.count': false,

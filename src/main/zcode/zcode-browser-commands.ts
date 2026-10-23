@@ -140,6 +140,12 @@ export class ZcodeBrowserCommandDispatcher extends ZcodeBrowserTabCommands {
           return await this.withTab(input.sessionId, tabId, startedAt, (tab) =>
             this.waitFor(tab, command, startedAt)
           )
+        case 'playwright':
+          return await this.withTab(input.sessionId, tabId, startedAt, (tab) =>
+            this.playwrightAction(input.sessionId, tab, command, startedAt)
+          )
+        case 'playwrightWaitForTimeout':
+          return await this.playwrightWaitForTimeout(command, startedAt)
         case 'turnEnded':
           // Lifecycle ping the broker relays at turn end; no work to do here.
           return { ok: true, elapsedMs: Date.now() - startedAt }
