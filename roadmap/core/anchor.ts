@@ -5,10 +5,10 @@
 
 import { createHash } from 'node:crypto'
 
-export type AnchorSource = 'zcode-tui-sqlite' | 'orca-journal'
+export type AnchorSource = 'tui-sqlite' | 'orca-journal'
 
 export type AnchorOrigin =
-  | { db: 'zcode-tui-sqlite'; path: string }
+  | { db: 'tui-sqlite'; path: string }
   | { db: 'orca-journal'; path: string; profile: string }
 
 export type Evidence = {
@@ -26,6 +26,7 @@ export type Evidence = {
   hashOf: 'tui-message-data' | 'journal-row-json'
 }
 
+/** sha256 over the payload's UTF-8 bytes, first 16 hex chars, lowercase. */
 export function hashContent(payload: string): string {
   return createHash('sha256').update(payload, 'utf8').digest('hex').slice(0, 16)
 }
@@ -38,8 +39,8 @@ export function tuiEvidence(
 ): Evidence {
   return {
     claim,
-    source: 'zcode-tui-sqlite',
-    origin: { db: 'zcode-tui-sqlite', path: origin.path },
+    source: 'tui-sqlite',
+    origin: { db: 'tui-sqlite', path: origin.path },
     ref: message.id,
     seq: message.seq,
     quote,

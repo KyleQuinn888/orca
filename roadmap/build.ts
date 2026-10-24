@@ -63,18 +63,19 @@ async function main(): Promise<void> {
       ? { kind: 'heuristic' as const, card: heuristicFrom(session, window), reason: '--no-llm' }
       : await summarizeChapter({ digest, promptTemplate })
     const card = renderCard(session, window, result, truncated, dbPath, tzOffsetMin, chosen)
-    // S6 gate: verify anchors against the raw DB bytes before stamping. Quote
-    // search covers the message row AND its part rows (conversational text
-    // lives in parts); the hash contract stays on the message row itself.
-    // Failing anchors are DROPPED from the card (anchorsDropped counts them):
-    // a shipped card carries only one-hop-verifiable anchors; LLM quote
-    // discipline is probabilistic, so the gate filters rather than rerolls.
-    const checks = card.evidence
-      .filter((e) => e.quote !== undefined)
-      .map((e) => ({ claim: e.claim, quote: e.quote!, evidence: e }))
+    // S6 gate: every accepted anchor MUST carry a quote (no quote = no
+    // verification = dropped as quote-missing). Failing anchors are dropped
+    // and counted (anchorsDropped): a shipped card carries only one-hop-
+    // verifiable anchors. anchorsVerifiedAt stamps only when every 要点
+    // claim keeps at least one surviving anchor — no zero-evidence pass.
+    const checks = card.evidence.map((e) => ({
+      claim: e.claim,
+      quote: e.quote ?? '',
+      evidence: e
+    }))
     const failures = verifyEvidence(checks, (evidence) => {
       const message = bySeq.get(evidence.seq)
-      if (!message) {
+      if (!message || evidence.quote === undefined || evidence.quote === '') {
         return { hashPayload: null, searchText: null }
       }
       return {
@@ -92,12 +93,19 @@ async function main(): Promise<void> {
       card.evidence = card.evidence.filter((e) => !failedClaims.has(e.claim))
       card.frontmatter.anchorsDropped = failures.length
     }
-    if (card.evidence.length > 0) {
+    const pointClaims = [...result.card.points.keys()].map((i) => `要点${i + 1}`)
+    const coveredClaims = new Set(card.evidence.map((e) => e.claim))
+    const uncoveredPoints = pointClaims.filter((c) => !coveredClaims.has(c))
+    if (card.evidence.length > 0 && uncoveredPoints.length === 0) {
       card.frontmatter.anchorsVerifiedAt = new Date().toISOString()
+    } else if (uncoveredPoints.length > 0) {
+      console.error(
+        `[roadmap] S6 ch${window.index} points without surviving anchors: ${uncoveredPoints.join(', ')} — no stamp`
+      )
     }
     const written = writeCard(outRoot, card)
     console.log(
-      `${written.outcome}: ${written.path} [${result.kind}] evidence=${card.evidence.length} dropped=${failures.length} verified=${failures.length === 0 || card.evidence.length > 0}`
+      `${written.outcome}: ${written.path} [${result.kind}] evidence=${card.evidence.length} dropped=${failures.length} verified=${card.frontmatter.anchorsVerifiedAt !== undefined}`
     )
   }
   refreshIndex(outRoot, {
