@@ -1,5 +1,3 @@
-import { AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY } from './agent-session-runtime-capabilities'
-
 // Why: a host's structured agents are the ones it registered, not a list every build ships. A host
 // advertising this accepts any agent it lists through `agentSession.agents` (with each agent's
 // capability record) in `agentSession.*` params, and refuses one it did not register; a client
@@ -49,6 +47,12 @@ export const STRUCTURED_AGENT_SESSION_AVAILABILITY_RUNTIME_CAPABILITY =
 
 export const AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY =
   'agent-session.coherent-model-catalog.v1' as const
+
+// Declared here rather than imported from agent-session-runtime-capabilities:
+// that module spreads this list, so importing back is a cycle whose const reads
+// undefined at init — the capability then never reaches the host's published set.
+export const AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY =
+  'agent-session.queued-messages.v1' as const
 
 export const STRUCTURED_AGENT_SESSION_SURFACE_RUNTIME_CAPABILITIES = [
   AGENT_SESSION_COHERENT_MODEL_CATALOG_CAPABILITY,

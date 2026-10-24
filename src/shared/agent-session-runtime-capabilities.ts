@@ -66,8 +66,6 @@ export const AGENT_SESSION_SEND_ANSWERS_PROOF_RUNTIME_CAPABILITY =
 // older host) reads as null. A card carries a hold of its own when its conversion failed
 // (`send_failed`) or the host kept it unsent (`kept`). The host mechanism lands first; the constant
 // gates the rollout.
-export const AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY =
-  'agent-session.queued-messages.v1' as const
 // Why: a host advertising this edits a queued card in place (`agentSession.queuedMessageUpdate`)
 // and holds it from automatic delivery while edited (`agentSession.queuedMessageEditHold`). Apart
 // from queued-messages.v1: kept and agent-mail cards are editable with mid-turn queueing still off.

@@ -163,3 +163,4 @@ export type RuntimeCapability = (typeof RUNTIME_CAPABILITIES)[number] | (string 
 // still read desktop/mobile names; remove once mobile reads runtime names.
 export const DESKTOP_PROTOCOL_VERSION = RUNTIME_PROTOCOL_VERSION
 export const MIN_COMPATIBLE_MOBILE_VERSION = MIN_COMPATIBLE_RUNTIME_CLIENT_VERSION
+export { AGENT_SESSION_QUEUED_MESSAGES_RUNTIME_CAPABILITY } from './structured-agent-session-surface-capabilities'
