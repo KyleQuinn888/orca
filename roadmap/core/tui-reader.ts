@@ -1,5 +1,9 @@
 // TUI session reader: transcript projection, human-message counting (S2),
 // chapter windowing, and digest construction for the summarizer.
+// v1.1 (re-reviewed 2026-10-25): windows close the inter-chapter gap (the
+// last covered message is the one BEFORE the next chapter starts), tails
+// below half bandwidth merge into the previous chapter, and digests carry
+// tool activity lines.
 
 import type { Database } from 'bun:sqlite'
 
@@ -10,6 +14,10 @@ export type TuiMessage = {
   role: string
   human: boolean
   texts: string[]
+  /** RAW SQLite data-column bytes; the hashing contract (never re-serialize). */
+  rawData: string
+  /** tool names from tool parts, for digest activity lines. */
+  tools: string[]
 }
 
 export type TuiSession = {
@@ -56,7 +64,12 @@ export function readTuiSession(db: Database, sessionId: string): TuiSession {
            SELECT group_concat(json_extract(p.data, '$.text'), char(10))
            FROM part p
            WHERE p.message_id = m.id AND json_extract(p.data, '$.type') = 'text'
-         ) AS texts
+         ) AS texts,
+         (
+           SELECT group_concat(json_extract(p.data, '$.tool'), char(10))
+           FROM part p
+           WHERE p.message_id = m.id AND json_extract(p.data, '$.type') = 'tool'
+         ) AS tools
          FROM message m WHERE m.session_id = ? ORDER BY m.sequence`
       )
       .all(sessionId) as {
@@ -65,6 +78,7 @@ export function readTuiSession(db: Database, sessionId: string): TuiSession {
       time_created: number
       data: string
       texts: string | null
+      tools: string | null
     }[]
   ).map((row) => {
     const data = JSON.parse(row.data) as { role?: string }
@@ -76,7 +90,9 @@ export function readTuiSession(db: Database, sessionId: string): TuiSession {
       timeCreated: row.time_created,
       role,
       human: role === 'user' ? isHumanUserMessage(texts) : false,
-      texts
+      texts,
+      rawData: row.data,
+      tools: row.tools ? row.tools.split('\n').filter((t) => t.length > 0) : []
     }
   })
   return {
@@ -99,43 +115,68 @@ export type ChapterWindow = {
   durationMin: number
 }
 
-/** Windows of 15-30 human messages; boundaries only between chapters. */
+/**
+ * Windows of ~target human messages. lastMsgSeq = the last COVERED message
+ * (next chapter's firstMsgSeq - 1, or the session's final message), so an
+ * answer to a chapter's last human message belongs to that chapter instead
+ * of falling into the gap. A tail below half the bandwidth merges backward.
+ */
 export function proposeChapterWindows(
   session: TuiSession,
   options: { targetHuman?: number } = {}
 ): ChapterWindow[] {
   const target = options.targetHuman ?? 20
   const humanRows = session.messages.filter((m) => m.human)
+  if (humanRows.length === 0) {
+    return []
+  }
+  const lastSeq = session.messages.at(-1)!.seq
   const windows: ChapterWindow[] = []
   let start = 0
   for (let i = target; ; i += target) {
     if (i >= humanRows.length) {
       const remaining = humanRows.length - start
-      if (remaining >= Math.ceil(target / 2) || windows.length === 0) {
-        pushWindow(humanRows, start, humanRows.length - 1, windows)
-      } else if (remaining > 0 && windows.length > 0) {
-        pushWindow(humanRows, start, humanRows.length - 1, windows)
+      if (remaining > 0) {
+        pushWindow(humanRows, start, humanRows.length - 1, lastSeq, windows)
       }
       break
     }
-    pushWindow(humanRows, start, i - 1, windows)
+    pushWindow(humanRows, start, i - 1, humanRows[i].seq - 1, windows)
     start = i
+  }
+  if (windows.length >= 2) {
+    const tail = windows.at(-1)!
+    if (tail.userMsg.human < Math.ceil(target / 2)) {
+      windows.pop()
+      const host = windows.at(-1)!
+      host.lastMsgSeq = Math.max(host.lastMsgSeq, tail.lastMsgSeq)
+      host.userMsg.human += tail.userMsg.human
+      host.lastTime = tail.lastTime
+      host.durationMin = Math.round(
+        (Date.parse(tail.lastTime) - Date.parse(host.firstTime)) / 60000
+      )
+    }
   }
   return windows
 }
 
-function pushWindow(rows: TuiMessage[], from: number, to: number, windows: ChapterWindow[]): void {
+function pushWindow(
+  rows: TuiMessage[],
+  from: number,
+  to: number,
+  lastCoveredSeq: number,
+  windows: ChapterWindow[]
+): void {
   if (to < from) {
     return
   }
   const first = rows[from]
   const last = rows[to]
-  const userMsg = { human: to - from + 1, total: 0 }
   windows.push({
     index: windows.length + 1,
     firstMsgSeq: first.seq,
-    lastMsgSeq: last.seq,
-    userMsg,
+    lastMsgSeq: Math.max(last.seq, lastCoveredSeq),
+    userMsg: { human: to - from + 1, total: 0 },
     firstTime: new Date(first.timeCreated).toISOString(),
     lastTime: new Date(last.timeCreated).toISOString(),
     durationMin: Math.round((last.timeCreated - first.timeCreated) / 60000)
@@ -145,7 +186,7 @@ function pushWindow(rows: TuiMessage[], from: number, to: number, windows: Chapt
 /**
  * Digest for one window: human messages in full, assistant turns trimmed,
  * tool activity as name-only lines. Bounded by maxChars; when clipped the
- * uncovered marker names the dropped range (S0-adjacent honesty rule).
+ * uncovered marker names the dropped range.
  */
 export function buildDigest(
   session: TuiSession,
@@ -163,16 +204,17 @@ export function buildDigest(
     (m) => m.seq >= window.firstMsgSeq && m.seq <= window.lastMsgSeq
   )
   for (const message of inWindow) {
-    const isHuman = message.human
-    const isUserRole = message.role === 'user'
-    let block: string
-    if (isHuman) {
-      block = `[用户 seq ${message.seq}] ${message.texts.join('\n').slice(0, 4000)}`
-    } else if (isUserRole) {
+    if (message.role === 'user' && !message.human) {
       continue // system injection: skip entirely
+    }
+    let block: string
+    if (message.human) {
+      block = `[用户 seq ${message.seq}] ${message.texts.join('\n').slice(0, 4000)}`
     } else {
       const text = message.texts.join('\n')
-      block = `[${message.role} seq ${message.seq}] ${text.length > 800 ? `${text.slice(0, 800)}…(截断)` : text}`
+      const toolLine = message.tools.length > 0 ? `〔工具：${message.tools.join('、')}〕` : ''
+      const body = text.length > 800 ? `${text.slice(0, 800)}…(截断)` : text
+      block = `[${message.role} seq ${message.seq}] ${body}${toolLine}`
     }
     if (block.length > budget) {
       truncated = true

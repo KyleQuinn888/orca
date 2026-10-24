@@ -12,12 +12,14 @@ export type SummarizerResult =
   | { kind: 'llm'; card: SummarizedChapter }
   | { kind: 'heuristic'; card: SummarizedChapter; reason: string }
 
+export type SeqText = { text: string; seq?: number }
+
 export type SummarizedChapter = {
   title: string
-  points: string[]
-  decisions: string[]
+  points: SeqText[]
+  decisions: SeqText[]
   artifacts: string[]
-  pitfalls: string[]
+  pitfalls: SeqText[]
 }
 
 const RETRY_DELAYS_MS = [2000, 4000]
@@ -79,18 +81,26 @@ export function parseChapterJson(stdout: string): SummarizedChapter | null {
   const candidates = [...stdout.matchAll(/\{[\s\S]*\}/g)].map((m) => m[0])
   for (const candidate of candidates.toReversed()) {
     try {
-      const parsed = JSON.parse(candidate) as Partial<SummarizedChapter>
+      const parsed = JSON.parse(candidate) as Partial<SummarizedChapter> & {
+        points?: (string | { text: string; seq?: number })[]
+        decisions?: (string | { text: string; seq?: number })[]
+        pitfalls?: (string | { text: string; seq?: number })[]
+      }
       if (
         typeof parsed.title === 'string' &&
         Array.isArray(parsed.points) &&
         parsed.points.length > 0
       ) {
+        const normalize = (
+          items: (string | { text: string; seq?: number })[] | undefined
+        ): SeqText[] =>
+          (items ?? []).map((item) => (typeof item === 'string' ? { text: item } : item))
         return {
           title: parsed.title,
-          points: parsed.points ?? [],
-          decisions: parsed.decisions ?? [],
+          points: normalize(parsed.points),
+          decisions: normalize(parsed.decisions),
           artifacts: parsed.artifacts ?? [],
-          pitfalls: parsed.pitfalls ?? []
+          pitfalls: normalize(parsed.pitfalls)
         }
       }
     } catch {
@@ -107,7 +117,9 @@ function heuristicCard(digest: string): SummarizedChapter {
     .map((line) => line.slice(0, 120))
   return {
     title: '（启发式降级：总结器不可用）',
-    points: humanLines.slice(0, 5).map((line, i) => `要点${i + 1}（原文摘录）：${line}`),
+    points: humanLines
+      .slice(0, 5)
+      .map((line, i) => ({ text: `要点${i + 1}（原文摘录）：${line}` })),
     decisions: [],
     artifacts: [],
     pitfalls: []

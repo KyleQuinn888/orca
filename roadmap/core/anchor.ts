@@ -1,6 +1,7 @@
-// Evidence anchors for roadmap cards (schema v1, S0-S6 adopted 2026-10-24).
+// Evidence anchors for roadmap cards (schema v1.1, re-reviewed 2026-10-25).
 // An anchor points at one durable row in a source DB so a card claim stays
-// one hop verifiable; contentHash pins the row bytes so schema drift is detectable.
+// one hop verifiable; contentHash pins the row's RAW bytes so schema drift
+// is detectable. hashOf is required on every entry (no silent defaults).
 
 import { createHash } from 'node:crypto'
 
@@ -17,7 +18,9 @@ export type Evidence = {
   /** TUI: message row id. Journal: journal row identity (sessionId@epoch:seq). */
   ref: string
   seq: number
-  /** sha256 over the hashed object (see hashOf), first 16 hex chars. */
+  /** Verbatim quote from the source row; the mechanical object of S6 inclusion checks. */
+  quote?: string
+  /** sha256 over the hashed object's RAW SQLite column bytes, first 16 hex chars. */
   contentHash: string
   /** S4a: names what contentHash covers so a schema migration can recompute. */
   hashOf: 'tui-message-data' | 'journal-row-json'
@@ -30,7 +33,8 @@ export function hashContent(payload: string): string {
 export function tuiEvidence(
   claim: string,
   origin: { path: string },
-  message: { id: string; seq: number; data: unknown }
+  message: { id: string; seq: number; rawData: string },
+  quote?: string
 ): Evidence {
   return {
     claim,
@@ -38,7 +42,10 @@ export function tuiEvidence(
     origin: { db: 'zcode-tui-sqlite', path: origin.path },
     ref: message.id,
     seq: message.seq,
-    contentHash: hashContent(JSON.stringify(message.data)),
+    quote,
+    // RAW bytes of the SQLite data column — never a re-serialization (review
+    // P0-3: JSON.stringify key order is not a contract).
+    contentHash: hashContent(message.rawData),
     hashOf: 'tui-message-data'
   }
 }
@@ -46,7 +53,8 @@ export function tuiEvidence(
 export function journalEvidence(
   claim: string,
   origin: { path: string; profile: string },
-  row: { sessionId: string; epoch: string; seq: number; rowJson: string }
+  row: { sessionId: string; epoch: string; seq: number; rowJson: string },
+  quote?: string
 ): Evidence {
   return {
     claim,
@@ -54,6 +62,7 @@ export function journalEvidence(
     origin: { db: 'orca-journal', path: origin.path, profile: origin.profile },
     ref: `${row.sessionId}@${row.epoch}:${row.seq}`,
     seq: row.seq,
+    quote,
     contentHash: hashContent(row.rowJson),
     hashOf: 'journal-row-json'
   }
@@ -61,28 +70,29 @@ export function journalEvidence(
 
 export type VerifyFailure = { claim: string; reason: string; detail?: string }
 
+export type QuoteCheck = { claim: string; quote: string; evidence: Evidence }
+
 /**
- * S6 one-hop verifier: every quote must appear verbatim in the row its
- * evidence points at, and every contentHash must recompute. `lookup` fetches
- * the hashed object for an evidence ref from the live DB (read-only).
+ * S6 one-hop verifier: contentHash must recompute over the RAW row bytes the
+ * anchor points at, and evidence.quote (when present) must appear verbatim in
+ * that row. `lookup` fetches the raw hashed-object bytes read-only.
  */
 export function verifyEvidence(
-  quotes: { claim: string; quote: string; evidence: Evidence }[],
+  checks: QuoteCheck[],
   lookup: (evidence: Evidence) => string | null
 ): VerifyFailure[] {
   const failures: VerifyFailure[] = []
-  for (const { claim, quote, evidence } of quotes) {
-    const hashed = lookup(evidence)
-    if (hashed === null) {
+  for (const { claim, quote, evidence } of checks) {
+    const raw = lookup(evidence)
+    if (raw === null) {
       failures.push({ claim, reason: 'anchor-unresolvable', detail: evidence.ref })
       continue
     }
-    if (hashContent(hashed) !== evidence.contentHash) {
+    if (hashContent(raw) !== evidence.contentHash) {
       failures.push({ claim, reason: 'content-hash-mismatch', detail: evidence.ref })
       continue
     }
-    const searchable = stripWhitespace(hashed)
-    if (!searchable.includes(stripWhitespace(quote))) {
+    if (!stripWhitespace(raw).includes(stripWhitespace(quote))) {
       failures.push({ claim, reason: 'quote-not-found', detail: quote.slice(0, 40) })
     }
   }

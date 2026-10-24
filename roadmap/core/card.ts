@@ -1,219 +1,294 @@
-// Roadmap card files: frontmatter serialize/parse, idempotent writes.
-// Card identity is {sessionId, chapter.index}; handEdited cards are never
-// overwritten (a .new sibling carries the regenerated draft instead).
+// Roadmap card files — schema v1.1 (reviewed 2026-10-25: dual adversarial
+// review verdict REVISE applied). Card identity is {sessionId, chapter.index};
+// the FILE name is derived, never the identity. Unparseable cards quarantine
+// to .legacy.md instead of poisoning the pipeline.
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  renameSync,
+  writeFileSync
+} from 'node:fs'
 import { join } from 'node:path'
 import type { Evidence } from './anchor'
+import { CardParseError, parseCard } from './card-parse'
 
-export type CardTime = { firstTime: string; lastTime: string; durationMin: number; tz?: string }
+export { CardParseError, parseCard } from './card-parse'
 
-export type CardSpan = {
-  firstMsgSeq: number
-  lastMsgSeq: number
-  /** S2: human-authored user messages vs all user-role messages. */
-  userMsg: { human: number; total: number }
-}
+export type CardKind = 'session-chapter' | 'session-index'
+export type CardSource = 'tui-sqlite' | 'orca-journal'
+export type CardQuality = 'draft' | 'approved' | 'superseded'
+export type CardProvenance = 'llm' | 'heuristic' | 'human'
+
+export type UncoveredRange = { fromSeq: number; toSeq: number; note?: string }
 
 export type CardFrontmatter = {
   v: 1
-  kind: 'session-chapter'
-  source: string
+  kind: CardKind
+  source: CardSource
   session: string
+  /** TUI: session.directory path. Journal: workspace path (workspaceId carries the Orca id). */
   workspace: string
+  workspaceId?: string
   title: string
-  chapter: { index: number; slug: string }
-  span: CardSpan
-  time: CardTime
-  uncovered: string
-  schemaNote?: string
-  quality: 'agent-draft' | 'approved-baseline'
+  /** session-chapter only. */
+  chapter?: { index: number; slug: string }
+  /** Last covered message = next chapter's firstMsgSeq - 1 (or session end). */
+  span: {
+    firstMsgSeq: number
+    lastMsgSeq: number
+    userMsg: { human: number; total: number }
+  }
+  time: {
+    firstTime: string
+    lastTime: string
+    durationMin: number
+    tzOffsetMin: number
+    tzNote?: string
+  }
+  uncovered: UncoveredRange[]
+  quality: CardQuality
+  provenance: CardProvenance
+  supersededBy?: string
+  anchorsVerifiedAt?: string
+  digestTruncated?: boolean
   handEdited?: boolean
+  handEditedAt?: string
+  schemaNote?: string
+  /** Unknown keys survive a read-modify-write cycle. */
+  extra: Record<string, string>
 }
 
-export type RoadmapCard = { frontmatter: CardFrontmatter; evidence: Evidence[]; body: string }
+export type CardAnchorsDefault = {
+  source: CardSource
+  origin: { db: string; path: string; profile?: string }
+}
 
-export function cardFileName(frontmatter: Pick<CardFrontmatter, 'chapter'>): string {
-  return `${String(frontmatter.chapter.index).padStart(2, '0')}-${frontmatter.chapter.slug}.md`
+export type RoadmapCard = {
+  frontmatter: CardFrontmatter
+  anchors: CardAnchorsDefault | null
+  evidence: Evidence[]
+  body: string
+}
+
+export function chapterFileName(index: number, slug: string): string {
+  return `${String(index).padStart(3, '0')}-${slug}.md`
 }
 
 export function serializeCard(card: RoadmapCard): string {
-  const fm: string[] = ['---']
   const f = card.frontmatter
-  fm.push(`v: ${f.v}`, `kind: ${f.kind}`, `source: ${f.source}`, `session: ${f.session}`)
-  fm.push(`workspace: ${yamlScalar(f.workspace)}`, `title: ${yamlScalar(f.title)}`)
-  fm.push(`chapter:`)
-  fm.push(`  index: ${f.chapter.index}`, `  slug: ${f.chapter.slug}`)
-  fm.push(`span:`)
-  fm.push(
+  const lines: string[] = ['---']
+  lines.push(`v: ${f.v}`, `kind: ${f.kind}`, `source: ${f.source}`, `session: ${f.session}`)
+  lines.push(`workspace: ${scalar(f.workspace)}`)
+  if (f.workspaceId) {
+    lines.push(`workspaceId: ${f.workspaceId}`)
+  }
+  lines.push(`title: ${scalar(f.title)}`)
+  if (f.chapter) {
+    lines.push('chapter:', `  index: ${f.chapter.index}`, `  slug: ${f.chapter.slug}`)
+  }
+  lines.push(
+    'span:',
     `  firstMsgSeq: ${f.span.firstMsgSeq}`,
     `  lastMsgSeq: ${f.span.lastMsgSeq}`,
     `  userMsg: { human: ${f.span.userMsg.human}, total: ${f.span.userMsg.total} }`
   )
-  fm.push(`time:`)
-  fm.push(
-    `  firstTime: ${yamlScalar(f.time.firstTime)}`,
-    `  lastTime: ${yamlScalar(f.time.lastTime)}`,
-    `  durationMin: ${f.time.durationMin}`
+  lines.push(
+    'time:',
+    `  firstTime: ${scalar(f.time.firstTime)}`,
+    `  lastTime: ${scalar(f.time.lastTime)}`,
+    `  durationMin: ${f.time.durationMin}`,
+    `  tzOffsetMin: ${f.time.tzOffsetMin}`
   )
-  if (f.time.tz) {
-    fm.push(`  tz: ${yamlScalar(f.time.tz)}`)
+  if (f.time.tzNote) {
+    lines.push(`  tzNote: ${scalar(f.time.tzNote)}`)
   }
-  fm.push(`uncovered: ${yamlScalar(f.uncovered)}`)
-  if (f.schemaNote) {
-    fm.push(`schemaNote: ${yamlScalar(f.schemaNote)}`)
+  lines.push('uncovered:')
+  if (f.uncovered.length === 0) {
+    lines.pop()
+    lines.push('uncovered: []')
   }
-  fm.push(`quality: ${f.quality}`)
+  for (const range of f.uncovered) {
+    lines.push(
+      range.note
+        ? `  - { fromSeq: ${range.fromSeq}, toSeq: ${range.toSeq}, note: ${scalar(range.note)} }`
+        : `  - { fromSeq: ${range.fromSeq}, toSeq: ${range.toSeq} }`
+    )
+  }
+  lines.push(`quality: ${f.quality}`, `provenance: ${f.provenance}`)
+  if (f.supersededBy) {
+    lines.push(`supersededBy: ${f.supersededBy}`)
+  }
+  if (f.anchorsVerifiedAt) {
+    lines.push(`anchorsVerifiedAt: ${f.anchorsVerifiedAt}`)
+  }
+  if (f.digestTruncated) {
+    lines.push(`digestTruncated: true`)
+  }
   if (f.handEdited) {
-    fm.push(`handEdited: true`)
+    lines.push('handEdited: true')
+    if (f.handEditedAt) {
+      lines.push(`handEditedAt: ${f.handEditedAt}`)
+    }
   }
-  fm.push('---', '')
-  const evidenceBlock =
-    card.evidence.length > 0
-      ? ['## 证据锚点', 'evidence:', ...card.evidence.map(serializeEvidence), '']
-      : []
-  return [...fm, card.body.trimEnd(), '', ...evidenceBlock].join('\n')
-}
-
-function serializeEvidence(evidence: Evidence): string {
-  const origin =
-    evidence.origin.db === 'orca-journal'
-      ? `{ db: orca-journal, path: ${evidence.origin.path}, profile: ${evidence.origin.profile} }`
-      : `{ db: zcode-tui-sqlite, path: ${evidence.origin.path} }`
+  if (f.schemaNote) {
+    lines.push(`schemaNote: ${scalar(f.schemaNote)}`)
+  }
+  for (const [key, value] of Object.entries(f.extra)) {
+    lines.push(`${key}: ${scalar(value)}`)
+  }
+  lines.push('---', '')
+  const blocks: string[] = []
+  if (card.evidence.length > 0) {
+    blocks.push('## 证据锚点', 'evidence:')
+    for (const evidence of card.evidence) {
+      blocks.push(serializeEvidence(evidence, card.anchors))
+    }
+  }
   return [
-    `  - claim: ${evidence.claim}`,
-    `    source: ${evidence.source}`,
-    `    origin: ${origin}`,
-    `    ref: ${evidence.ref}`,
-    `    seq: ${evidence.seq}`,
-    `    contentHash: ${evidence.contentHash}`,
-    `    hashOf: ${evidence.hashOf}`
+    ...lines,
+    ...(card.anchors ? anchorsLines(card.anchors) : []),
+    card.body.trimEnd(),
+    '',
+    blocks.flat().join('\n'),
+    ''
   ].join('\n')
 }
 
-function yamlScalar(value: string): string {
-  return /[:#\n{}[\]]/.test(value) ? `'${value.replace(/'/g, "''")}'` : value
+function inlineOrigin(origin: CardAnchorsDefault['origin']): string {
+  const parts = [`db: ${origin.db}`, `path: ${origin.path}`]
+  if (origin.profile) {
+    parts.push(`profile: ${origin.profile}`)
+  }
+  return `{ ${parts.join(', ')} }`
 }
 
-export function parseCard(text: string): RoadmapCard {
-  const match = /^---\n([\s\S]*?)\n---\n?([\s\S]*)$/.exec(text)
-  if (!match) {
-    throw new Error('card has no frontmatter block')
-  }
-  const frontmatter = parseFrontmatter(match[1])
-  const body = match[2]
-  const evidence: Evidence[] = []
-  const evidenceMatch = /\n## 证据锚点\nevidence:\n([\s\S]*)$/.exec(body)
-  if (evidenceMatch) {
-    for (const block of evidenceMatch[1].matchAll(
-      /[ \t]*-[ \t]*claim:[ \t]*([^\n]+)\n([\s\S]*?)(?=\n[ \t]*-[ \t]*claim:|$)/g
-    )) {
-      evidence.push(parseEvidenceBlock(block[1], block[2]))
-    }
-  }
-  return { frontmatter, evidence, body: evidenceMatch ? body.slice(0, evidenceMatch.index) : body }
+function anchorsLines(anchors: CardAnchorsDefault): string[] {
+  return [
+    'anchors:',
+    `  source: ${anchors.source}`,
+    `  origin: ${inlineOrigin(anchors.origin)}`,
+    ''
+  ]
 }
 
-function parseFrontmatter(text: string): CardFrontmatter {
-  const values = new Map<string, string>()
-  const nested = new Map<string, Map<string, string>>()
-  let current: string | null = null
-  for (const line of text.split('\n')) {
-    const nestedMatch = /^  ([A-Za-z]+): ?(.*)$/.exec(line)
-    const topMatch = /^([A-Za-z]+): ?(.*)$/.exec(line)
-    if (nestedMatch && current) {
-      if (!nested.has(current)) {
-        nested.set(current, new Map())
-      }
-      nested.get(current)!.set(nestedMatch[1], nestedMatch[2])
-    } else if (topMatch) {
-      values.set(topMatch[1], topMatch[2])
-      current = topMatch[1]
-    }
+function serializeEvidence(evidence: Evidence, defaults: CardAnchorsDefault | null): string {
+  const lines = [`  - claim: ${evidence.claim}`]
+  const skipSource =
+    defaults !== null &&
+    defaults.source === evidence.source &&
+    JSON.stringify(defaults.origin) === JSON.stringify(evidence.origin)
+  if (!skipSource) {
+    lines.push(
+      `    source: ${evidence.source}`,
+      `    origin: ${inlineOrigin({ ...evidence.origin, db: evidence.origin.db })}`
+    )
   }
-  const chapter = nested.get('chapter')
-  const span = nested.get('span')
-  const time = nested.get('time')
-  const userMsg = /\{ human: (\d+), total: (\d+) \}/.exec(span?.get('userMsg') ?? '')
-  if (!chapter || !span || !time || !userMsg) {
-    throw new Error('card frontmatter missing chapter/span/time')
+  lines.push(`    ref: ${evidence.ref}`, `    seq: ${evidence.seq}`)
+  if (evidence.quote) {
+    lines.push(`    quote: ${scalar(evidence.quote)}`)
   }
-  return {
-    v: 1,
-    kind: 'session-chapter',
-    source: unscalar(values.get('source') ?? ''),
-    session: unscalar(values.get('session') ?? ''),
-    workspace: unscalar(values.get('workspace') ?? ''),
-    title: unscalar(values.get('title') ?? ''),
-    chapter: {
-      index: Number(chapter.get('index')),
-      slug: chapter.get('slug') ?? ''
-    },
-    span: {
-      firstMsgSeq: Number(span.get('firstMsgSeq')),
-      lastMsgSeq: Number(span.get('lastMsgSeq')),
-      userMsg: { human: Number(userMsg[1]), total: Number(userMsg[2]) }
-    },
-    time: {
-      firstTime: unscalar(time.get('firstTime') ?? ''),
-      lastTime: unscalar(time.get('lastTime') ?? ''),
-      durationMin: Number(time.get('durationMin') ?? '0'),
-      tz: time.get('tz') ? unscalar(time.get('tz')!) : undefined
-    },
-    uncovered: unscalar(values.get('uncovered') ?? ''),
-    schemaNote: values.get('schemaNote') ? unscalar(values.get('schemaNote')!) : undefined,
-    quality: (values.get('quality') as CardFrontmatter['quality']) ?? 'agent-draft',
-    handEdited: values.get('handEdited') === 'true'
-  }
+  lines.push(`    contentHash: ${evidence.contentHash}`, `    hashOf: ${evidence.hashOf}`)
+  return lines.join('\n')
 }
 
-function parseEvidenceBlock(claim: string, rest: string): Evidence {
-  const values = new Map<string, string>()
-  for (const line of rest.split('\n')) {
-    const match = /^    ([A-Za-z]+): ?(.*)$/.exec(line)
-    if (match) {
-      values.set(match[1], match[2])
-    }
+function scalar(value: string): string {
+  if (/[\n]/.test(value)) {
+    throw new Error(`multi-line value not representable in v1.1 scalars: ${value.slice(0, 40)}`)
   }
-  const originRaw = values.get('origin') ?? ''
-  const isJournal = originRaw.includes('orca-journal')
-  const path = /path: ([^,}]+)/.exec(originRaw)?.[1] ?? ''
-  return {
-    claim,
-    source: (values.get('source') as Evidence['source']) ?? 'zcode-tui-sqlite',
-    origin: isJournal
-      ? { db: 'orca-journal', path, profile: /profile: ([^,}]+)/.exec(originRaw)?.[1] ?? '' }
-      : { db: 'zcode-tui-sqlite', path },
-    ref: values.get('ref') ?? '',
-    seq: Number(values.get('seq') ?? '0'),
-    contentHash: values.get('contentHash') ?? '',
-    hashOf: (values.get('hashOf') as Evidence['hashOf']) ?? 'tui-message-data'
-  }
-}
-
-function unscalar(value: string): string {
-  const quoted = /^'(.*)'$/s.exec(value)
-  return quoted ? quoted[1].replace(/''/g, "'") : value
+  // Quote on any structural or comment-trigger character, not just leading
+  // ones: a mid-string ": " or " #" would corrupt line-based parsing.
+  const needsQuotes =
+    /^[:{}[\],&*?|'%@`]/.test(value) ||
+    /^\s|\s$/.test(value) ||
+    /^(true|false|null|~)$/.test(value) ||
+    value.includes(': ') ||
+    value.includes(' #') ||
+    value.includes(':')
+  return needsQuotes ? `'${value.replace(/'/g, "''")}'` : value
 }
 
 export type WriteResult =
   | { outcome: 'written'; path: string }
   | { outcome: 'hand-edited-kept'; path: string; draftPath: string }
+  | { outcome: 'legacy-quarantined'; path: string; legacyPath: string }
 
-/** Idempotent atomic write: temp file + rename; handEdited cards keep the original. */
+/**
+ * Idempotent atomic write by {sessionId, chapter.index}: stale same-index
+ * files with a different slug are removed (filename is derived, not identity),
+ * handEdited cards keep the original (.new.md draft), unparseable cards
+ * quarantine to .legacy.md instead of aborting the pipeline.
+ */
 export function writeCard(directory: string, card: RoadmapCard): WriteResult {
   mkdirSync(directory, { recursive: true })
-  const path = join(directory, cardFileName(card.frontmatter))
+  const f = card.frontmatter
+  const isIndex = f.kind === 'session-index'
+  const wanted = isIndex
+    ? '000-index.md'
+    : chapterFileName(f.chapter?.index ?? 0, f.chapter?.slug ?? 'untitled')
+  const path = join(directory, wanted)
+  let quarantined: string | null = null
+  for (const name of readdirSync(directory)) {
+    if (name === wanted || (!name.endsWith('.md') && !name.endsWith('.new.md'))) {
+      continue
+    }
+    if (
+      isIndex ? name === '00-index.md' || name.endsWith('-index.md') : sameIndexFile(name, wanted)
+    ) {
+      const existingPath = join(directory, name)
+      if (name.endsWith('.legacy.md') || name.endsWith('.superseded.md')) {
+        continue
+      }
+      let existingText: string
+      try {
+        existingText = readFileSync(existingPath, 'utf8')
+      } catch {
+        continue
+      }
+      try {
+        const existing = parseCard(existingText)
+        if (!isIndex && existing.frontmatter.handEdited) {
+          const draftPath = `${path.slice(0, -3)}.new.md`
+          atomicWrite(draftPath, serializeCard(card))
+          return { outcome: 'hand-edited-kept', path: existingPath, draftPath }
+        }
+        if (existing.frontmatter.kind !== 'session-index') {
+          renameSync(existingPath, `${existingPath.slice(0, -3)}.superseded.md`)
+        }
+      } catch (error) {
+        if (error instanceof CardParseError) {
+          renameSync(existingPath, `${existingPath.slice(0, -3)}.legacy.md`)
+          quarantined = `${name}.legacy.md`
+          console.warn(
+            `[roadmap] quarantined unparseable card to ${name}.legacy.md: ${error.message}`
+          )
+        } else {
+          throw error
+        }
+      }
+    }
+  }
   if (existsSync(path)) {
     const existing = parseCard(readFileSync(path, 'utf8'))
-    if (existing.frontmatter.handEdited) {
+    if (!isIndex && existing.frontmatter.handEdited) {
       const draftPath = `${path.slice(0, -3)}.new.md`
       atomicWrite(draftPath, serializeCard(card))
       return { outcome: 'hand-edited-kept', path, draftPath }
     }
   }
   atomicWrite(path, serializeCard(card))
+  if (quarantined !== null) {
+    return { outcome: 'legacy-quarantined', path, legacyPath: quarantined }
+  }
   return { outcome: 'written', path }
+}
+
+function sameIndexFile(name: string, wanted: string): boolean {
+  const wantedMatch = /^(\d+)-.*\.md$/.exec(wanted)
+  const nameMatch = /^(\d+)-.*\.md$/.exec(name)
+  return wantedMatch !== null && nameMatch !== null && wantedMatch[1] === nameMatch[1]
 }
 
 function atomicWrite(path: string, text: string): void {
