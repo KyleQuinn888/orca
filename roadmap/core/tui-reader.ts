@@ -16,6 +16,8 @@ export type TuiMessage = {
   texts: string[]
   /** RAW SQLite data-column bytes; the hashing contract (never re-serialize). */
   rawData: string
+  /** RAW part rows for this message; the S6 quote-search surface. */
+  rawParts: string[]
   /** tool names from tool parts, for digest activity lines. */
   tools: string[]
 }
@@ -69,7 +71,12 @@ export function readTuiSession(db: Database, sessionId: string): TuiSession {
            SELECT group_concat(json_extract(p.data, '$.tool'), char(10))
            FROM part p
            WHERE p.message_id = m.id AND json_extract(p.data, '$.type') = 'tool'
-         ) AS tools
+         ) AS tools,
+         (
+           SELECT group_concat(p.data, char(31))
+           FROM part p
+           WHERE p.message_id = m.id
+         ) AS rawParts
          FROM message m WHERE m.session_id = ? ORDER BY m.sequence`
       )
       .all(sessionId) as {
@@ -79,6 +86,7 @@ export function readTuiSession(db: Database, sessionId: string): TuiSession {
       data: string
       texts: string | null
       tools: string | null
+      rawParts: string | null
     }[]
   ).map((row) => {
     const data = JSON.parse(row.data) as { role?: string }
@@ -92,6 +100,7 @@ export function readTuiSession(db: Database, sessionId: string): TuiSession {
       human: role === 'user' ? isHumanUserMessage(texts) : false,
       texts,
       rawData: row.data,
+      rawParts: row.rawParts ? row.rawParts.split('\u001f') : [],
       tools: row.tools ? row.tools.split('\n').filter((t) => t.length > 0) : []
     }
   })

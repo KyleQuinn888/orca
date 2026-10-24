@@ -72,27 +72,35 @@ export type VerifyFailure = { claim: string; reason: string; detail?: string }
 
 export type QuoteCheck = { claim: string; quote: string; evidence: Evidence }
 
+export type VerifySurfaces = {
+  /** Exactly what hashOf covers (the anchored row's RAW bytes). */
+  hashPayload: string | null
+  /** Where the quote may verbatim-appear (anchored row + its child rows). */
+  searchText: string | null
+}
+
 /**
- * S6 one-hop verifier: contentHash must recompute over the RAW row bytes the
- * anchor points at, and evidence.quote (when present) must appear verbatim in
- * that row. `lookup` fetches the raw hashed-object bytes read-only.
+ * S6 one-hop verifier: contentHash must recompute over the anchored row's
+ * RAW bytes (hashPayload), and evidence.quote must appear verbatim in the
+ * message's full stored text (searchText covers part rows where the
+ * conversational text lives). Two surfaces, never conflated.
  */
 export function verifyEvidence(
   checks: QuoteCheck[],
-  lookup: (evidence: Evidence) => string | null
+  lookup: (evidence: Evidence) => VerifySurfaces
 ): VerifyFailure[] {
   const failures: VerifyFailure[] = []
   for (const { claim, quote, evidence } of checks) {
-    const raw = lookup(evidence)
-    if (raw === null) {
+    const surfaces = lookup(evidence)
+    if (surfaces.hashPayload === null || surfaces.searchText === null) {
       failures.push({ claim, reason: 'anchor-unresolvable', detail: evidence.ref })
       continue
     }
-    if (hashContent(raw) !== evidence.contentHash) {
+    if (hashContent(surfaces.hashPayload) !== evidence.contentHash) {
       failures.push({ claim, reason: 'content-hash-mismatch', detail: evidence.ref })
       continue
     }
-    if (!stripWhitespace(raw).includes(stripWhitespace(quote))) {
+    if (!stripWhitespace(surfaces.searchText).includes(stripWhitespace(quote))) {
       failures.push({ claim, reason: 'quote-not-found', detail: quote.slice(0, 40) })
     }
   }

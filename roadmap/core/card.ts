@@ -53,6 +53,8 @@ export type CardFrontmatter = {
   provenance: CardProvenance
   supersededBy?: string
   anchorsVerifiedAt?: string
+  /** Anchors the S6 gate dropped (rewritten quotes); card keeps only verifiable ones. */
+  anchorsDropped?: number
   digestTruncated?: boolean
   handEdited?: boolean
   handEditedAt?: string
@@ -123,6 +125,9 @@ export function serializeCard(card: RoadmapCard): string {
   }
   if (f.anchorsVerifiedAt) {
     lines.push(`anchorsVerifiedAt: ${f.anchorsVerifiedAt}`)
+  }
+  if (f.anchorsDropped !== undefined) {
+    lines.push(`anchorsDropped: ${f.anchorsDropped}`)
   }
   if (f.digestTruncated) {
     lines.push(`digestTruncated: true`)

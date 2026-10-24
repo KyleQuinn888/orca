@@ -56,7 +56,6 @@ async function main(): Promise<void> {
     args.out ?? join(session.directory || process.cwd(), '.roadmap', '001', session.id)
   const tzOffsetMin = -new Date().getTimezoneOffset()
   const bySeq = new Map(session.messages.map((m) => [m.seq, m]))
-  let gateFailed = false
   for (const window of chosen) {
     window.userMsg.total = countUserRole(session, window)
     const { digest, truncated } = buildDigest(session, window)
@@ -64,24 +63,41 @@ async function main(): Promise<void> {
       ? { kind: 'heuristic' as const, card: heuristicFrom(session, window), reason: '--no-llm' }
       : await summarizeChapter({ digest, promptTemplate })
     const card = renderCard(session, window, result, truncated, dbPath, tzOffsetMin, chosen)
-    // S6 gate: verify anchors against the raw DB bytes before stamping.
+    // S6 gate: verify anchors against the raw DB bytes before stamping. Quote
+    // search covers the message row AND its part rows (conversational text
+    // lives in parts); the hash contract stays on the message row itself.
+    // Failing anchors are DROPPED from the card (anchorsDropped counts them):
+    // a shipped card carries only one-hop-verifiable anchors; LLM quote
+    // discipline is probabilistic, so the gate filters rather than rerolls.
     const checks = card.evidence
       .filter((e) => e.quote !== undefined)
       .map((e) => ({ claim: e.claim, quote: e.quote!, evidence: e }))
-    const failures = verifyEvidence(checks, (evidence) => bySeq.get(evidence.seq)?.rawData ?? null)
-    if (failures.length === 0 && card.evidence.length > 0) {
-      card.frontmatter.anchorsVerifiedAt = new Date().toISOString()
-    } else if (failures.length > 0) {
-      gateFailed = true
+    const failures = verifyEvidence(checks, (evidence) => {
+      const message = bySeq.get(evidence.seq)
+      if (!message) {
+        return { hashPayload: null, searchText: null }
+      }
+      return {
+        hashPayload: message.rawData,
+        searchText: `${message.rawData}\n${message.rawParts.join('\n')}`
+      }
+    })
+    if (failures.length > 0) {
+      const failedClaims = new Set(failures.map((f) => f.claim))
       for (const failure of failures) {
         console.error(
-          `[roadmap] S6 FAIL ch${window.index} ${failure.claim}: ${failure.reason} ${failure.detail ?? ''}`
+          `[roadmap] S6 DROP ch${window.index} ${failure.claim}: ${failure.reason} ${failure.detail ?? ''}`
         )
       }
+      card.evidence = card.evidence.filter((e) => !failedClaims.has(e.claim))
+      card.frontmatter.anchorsDropped = failures.length
+    }
+    if (card.evidence.length > 0) {
+      card.frontmatter.anchorsVerifiedAt = new Date().toISOString()
     }
     const written = writeCard(outRoot, card)
     console.log(
-      `${written.outcome}: ${written.path} [${result.kind}] evidence=${card.evidence.length} verified=${failures.length === 0}`
+      `${written.outcome}: ${written.path} [${result.kind}] evidence=${card.evidence.length} dropped=${failures.length} verified=${failures.length === 0 || card.evidence.length > 0}`
     )
   }
   refreshIndex(outRoot, {
@@ -94,9 +110,6 @@ async function main(): Promise<void> {
     tzOffsetMin
   })
   console.log(`index refreshed: ${join(outRoot, '000-index.md')}`)
-  if (gateFailed) {
-    process.exitCode = 4
-  }
 }
 
 function renderCard(

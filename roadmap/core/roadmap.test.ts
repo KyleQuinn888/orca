@@ -140,6 +140,7 @@ describe('S4a raw-byte hash + S6 verifier', () => {
   })
   it('verifies true quotes and catches all three failure modes', () => {
     const raw = '{"role":"user","text":"模型整个窗口内从未进入软化"}'
+    const surfaces = { hashPayload: raw, searchText: raw }
     const evidence = tuiEvidence(
       '要点1',
       { path: 'p' },
@@ -147,18 +148,38 @@ describe('S4a raw-byte hash + S6 verifier', () => {
       '从未进入软化'
     )
     expect(
-      verifyEvidence([{ claim: '要点1', quote: '从未进入软化', evidence }], () => raw)
+      verifyEvidence([{ claim: '要点1', quote: '从未进入软化', evidence }], () => surfaces)
     ).toEqual([])
     expect(
-      verifyEvidence([{ claim: '要点1', quote: '完全不存在的引文', evidence }], () => raw)[0].reason
+      verifyEvidence([{ claim: '要点1', quote: '完全不存在的引文', evidence }], () => surfaces)[0]
+        .reason
     ).toBe('quote-not-found')
     expect(
-      verifyEvidence([{ claim: '要点1', quote: '软化', evidence }], () => '{"tampered":1}')[0]
-        .reason
+      verifyEvidence([{ claim: '要点1', quote: '软化', evidence }], () => ({
+        hashPayload: '{"tampered":1}',
+        searchText: '{"tampered":1}'
+      }))[0].reason
     ).toBe('content-hash-mismatch')
-    expect(verifyEvidence([{ claim: '要点1', quote: 'x', evidence }], () => null)[0].reason).toBe(
-      'anchor-unresolvable'
+    expect(
+      verifyEvidence([{ claim: '要点1', quote: 'x', evidence }], () => ({
+        hashPayload: null,
+        searchText: null
+      }))[0].reason
+    ).toBe('anchor-unresolvable')
+    // conversational text lives in part rows: search surface wider than hash
+    const partText = '{"type":"text","text":"引文在 part 行里"}'
+    const partEvidence = tuiEvidence(
+      '要点2',
+      { path: 'p' },
+      { id: 'm2', seq: 2, rawData: raw },
+      '引文在 part 行里'
     )
+    expect(
+      verifyEvidence(
+        [{ claim: '要点2', quote: '引文在 part 行里', evidence: partEvidence }],
+        () => ({ hashPayload: raw, searchText: `${raw}\n${partText}` })
+      )
+    ).toEqual([])
   })
 })
 

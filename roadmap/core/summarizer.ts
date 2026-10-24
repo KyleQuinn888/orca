@@ -43,7 +43,7 @@ export async function summarizeChapter(args: {
       const stdout = await runZcode(bin, prompt, dir)
       const parsed = parseChapterJson(stdout)
       if (parsed) {
-        rmSync(dir, { recursive: true, force: true })
+        cleanupTempDir(dir)
         return { kind: 'llm', card: parsed }
       }
       lastError = 'reply carried no parseable chapter JSON'
@@ -51,8 +51,18 @@ export async function summarizeChapter(args: {
       lastError = String(error)
     }
   }
-  rmSync(dir, { recursive: true, force: true })
+  cleanupTempDir(dir)
   return { kind: 'heuristic', card: heuristicCard(args.digest), reason: lastError }
+}
+
+/** Windows: the exited child's cwd can stay locked briefly (AV/indexer);
+ * temp cleanup is best-effort and never fails the summarization. */
+function cleanupTempDir(dir: string): void {
+  try {
+    rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 500 })
+  } catch {
+    // leaked temp dir is acceptable; the OS reclaims it
+  }
 }
 
 function runZcode(bin: string, prompt: string, cwd: string): Promise<string> {
