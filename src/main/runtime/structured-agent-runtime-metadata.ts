@@ -3,7 +3,10 @@ import { join } from 'node:path'
 import { agentSessionAccountHome } from '../../shared/agent-session-account-home'
 import { isNativeLocalLocation } from '../../shared/execution-host'
 import { resolveStructuredAgentCommand } from '../native-chat/structured-agent-command-resolution'
-import { ZCODE_SESSION_HISTORY } from '../native-chat/zcode-cli-conversations'
+import {
+  ZCODE_SESSION_HISTORY,
+  ZCODE_TRANSCRIPT_IMPORT
+} from '../native-chat/zcode-cli-conversations'
 import { applyStructuredCodexWorkspaceTrust } from '../agent-workspace-trust-spawn'
 import { ACP_LAUNCH_SPECS, type AcpLaunchSpec } from '../acp/acp-launch-specs'
 import { acpStructuredAgentDefinition } from '../acp/acp-structured-agent-definitions'
@@ -128,7 +131,7 @@ export const STRUCTURED_AGENT_RUNTIME_CATALOG: readonly StructuredAgentRuntimeCa
     metadata: {
       definition: ZCODE_STRUCTURED_AGENT,
       // v1 adopts no CLI-recorded conversations; Session History rows still resolve by agent id.
-      transcriptImport: null,
+      transcriptImport: ZCODE_TRANSCRIPT_IMPORT,
       sessionHistory: ZCODE_SESSION_HISTORY,
       // A one-shot app-server probe lists the account's models; without a listing
       // the picker's catalog gate also blocks the live options read.

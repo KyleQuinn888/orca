@@ -14,7 +14,9 @@ export const CLI_CONVERSATION_ADOPTING_AGENTS = {
   // An OpenCode 2.x conversation: the OpenCode 2 chat runs only 2.x, an OpenCode chat runs 2.x
   // where `opencode` is 2.x.
   opencode2: ['opencode2', 'opencode'],
-  pi: ['pi']
+  pi: ['pi'],
+  // The CLI's own database records both TUI and app-server conversations.
+  zcode: ['zcode']
 } as const
 
 /** A Session History row agent whose conversations a chat can take over. */
