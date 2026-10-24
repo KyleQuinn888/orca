@@ -3,8 +3,8 @@
 // strict-JSON reply. Retries [2s,4s], then degrades to a heuristic card
 // marked quality=agent-draft + heuristic note — never silent.
 
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawn } from 'node:child_process'
 
@@ -56,13 +56,17 @@ export async function summarizeChapter(args: {
 }
 
 function runZcode(bin: string, prompt: string, cwd: string): Promise<string> {
+  const command = resolveZcodeCommand(bin)
   return new Promise((resolve, reject) => {
-    const child = spawn(bin, ['-p', prompt], { cwd, windowsHide: true })
+    const child = spawn(command.cmd, [...command.prefixArgs, '-p', prompt], {
+      cwd,
+      windowsHide: true
+    })
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', (chunk) => (stdout += chunk))
     child.stderr.on('data', (chunk) => (stderr += chunk))
-    child.on('error', (error) => reject(`spawn failed (${bin}): ${String(error)}`))
+    child.on('error', (error) => reject(`spawn failed (${command.cmd}): ${String(error)}`))
     child.on('close', (code) => {
       if (code === 0 && stdout.trim().length > 0) {
         resolve(stdout)
@@ -75,6 +79,36 @@ function runZcode(bin: string, prompt: string, cwd: string): Promise<string> {
       reject('zcode -p timed out after 180s')
     }, 180_000).unref()
   })
+}
+
+let zcodeCommandCache: { cmd: string; prefixArgs: string[] } | null = null
+
+/**
+ * On Windows the `zcode` on PATH is a .cmd shim, and Node refuses argv with
+ * cmd.exe metacharacters (our CJK prompt is full of them). Resolve the shim
+ * to its real JS entry and spawn node on it directly; anywhere else the
+ * binary spawns as-is.
+ */
+function resolveZcodeCommand(bin: string): { cmd: string; prefixArgs: string[] } {
+  if (zcodeCommandCache) {
+    return zcodeCommandCache
+  }
+  if (process.platform !== 'win32' || !bin.includes('zcode') || bin.endsWith('.js')) {
+    zcodeCommandCache = { cmd: bin, prefixArgs: [] }
+    return zcodeCommandCache
+  }
+  try {
+    const shimDir = join(homedir(), 'AppData', 'Roaming', 'npm')
+    const jsEntry = join(shimDir, 'node_modules', 'zcode-app-cli', 'bin', 'zcode.js')
+    if (existsSync(jsEntry)) {
+      zcodeCommandCache = { cmd: 'node', prefixArgs: [jsEntry] }
+      return zcodeCommandCache
+    }
+  } catch {
+    // fall through to bare spawn
+  }
+  zcodeCommandCache = { cmd: bin, prefixArgs: [] }
+  return zcodeCommandCache
 }
 
 export function parseChapterJson(stdout: string): SummarizedChapter | null {

@@ -286,9 +286,12 @@ export function writeCard(directory: string, card: RoadmapCard): WriteResult {
 }
 
 function sameIndexFile(name: string, wanted: string): boolean {
+  // Compare numerically: v1 files used 2-digit padding, v1.1 uses 3.
   const wantedMatch = /^(\d+)-.*\.md$/.exec(wanted)
   const nameMatch = /^(\d+)-.*\.md$/.exec(name)
-  return wantedMatch !== null && nameMatch !== null && wantedMatch[1] === nameMatch[1]
+  return (
+    wantedMatch !== null && nameMatch !== null && Number(wantedMatch[1]) === Number(nameMatch[1])
+  )
 }
 
 function atomicWrite(path: string, text: string): void {
