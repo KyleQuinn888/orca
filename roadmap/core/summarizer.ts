@@ -12,14 +12,22 @@ export type SummarizerResult =
   | { kind: 'llm'; card: SummarizedChapter }
   | { kind: 'heuristic'; card: SummarizedChapter; reason: string }
 
-export type SeqText = { text: string; seq?: number }
+export type SeqText = { text: string; seq?: number; quote?: string }
+
+export type PitfallEntry = {
+  text: string
+  keywords?: string[]
+  symptom?: string
+  fix?: string
+  seq?: number
+}
 
 export type SummarizedChapter = {
   title: string
   points: SeqText[]
   decisions: SeqText[]
   artifacts: string[]
-  pitfalls: SeqText[]
+  pitfalls: PitfallEntry[]
 }
 
 const RETRY_DELAYS_MS = [2000, 4000]
@@ -86,8 +94,8 @@ function runZcode(bin: string, prompt: string, cwd: string): Promise<string> {
     })
     setTimeout(() => {
       child.kill()
-      reject('zcode -p timed out after 180s')
-    }, 180_000).unref()
+      reject('zcode -p timed out after 420s')
+    }, 420_000).unref()
   })
 }
 
@@ -126,9 +134,9 @@ export function parseChapterJson(stdout: string): SummarizedChapter | null {
   for (const candidate of candidates.toReversed()) {
     try {
       const parsed = JSON.parse(candidate) as Partial<SummarizedChapter> & {
-        points?: (string | { text: string; seq?: number })[]
-        decisions?: (string | { text: string; seq?: number })[]
-        pitfalls?: (string | { text: string; seq?: number })[]
+        points?: (string | SeqText)[]
+        decisions?: (string | SeqText)[]
+        pitfalls?: (string | PitfallEntry)[]
       }
       if (
         typeof parsed.title === 'string' &&
@@ -139,12 +147,14 @@ export function parseChapterJson(stdout: string): SummarizedChapter | null {
           items: (string | { text: string; seq?: number })[] | undefined
         ): SeqText[] =>
           (items ?? []).map((item) => (typeof item === 'string' ? { text: item } : item))
+        const normalizePits = (items: (string | PitfallEntry)[] | undefined): PitfallEntry[] =>
+          (items ?? []).map((item) => (typeof item === 'string' ? { text: item } : item))
         return {
           title: parsed.title,
           points: normalize(parsed.points),
           decisions: normalize(parsed.decisions),
           artifacts: parsed.artifacts ?? [],
-          pitfalls: normalize(parsed.pitfalls)
+          pitfalls: normalizePits(parsed.pitfalls)
         }
       }
     } catch {

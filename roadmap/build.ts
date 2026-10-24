@@ -17,6 +17,7 @@ import {
 } from './core/tui-reader'
 import { writeCard, type CardFrontmatter, type RoadmapCard, type UncoveredRange } from './core/card'
 import { refreshIndex } from './core/index-card'
+import { refreshPitsIndex, type PitSource } from './core/pits-index'
 import { summarizeChapter, type SummarizedChapter } from './core/summarizer'
 import { tuiEvidence, verifyEvidence, type Evidence } from './core/anchor'
 
@@ -56,6 +57,7 @@ async function main(): Promise<void> {
     args.out ?? join(session.directory || process.cwd(), '.roadmap', '001', session.id)
   const tzOffsetMin = -new Date().getTimezoneOffset()
   const bySeq = new Map(session.messages.map((m) => [m.seq, m]))
+  const pitSources: PitSource[] = []
   for (const window of chosen) {
     window.userMsg.total = countUserRole(session, window)
     const { digest, truncated } = buildDigest(session, window)
@@ -103,6 +105,14 @@ async function main(): Promise<void> {
         `[roadmap] S6 ch${window.index} points without surviving anchors: ${uncoveredPoints.join(', ')} — no stamp`
       )
     }
+    for (const pit of result.card.pitfalls) {
+      pitSources.push({
+        sessionId: session.id,
+        sessionTitle: session.title,
+        chapter: window.index,
+        pit
+      })
+    }
     const written = writeCard(outRoot, card)
     console.log(
       `${written.outcome}: ${written.path} [${result.kind}] evidence=${card.evidence.length} dropped=${failures.length} verified=${card.frontmatter.anchorsVerifiedAt !== undefined}`
@@ -118,6 +128,10 @@ async function main(): Promise<void> {
     tzOffsetMin
   })
   console.log(`index refreshed: ${join(outRoot, '000-index.md')}`)
+  refreshPitsIndex(session.directory, session, pitSources)
+  console.log(
+    `pits layer refreshed: ${join(session.directory || '', '.roadmap', 'pits', 'KEYWORDS.md')}`
+  )
 }
 
 function renderCard(
@@ -186,8 +200,6 @@ function renderCard(
   }
 }
 
-type SeqText = { text: string; seq?: number }
-
 function buildEvidence(
   session: TuiSession,
   window: ChapterWindow,
@@ -195,10 +207,10 @@ function buildEvidence(
   dbPath: string
 ): Evidence[] {
   const bySeq = new Map(session.messages.map((m) => [m.seq, m]))
-  const sections: [string, SeqText][] = [
-    ...summarized.points.map((p, i) => [`要点${i + 1}`, p] as [string, SeqText]),
-    ...summarized.decisions.map((d, i) => [`决策${i + 1}`, d] as [string, SeqText]),
-    ...summarized.pitfalls.map((p, i) => [`坑${i + 1}`, p] as [string, SeqText])
+  const sections: [string, { seq?: number; quote?: string }][] = [
+    ...summarized.points.map((p, i) => [`要点${i + 1}`, p]),
+    ...summarized.decisions.map((d, i) => [`决策${i + 1}`, d]),
+    ...summarized.pitfalls.map((p, i) => [`坑${i + 1}`, p])
   ]
   const evidence: Evidence[] = []
   for (const [label, entry] of sections) {
@@ -209,19 +221,11 @@ function buildEvidence(
     if (!message || message.seq < window.firstMsgSeq || message.seq > window.lastMsgSeq) {
       continue
     }
-    evidence.push(tuiEvidence(label, { path: dbPath }, message, extractQuote(entry.text)))
+    // Quote is the structured pointer the LLM returns verbatim; body text
+    // stays quote-free (human narrative vs machine pointer, per owner spec).
+    evidence.push(tuiEvidence(label, { path: dbPath }, message, entry.quote))
   }
   return evidence
-}
-
-/** First quoted span (ASCII or CJK quotes) in a point, else undefined. */
-export function extractQuote(text: string): string | undefined {
-  const ascii = /"([^"]{4,200})"/.exec(text)
-  if (ascii) {
-    return ascii[1]
-  }
-  const cjk = /\u201c([^\u201d]{4,200})\u201d/.exec(text)
-  return cjk?.[1]
 }
 
 function complementRanges(
