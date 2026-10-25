@@ -358,9 +358,9 @@ describe('pits layer (rebuild from cards)', () => {
     const card = chapterCard(1, 'one')
     card.pits = [
       {
-        text: '罚刚度命名：误读为 45° | 竖线：认 2a 轨',
+        text: '罚刚度命名：误读为 45°：认 2a 轨',
         keywords: ['罚刚度', 'K45'],
-        symptom: '误读',
+        symptom: '误读 | 竖线',
         fix: '认 2a 轨',
         seq: 12
       }
