@@ -62,6 +62,7 @@ export function buildIndexCard(args: {
     },
     anchors: null,
     evidence: [],
+    pits: [], // pits live in chapter cards; the index carries none
     body: renderIndexBody(chapters)
   }
 }

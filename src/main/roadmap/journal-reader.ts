@@ -41,6 +41,7 @@ export type CutSignal =
       detail?: string
     }
   | { tier: 2; kind: 'size-overflow'; atSeq: number; forced: true }
+  | { tier: 2; kind: 'flush'; atSeq: number; forced: false }
 
 export type ChapterCut = {
   index: number
@@ -71,13 +72,21 @@ export const DEFAULT_SEGMENTATION_CONFIG: SegmentationConfig = {
 
 // ─── Segmentation state ─────────────────────────────────────────────────
 
+/** TIER 1 boundary candidate recorded while a chapter stays open. */
+export type CutCandidate = {
+  tier: 1
+  kind: 'git-commit' | 'thread-goal' | 'orca-stop' | 'slash-command'
+  atSeq: number
+  detail?: string
+}
+
 export type OpenChapter = {
   epoch: JournalEpoch
   startSeq: number
   terminalTurns: number
   projectionChars: number
   /** Best boundary candidates found so far, in priority order. */
-  candidates: { tier: 1 | 2; kind: string; atSeq: number; detail?: string }[]
+  candidates: CutCandidate[]
 }
 
 export type SegmentationResult = {
@@ -93,7 +102,7 @@ export type SegmentationResult = {
  * in `open` across calls.
  */
 export function segmentRows(
-  sessionId: string,
+  _sessionId: string,
   rows: JournalRowRef[],
   open: OpenChapter | null,
   config: SegmentationConfig = DEFAULT_SEGMENTATION_CONFIG,
@@ -258,7 +267,7 @@ function findBestBacktrack(
 // ─── Flush: close the open chapter regardless of signals ───────────────
 
 export function flushOpenChapter(
-  sessionId: string,
+  _sessionId: string,
   open: OpenChapter | null,
   chapterIndex: number
 ): ChapterCut | null {

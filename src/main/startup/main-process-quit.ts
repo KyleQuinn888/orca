@@ -17,6 +17,7 @@ import { disposeDesktopBrowserBridge } from '../ipc/desktop-browser-bridge-wirin
 import { browserManager } from '../browser/browser-manager'
 import { stopCodexStateDbBackfillRecoveries } from '../codex/codex-state-db-backfill-recovery'
 import { stopCodexAccountSessionBridges } from '../codex/codex-account-session-bridge'
+import { getRoadmapService } from '../roadmap/roadmap-bootstrap'
 import { awaitPackedRefsLockRelease } from '../git/local-repo-ref-maintenance'
 import { stopBackgroundWorktreeRemovals } from '../worktree-background-removal'
 import { settleTeardownWithinDeadline, settleWithinMs } from '../quit-teardown-deadline'
@@ -70,6 +71,7 @@ function shutdownWatchersOnce(): Promise<void> {
 
 function installBeforeQuitHandler(): void {
   app.on('before-quit', (event: Event) => {
+    getRoadmapService()?.stop()
     if (event.defaultPrevented) {
       return
     }

@@ -101,7 +101,7 @@ export function recordSpawn(session: SessionState, dateKey = utcDateKey()): void
   const keys = Object.keys(session.counts).sort()
   if (keys.length > 7) {
     for (const k of keys.slice(0, -7)) {
-      delete session.counts[k]!
+      delete session.counts[k]
     }
   }
 }

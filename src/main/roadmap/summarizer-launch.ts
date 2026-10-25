@@ -3,10 +3,9 @@
 // (Electron process, not Bun).
 
 import { spawn } from 'node:child_process'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir, homedir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { existsSync, homedir } from 'node:os'
 
 // Re-export types from the A-slice (the CLI and service share the same JSON contract)
 export type SeqText = { text: string; seq?: number; quote?: string }

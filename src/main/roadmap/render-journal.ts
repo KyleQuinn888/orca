@@ -1,11 +1,15 @@
 // Journal card renderer: produce a RoadmapCard from a chapter cut and its
 // rows, with journal-source evidence anchors and S6 lookup.
+//
+// Imports only the pure node-safe roadmap/core modules. render.ts's
+// sanitizeLlmText is duplicated here (like slugify below) because render.ts
+// pulls the bun:sqlite TUI reader into the graph, which the Electron
+// typecheck program must not see.
 
-import { journalEvidence, type Evidence } from '../../roadmap/core/anchor'
-import type { RoadmapCard, CardFrontmatter } from '../../roadmap/core/card'
-import { sanitizeLlmText } from '../../roadmap/core/render'
+import { journalEvidence, type Evidence } from '../../../roadmap/core/anchor'
+import type { RoadmapCard, CardFrontmatter } from '../../../roadmap/core/card'
 import type { ChapterCut, JournalRowRef } from './journal-reader'
-import type { SummarizedChapter } from './summarizer'
+import type { SummarizedChapter } from './summarizer-launch'
 
 export function renderJournalCard(args: {
   sessionId: string
@@ -145,7 +149,7 @@ function buildJournalEvidence(
 // ─── S6 lookup for journal cards ────────────────────────────────────────
 
 export function journalS6Lookup(db: {
-  query: (sql: string, ...params: unknown[]) => { get?: (...p: unknown[]) => unknown }
+  query: (sql: string, ...params: unknown[]) => { get: (...p: unknown[]) => unknown }
 }): (evidence: Evidence) => { hashPayload: string | null; searchText: string | null } {
   return (evidence) => {
     // ref format: "sessionId@epoch:seq"
@@ -171,6 +175,20 @@ export function journalS6Lookup(db: {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────
+
+/**
+ * S6 forgery guard, copied from roadmap/core/render.ts (see file header):
+ * mangle lines that would parse as structural block markers and collapse
+ * newlines, so parseCard can never read a forged block out of a body.
+ */
+function sanitizeLlmText(text: string): string {
+  return text
+    .split('\n')
+    .map((line) =>
+      line.startsWith('## ') || /^(pits|anchors|evidence):$/.test(line) ? `·${line}` : line
+    )
+    .join('；')
+}
 
 function slugify(title: string): string {
   return (

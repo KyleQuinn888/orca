@@ -6,7 +6,7 @@ import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Cursor } from './roadmap-store'
 import type { ChapterCut, JournalRowRef } from './journal-reader'
-import { isChapterCardFile } from '../../roadmap/core/chapter-files'
+import { isChapterCardFile } from '../../../roadmap/core/chapter-files'
 
 export type JournalDb = {
   query: (
@@ -65,7 +65,7 @@ export function countExistingChapters(workspace: string, sessionId: string): num
 }
 
 export function computeUncovered(
-  sessionId: string,
+  _sessionId: string,
   cut: ChapterCut,
   allRows: JournalRowRef[]
 ): { fromSeq: number; toSeq: number; note?: string }[] {
