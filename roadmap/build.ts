@@ -62,6 +62,7 @@ async function main(): Promise<void> {
   if (chosen.length === 0) {
     throw new Error(`--chapter ${args.chapter}: no such chapter`)
   }
+  const WAVE_SIZE = 4
   const outRoot =
     args.out ?? join(session.directory || process.cwd(), '.roadmap', '001', session.id)
   const tzOffsetMin = -new Date().getTimezoneOffset()
@@ -80,7 +81,10 @@ async function main(): Promise<void> {
     // Verified keys are `${sessionId}:${seq}` — a bare seq would let one
     // session's S6-pass vouch for another session's colliding seq.
     const verifiedSeqs = new Set<string>()
-    for (const window of chosen) {
+    // Wave parallelism: chapters run in waves of WAVE_SIZE; each wave's
+    // chapters share the terminology table established by earlier waves
+    // (rolling injection reads cards already on disk, so wave N+1 sees wave N).
+    const processWindow = async (window: ChapterWindow): Promise<void> => {
       window.userMsg.total = countUserRole(session, window)
       const { digest, truncated } = buildDigest(session, window)
       const termHeader = termInjectionHeader(establishedTerms(outRoot, window.index))
@@ -178,6 +182,15 @@ async function main(): Promise<void> {
         `${written.outcome}: ${written.path} [${result.kind}] evidence=${card.evidence.length} dropped=${failures.length} verified=${card.frontmatter.anchorsVerifiedAt !== undefined}`
       )
     }
+
+    for (let wave = 0; wave < chosen.length; wave += WAVE_SIZE) {
+      const waveWindows = chosen.slice(wave, wave + WAVE_SIZE)
+      await Promise.all(waveWindows.map((w) => processWindow(w)))
+      console.log(
+        `[roadmap] wave done: chapters ${waveWindows[0].index}-${waveWindows.at(-1)?.index ?? waveWindows[0].index}`
+      )
+    }
+
     refreshIndex(outRoot, {
       source: 'tui-sqlite',
       session: session.id,

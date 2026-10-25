@@ -53,6 +53,7 @@ export async function summarizeChapter(args: {
   writeFileSync(digestFile, args.digest, 'utf8')
   const prompt = args.promptTemplate.replace('{{DIGEST_FILE}}', digestFile)
   let lastError = 'unknown error'
+  let timeouts = 0
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
     if (attempt > 0) {
       await delay(RETRY_DELAYS_MS[attempt - 1]!)
@@ -70,7 +71,10 @@ export async function summarizeChapter(args: {
     } catch (error) {
       lastError = String(error)
       if (lastError.includes('timed out')) {
-        break // a timeout is a budget problem, not a transient one
+        timeouts++
+        if (timeouts >= 2) {
+          break // second timeout confirms a budget problem, not variance
+        }
       }
     }
   }
@@ -104,8 +108,8 @@ function runZcode(bin: string, prompt: string, cwd: string): Promise<string> {
     child.on('error', (error) => reject(`spawn failed (${command.cmd}): ${String(error)}`))
     const timer = setTimeout(() => {
       child.kill()
-      reject('zcode -p timed out after 420s')
-    }, 420_000)
+      reject('zcode -p timed out after 600s')
+    }, 600_000)
     timer.unref()
     child.on('close', (code) => {
       clearTimeout(timer)
