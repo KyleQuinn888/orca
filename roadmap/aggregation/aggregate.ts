@@ -13,6 +13,7 @@ import { evaluatePromotions } from './promote'
 import { proposeForGroup, zcodeSpawnLLM } from './propose'
 import { parseExisting, renderMilestone, renderIndex, llmName, type NamedGroup } from './render'
 import { verbAddCut, verbSuppress, verbReview } from './verbs'
+import { ensureAgentsMd } from './agents-md'
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
@@ -241,21 +242,32 @@ async function main(): Promise<void> {
       console.log(`  superseded: ${e.file} "${e.title}"`)
     }
 
-    // INDEX (zero-LLM view, last write, skip-if-unchanged)
+    // INDEX (zero-LLM view, skip-if-unchanged)
     const indexPath = join(workspace, '.roadmap', 'INDEX.md')
     const indexContent = renderIndex(results, sessionId, chapters)
+    let indexWritten = false
     if (existsSync(indexPath)) {
       const stripGen = (s: string): string => s.replace(/^generatedAt: '.*'$/m, '')
       if (stripGen(readFileSync(indexPath, 'utf8')) === stripGen(indexContent)) {
         console.log('INDEX.md unchanged (skip write)')
-        console.log('\n=== DONE ===')
-        return
+      } else {
+        indexWritten = true
       }
+    } else {
+      indexWritten = true
     }
-    const indexTmp = `${indexPath}.tmp`
-    writeFileSync(indexTmp, indexContent, 'utf8')
-    renameSync(indexTmp, indexPath)
-    console.log(`INDEX.md rebuilt (${results.length} milestones, ${chapters.length} chapters)`)
+    if (indexWritten) {
+      const indexTmp = `${indexPath}.tmp`
+      writeFileSync(indexTmp, indexContent, 'utf8')
+      renameSync(indexTmp, indexPath)
+      console.log(`INDEX.md rebuilt (${results.length} milestones, ${chapters.length} chapters)`)
+    }
+
+    // agent entry point last (spec agent-retrieval §4: after INDEX; runs every
+    // aggregation, including no-op ones — its own skip-unchanged is cheap)
+    const agents = ensureAgentsMd(workspace)
+    console.log(`  ${agents.message}`)
+
     console.log('\n=== DONE ===')
   } finally {
     lock.release()

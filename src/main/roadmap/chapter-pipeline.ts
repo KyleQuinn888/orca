@@ -140,7 +140,7 @@ export async function summarizeAndWrite(
     sessionUncoveredNote: `Ch.${cut.index} closed`,
     tzOffsetMin
   })
-  rebuildPitsIndex(workspace, new Set())
+  rebuildPitsIndex(workspace)
 
   // Term lint (non-blocking)
   const conflicts = lintTerms(outDir)

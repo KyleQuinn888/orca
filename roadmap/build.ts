@@ -78,9 +78,6 @@ async function main(): Promise<void> {
     console.log(
       `[roadmap] budget: ~${windows.length} chapters × ~${Math.ceil(probe.digest.length / 1000)}k chars digest → est. ${chosen.length} LLM calls (manual CLI, no auto-trigger)`
     )
-    // Verified keys are `${sessionId}:${seq}` — a bare seq would let one
-    // session's S6-pass vouch for another session's colliding seq.
-    const verifiedSeqs = new Set<string>()
     // Wave parallelism: chapters run in waves of WAVE_SIZE; each wave's
     // chapters share the terminology table established by earlier waves
     // (rolling injection reads cards already on disk, so wave N+1 sees wave N).
@@ -148,9 +145,6 @@ async function main(): Promise<void> {
         }
         card.evidence = card.evidence.filter((e) => !failedClaims.has(e.claim))
         card.frontmatter.anchorsDropped = failures.length
-      }
-      for (const evidence of card.evidence) {
-        verifiedSeqs.add(`${session.id}:${evidence.seq}`)
       }
       const pointClaims = [...result.card.points.keys()].map((i) => `要点${i + 1}`)
       const coveredClaims = new Set(card.evidence.map((e) => e.claim))
@@ -233,9 +227,14 @@ async function main(): Promise<void> {
       pitsRoot = session.directory
     }
     if (pitsRoot) {
-      const pitsPath = rebuildPitsIndex(pitsRoot, verifiedSeqs)
-      if (pitsPath) {
-        console.log(`pits layer rebuilt: ${pitsPath}`)
+      const pits = rebuildPitsIndex(pitsRoot)
+      if (pits) {
+        const parts = [
+          pits.details ? 'DETAILS' : null,
+          pits.keywords ? 'KEYWORDS' : null,
+          pits.legacyRenamed ? `legacy->${pits.legacyRenamed}` : null
+        ].filter(Boolean)
+        console.log(`pits layer rebuilt: ${parts.join(', ') || 'unchanged'}`)
       } else {
         console.log('pits layer: no structured pits on disk, nothing written')
       }

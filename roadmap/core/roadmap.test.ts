@@ -370,17 +370,30 @@ describe('pits layer (rebuild from cards)', () => {
         seq: 12
       }
     ]
+    card.frontmatter.anchorsVerifiedAt = '2026-10-04T04:00:00Z'
+    card.evidence = [
+      {
+        claim: '坑1',
+        source: 'tui-sqlite',
+        origin: { db: 'tui-sqlite', path: 'p' },
+        ref: 'm1',
+        seq: 12,
+        quote: 'q',
+        contentHash: '0',
+        hashOf: 'tui-message-data'
+      }
+    ]
     writeCard(sessionDir, card)
-    const first = rebuildPitsIndex(root, new Set(['s1:12']))
-    expect(first).toContain('KEYWORDS.md')
-    const text1 = readFileSync(first!, 'utf8')
+    const first = rebuildPitsIndex(root)
+    expect(first?.details).toContain('DETAILS.md')
+    const text1 = readFileSync(first!.details!, 'utf8')
     expect((text1.match(/^# /gm) ?? []).length).toBe(1)
-    expect(text1).toContain('罚刚度、K45')
+    expect(text1).toContain('K45、罚刚度')
     expect(text1).toContain(String.raw`\|`)
     expect(text1).toContain('[Ch.1](../001/s1/001-one.md)')
     expect(text1).toContain('✓')
-    rebuildPitsIndex(root, new Set(['s1:12']))
-    expect(readFileSync(first!, 'utf8')).toBe(text1)
+    rebuildPitsIndex(root)
+    expect(readFileSync(first!.details!, 'utf8')).toBe(text1)
   })
   it('returns null when no structured pits exist', () => {
     expect(rebuildPitsIndex(join(fixtureDir, 'no-such-root'))).toBeNull()
@@ -480,23 +493,34 @@ describe('shared chapter-card file predicate (fix: drifted scanner filters)', ()
 })
 
 describe('keyed pit verification (fix: cross-session seq collision fakes)', () => {
-  it("keys by session:seq so a colliding seq cannot borrow another session's ✓", () => {
+  it("per-card persistent stamp so a colliding seq cannot borrow another session's ✓", () => {
     const root = join(fixtureDir, 'pit-keyed')
     const dirA = join(root, '.roadmap', '001', 'sessA')
     const dirB = join(root, '.roadmap', '001', 'sessB')
     mkdirSync(dirA, { recursive: true })
     mkdirSync(dirB, { recursive: true })
-    writeCard(dirA, pitCard(1, 'a', 12))
-    writeCard(dirB, pitCard(1, 'b', 12))
-    const path = rebuildPitsIndex(root, new Set(['sessA:12']))
-    const text = readFileSync(path!, 'utf8')
+    const cardA = pitCard(1, 'a', 12)
+    cardA.frontmatter.anchorsVerifiedAt = '2026-10-04T04:00:00Z'
+    cardA.evidence = [
+      {
+        claim: '坑1',
+        source: 'tui-sqlite',
+        origin: { db: 'tui-sqlite', path: 'p' },
+        ref: 'm1',
+        seq: 12,
+        quote: 'q',
+        contentHash: '0',
+        hashOf: 'tui-message-data'
+      }
+    ]
+    writeCard(dirA, cardA) // sessA: own stamp + own evidence seq 12
+    writeCard(dirB, pitCard(1, 'b', 12)) // sessB: same seq, no stamp of its own
+    const res = rebuildPitsIndex(root)
+    const text = readFileSync(res!.details!, 'utf8')
     const lineA = text.split('\n').find((l) => l.includes('../001/sessA/001-a.md'))!
     const lineB = text.split('\n').find((l) => l.includes('../001/sessB/001-b.md'))!
     expect(lineA.trimEnd().endsWith('| ✓ |')).toBe(true)
     expect(lineB.trimEnd().endsWith('| 未验 |')).toBe(true)
-    // fail-closed: no set handed in → every row reports unverified
-    const closed = readFileSync(rebuildPitsIndex(root, new Set())!, 'utf8')
-    expect(closed).not.toContain('✓')
   })
 })
 
