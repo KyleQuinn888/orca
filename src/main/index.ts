@@ -135,19 +135,23 @@ if (preflightReady) {
   registerMainProcessIpcHandlers()
   installMainProcessQuitHandlers()
   // Session roadmap: auto-summarize opt-in sessions (settings.sessionRoadmap defaults false)
-  import('./roadmap/roadmap-bootstrap')
-    .then(({ bootstrapRoadmap }) => {
+  void import('./roadmap/roadmap-bootstrap')
+    .then(async ({ bootstrapRoadmap }) => {
+      const { openRoadmapJournalDb, getSessionTitle, probeZcode } =
+        await import('./roadmap/roadmap-runtime')
+      const { wireRoadmapToRuntime } = await import('./roadmap/roadmap-runtime-wiring')
+      const runtime = wireRoadmapToRuntime()
       bootstrapRoadmap({
         getUserDataDir: () => app.getPath('userData'),
-        getJournalDb: () => null, // TODO: wire to journal database access
-        getWorkspacePath: () => null, // TODO: wire to workspace path resolution
-        getSessionTitle: (id) => id,
-        isLocalSession: () => true,
-        onJournalCommit: () => () => {},
-        onTurnCompletion: () => () => {},
-        onIdle: () => () => {},
-        zcodeAvailable: () => false, // TODO: probe on startup
-        onQuit: () => {}
+        getJournalDb: openRoadmapJournalDb,
+        getWorkspacePath: (sessionId) => runtime.resolveWorkspacePath(sessionId),
+        getSessionTitle,
+        isLocalSession: runtime.isLocalSession,
+        onJournalCommit: runtime.onJournalCommit,
+        onTurnCompletion: runtime.onTurnCompletion,
+        onIdle: runtime.onIdle,
+        zcodeAvailable: probeZcode,
+        onQuit: runtime.onQuit
       })
     })
     .catch((e) => console.warn('[roadmap] bootstrap failed:', e))

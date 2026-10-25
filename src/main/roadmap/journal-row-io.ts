@@ -13,6 +13,7 @@ export type JournalDb = {
     sql: string,
     ...params: unknown[]
   ) => { all: (...p: unknown[]) => unknown[]; get: (...p: unknown[]) => unknown }
+  close?: () => void
 }
 
 export function readRowsAfterCursor(
