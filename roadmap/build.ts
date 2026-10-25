@@ -17,7 +17,7 @@ import {
 } from './core/tui-reader'
 import { writeCard, type CardFrontmatter, type RoadmapCard, type UncoveredRange } from './core/card'
 import { refreshIndex } from './core/index-card'
-import { refreshPitsIndex, type PitSource } from './core/pits-index'
+import { rebuildPitsIndex } from './core/pits-index'
 import { summarizeChapter, type SummarizedChapter } from './core/summarizer'
 import { tuiEvidence, verifyEvidence, type Evidence } from './core/anchor'
 
@@ -57,7 +57,7 @@ async function main(): Promise<void> {
     args.out ?? join(session.directory || process.cwd(), '.roadmap', '001', session.id)
   const tzOffsetMin = -new Date().getTimezoneOffset()
   const bySeq = new Map(session.messages.map((m) => [m.seq, m]))
-  const pitSources: PitSource[] = []
+  const verifiedSeqs = new Set<number>()
   for (const window of chosen) {
     window.userMsg.total = countUserRole(session, window)
     const { digest, truncated } = buildDigest(session, window)
@@ -95,6 +95,9 @@ async function main(): Promise<void> {
       card.evidence = card.evidence.filter((e) => !failedClaims.has(e.claim))
       card.frontmatter.anchorsDropped = failures.length
     }
+    for (const evidence of card.evidence) {
+      verifiedSeqs.add(evidence.seq)
+    }
     const pointClaims = [...result.card.points.keys()].map((i) => `要点${i + 1}`)
     const coveredClaims = new Set(card.evidence.map((e) => e.claim))
     const uncoveredPoints = pointClaims.filter((c) => !coveredClaims.has(c))
@@ -105,14 +108,15 @@ async function main(): Promise<void> {
         `[roadmap] S6 ch${window.index} points without surviving anchors: ${uncoveredPoints.join(', ')} — no stamp`
       )
     }
-    for (const pit of result.card.pitfalls) {
-      pitSources.push({
-        sessionId: session.id,
-        sessionTitle: session.title,
-        chapter: window.index,
-        pit
-      })
-    }
+    // Structured pits persist IN the card (second durable store); the project
+    // KEYWORDS.md rebuilds from cards, so partial rebuilds cannot lose rows.
+    card.pits = result.card.pitfalls.map((pit) => ({
+      text: pit.text,
+      keywords: pit.keywords ?? [],
+      symptom: pit.symptom,
+      fix: pit.fix,
+      seq: pit.seq
+    }))
     const written = writeCard(outRoot, card)
     console.log(
       `${written.outcome}: ${written.path} [${result.kind}] evidence=${card.evidence.length} dropped=${failures.length} verified=${card.frontmatter.anchorsVerifiedAt !== undefined}`
@@ -128,10 +132,20 @@ async function main(): Promise<void> {
     tzOffsetMin
   })
   console.log(`index refreshed: ${join(outRoot, '000-index.md')}`)
-  refreshPitsIndex(session.directory, session, pitSources)
-  console.log(
-    `pits layer refreshed: ${join(session.directory || '', '.roadmap', 'pits', 'KEYWORDS.md')}`
-  )
+  // Pits layer is fully derived from cards on disk: rebuild covers sessions
+  // this run never touched, and repeated runs are idempotent. --out redirects
+  // the rebuild root so dry runs never touch the real project tree.
+  const pitsRoot = args.out
+    ? args.out.slice(0, args.out.lastIndexOf(join('.roadmap', '001')))
+    : session.directory
+  if (pitsRoot) {
+    const pitsPath = rebuildPitsIndex(pitsRoot, verifiedSeqs)
+    if (pitsPath) {
+      console.log(`pits layer rebuilt: ${pitsPath}`)
+    } else {
+      console.log('pits layer: no structured pits on disk, nothing written')
+    }
+  }
 }
 
 function renderCard(
@@ -196,6 +210,7 @@ function renderCard(
     frontmatter,
     anchors: { source: 'tui-sqlite', origin: { db: 'tui-sqlite', path: dbPath } },
     evidence,
+    pits: [],
     body
   }
 }

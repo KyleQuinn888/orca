@@ -68,10 +68,21 @@ export type CardAnchorsDefault = {
   origin: { db: string; path: string; profile?: string }
 }
 
+export type PitRecord = {
+  text: string
+  keywords: string[]
+  symptom?: string
+  fix?: string
+  seq?: number
+}
+
 export type RoadmapCard = {
   frontmatter: CardFrontmatter
   anchors: CardAnchorsDefault | null
   evidence: Evidence[]
+  /** Structured pits persisted IN the card (second durable store); the
+   * project KEYWORDS.md layer rebuilds from these. */
+  pits: PitRecord[]
   body: string
 }
 
@@ -151,6 +162,25 @@ export function serializeCard(card: RoadmapCard): string {
     for (const evidence of card.evidence) {
       blocks.push(serializeEvidence(evidence, card.anchors))
     }
+  }
+  if ((card.pits ?? []).length > 0) {
+    const pitLines: string[] = ['pits:']
+    for (const pit of card.pits) {
+      pitLines.push(`  - text: ${scalar(pit.text)}`)
+      if (pit.keywords.length > 0) {
+        pitLines.push(`    keywords: ${scalar(pit.keywords.join('、'))}`)
+      }
+      if (pit.symptom) {
+        pitLines.push(`    symptom: ${scalar(pit.symptom)}`)
+      }
+      if (pit.fix) {
+        pitLines.push(`    fix: ${scalar(pit.fix)}`)
+      }
+      if (pit.seq !== undefined) {
+        pitLines.push(`    seq: ${pit.seq}`)
+      }
+    }
+    blocks.push(pitLines.join('\n'))
   }
   return [
     ...lines,

@@ -14,6 +14,7 @@ import {
   countUserRole
 } from './tui-reader'
 import { parseChapterJson } from './summarizer'
+import { rebuildPitsIndex } from './pits-index'
 
 let fixtureDir: string
 let fixtureDb: Database
@@ -305,7 +306,7 @@ describe('S1 index card (session-index kind)', () => {
     expect(indexText).toContain('kind: session-index')
     expect(indexText).not.toContain('kind: session-chapter')
     expect(indexText).toContain('| one |')
-    expect(indexText).toContain('\\|')
+    expect(indexText).toContain(String.raw`\|`)
   })
 })
 
@@ -344,6 +345,39 @@ function chapterCard(index: number, slug: string): RoadmapCard {
     },
     anchors: null,
     evidence: [],
+    pits: [],
     body: `# Ch.${index} 澄清裁决\n\n## 要点\n- x`
   }
 }
+
+describe('pits layer (rebuild from cards)', () => {
+  it('rebuilds idempotently, single header, escapes pipes, links to cards, marks verified', () => {
+    const root = join(fixtureDir, 'pit-root')
+    const sessionDir = join(root, '.roadmap', '001', 's1')
+    mkdirSync(sessionDir, { recursive: true })
+    const card = chapterCard(1, 'one')
+    card.pits = [
+      {
+        text: '罚刚度命名：误读为 45° | 竖线：认 2a 轨',
+        keywords: ['罚刚度', 'K45'],
+        symptom: '误读',
+        fix: '认 2a 轨',
+        seq: 12
+      }
+    ]
+    writeCard(sessionDir, card)
+    const first = rebuildPitsIndex(root, new Set([12]))
+    expect(first).toContain('KEYWORDS.md')
+    const text1 = readFileSync(first!, 'utf8')
+    expect((text1.match(/^# /gm) ?? []).length).toBe(1)
+    expect(text1).toContain('罚刚度、K45')
+    expect(text1).toContain(String.raw`\|`)
+    expect(text1).toContain('[Ch.1](../001/s1/001-one.md)')
+    expect(text1).toContain('✓')
+    rebuildPitsIndex(root, new Set([12]))
+    expect(readFileSync(first!, 'utf8')).toBe(text1)
+  })
+  it('returns null when no structured pits exist', () => {
+    expect(rebuildPitsIndex(join(fixtureDir, 'no-such-root'))).toBeNull()
+  })
+})

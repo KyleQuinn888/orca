@@ -57,6 +57,9 @@ export async function summarizeChapter(args: {
       lastError = 'reply carried no parseable chapter JSON'
     } catch (error) {
       lastError = String(error)
+      if (lastError.includes('timed out')) {
+        break // a timeout is a budget problem, not a transient one
+      }
     }
   }
   cleanupTempDir(dir)
@@ -148,7 +151,23 @@ export function parseChapterJson(stdout: string): SummarizedChapter | null {
         ): SeqText[] =>
           (items ?? []).map((item) => (typeof item === 'string' ? { text: item } : item))
         const normalizePits = (items: (string | PitfallEntry)[] | undefined): PitfallEntry[] =>
-          (items ?? []).map((item) => (typeof item === 'string' ? { text: item } : item))
+          (items ?? [])
+            .filter((item): item is string | PitfallEntry => item !== null && item !== undefined)
+            .map((item) => {
+              if (typeof item === 'string') {
+                return { text: item }
+              }
+              return {
+                text: String(item.text ?? ''),
+                keywords: Array.isArray(item.keywords)
+                  ? item.keywords.filter((k): k is string => typeof k === 'string')
+                  : [],
+                symptom: typeof item.symptom === 'string' ? item.symptom : undefined,
+                fix: typeof item.fix === 'string' ? item.fix : undefined,
+                seq: typeof item.seq === 'number' ? item.seq : undefined
+              }
+            })
+            .filter((pit) => pit.text.length > 0)
         return {
           title: parsed.title,
           points: normalize(parsed.points),

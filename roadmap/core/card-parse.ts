@@ -4,7 +4,7 @@
 
 import type { CardAnchorsDefault, CardFrontmatter, CardSource, UncoveredRange } from './card'
 import type { Evidence } from './anchor'
-import type { RoadmapCard } from './card'
+import type { PitRecord, RoadmapCard } from './card'
 
 export class CardParseError extends Error {
   constructor(message: string) {
@@ -35,10 +35,31 @@ export function parseCard(text: string): RoadmapCard {
       evidence.push(parseEvidenceBlock(block[1], block[2]))
     }
   }
+  const pits: PitRecord[] = []
+  const pitsMatch = /\npits:\n([\s\S]*)$/.exec(body)
+  if (pitsMatch) {
+    for (const block of pitsMatch[1].matchAll(/  - text: ([^\n]+)\n([\s\S]*?)(?=\n  - text:|$)/g)) {
+      const values = new Map<string, string>()
+      for (const line of block[2].split('\n')) {
+        const kv = /^    ([A-Za-z]+): ?(.*)$/.exec(line)
+        if (kv) {
+          values.set(kv[1], kv[2])
+        }
+      }
+      pits.push({
+        text: unscalar(block[1]),
+        keywords: values.get('keywords') ? unscalar(values.get('keywords')!).split('、') : [],
+        symptom: values.get('symptom') ? unscalar(values.get('symptom')!) : undefined,
+        fix: values.get('fix') ? unscalar(values.get('fix')!) : undefined,
+        seq: values.get('seq') !== undefined ? Number(values.get('seq')) : undefined
+      })
+    }
+  }
   return {
     frontmatter,
     anchors,
     evidence,
+    pits,
     body: evidenceMatch ? body.slice(0, evidenceMatch.index) : body
   }
 }
