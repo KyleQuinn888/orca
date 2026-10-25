@@ -4,7 +4,8 @@
 // S6 is a GATE: evidence anchors are generated from per-point seqs and verified
 // against the source DB before a card is stamped anchorsVerifiedAt.
 
-import { readFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { SourceLocationError, locateSource, openTui } from './core/sources'
 import {
@@ -59,15 +60,25 @@ async function main(): Promise<void> {
     args.out ?? join(session.directory || process.cwd(), '.roadmap', '001', session.id)
   const tzOffsetMin = -new Date().getTimezoneOffset()
   const bySeq = new Map(session.messages.map((m) => [m.seq, m]))
+  // One fixed temp dir per session run + stable per-chapter digest filenames:
+  // the -p system prompt embeds "Working directory: <cwd>", so a random
+  // per-chapter mkdtemp broke the provider prefix cache BEFORE our template
+  // (review finding); a stable cwd keeps it constant across chapters.
+  const sessionDir = mkdtempSync(join(tmpdir(), `roadmap-${session.id.slice(0, 12)}-`))
   const verifiedSeqs = new Set<number>()
   for (const window of chosen) {
     window.userMsg.total = countUserRole(session, window)
     const { digest, truncated } = buildDigest(session, window)
-    const termHeader = termInjectionHeader(establishedTerms(outRoot))
+    const termHeader = termInjectionHeader(establishedTerms(outRoot, window.index))
     const digestWithTerms = `${termHeader}${digest}`
     const result = args.noLlm
       ? { kind: 'heuristic' as const, card: heuristicFrom(session, window), reason: '--no-llm' }
-      : await summarizeChapter({ digest: digestWithTerms, promptTemplate })
+      : await summarizeChapter({
+          digest: digestWithTerms,
+          promptTemplate,
+          sessionDir,
+          digestName: `digest-ch${String(window.index).padStart(3, '0')}.txt`
+        })
     const card = renderCard(session, window, result, truncated, dbPath, tzOffsetMin, chosen)
     // S6 gate: every accepted anchor MUST carry a quote (no quote = no
     // verification = dropped as quote-missing). Failing anchors are dropped
@@ -119,7 +130,8 @@ async function main(): Promise<void> {
       keywords: pit.keywords ?? [],
       symptom: pit.symptom,
       fix: pit.fix,
-      seq: pit.seq
+      seq: pit.seq,
+      quote: pit.quote
     }))
     const written = writeCard(outRoot, card)
     console.log(
@@ -140,13 +152,19 @@ async function main(): Promise<void> {
   // this run never touched, and repeated runs are idempotent. --out redirects
   // the rebuild root so dry runs never touch the real project tree.
   const termConflicts = lintTerms(outRoot)
+  const lintReportPath = join(outRoot, 'term-lint.txt')
   if (termConflicts.length > 0) {
-    console.warn(`[roadmap] 术语漂移 lint（非阻断，建议统一后重生成对应章）：`)
-    for (const conflict of termConflicts) {
-      console.warn(
-        `  「${conflict.jargon}」→ ${conflict.renderings.join(' / ')}（Ch.${conflict.chapters.join(', ')}）`
+    const report = [
+      '术语漂移 lint（非阻断，建议统一后重生成对应章）：',
+      ...termConflicts.map(
+        (c) => `  「${c.jargon}」→ ${c.renderings.join(' / ')}（Ch.${c.chapters.join(', ')}）`
       )
-    }
+    ].join('\n')
+    console.warn(`[roadmap] ${report}`)
+    writeFileSync(lintReportPath, `${report}\n`, 'utf8')
+    console.log(`lint report: ${lintReportPath}`)
+  } else if (existsSync(lintReportPath)) {
+    rmSync(lintReportPath)
   }
   const pitsRoot = args.out
     ? args.out.slice(0, args.out.lastIndexOf(join('.roadmap', '001')))

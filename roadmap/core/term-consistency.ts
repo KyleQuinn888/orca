@@ -1,62 +1,62 @@
-// Terminology consistency: B) rolling injection — extract term pairs already
-// established in earlier chapter cards (标准词（会话内称「黑话」） pattern) and
-// feed them to the next chapter so renderings stay stable; C) post-hoc lint —
-// detect the same jargon mapping to different standard terms across cards and
-// report (non-blocking). Zero maintenance by design: the cards ARE the
-// glossary.
+// Terminology consistency: B) rolling injection — feed the next chapter the
+// term pairs already established in EARLIER chapter cards so renderings stay
+// stable; C) post-hoc lint — same jargon mapped to different standard terms
+// across cards, reported non-blocking. Zero maintenance: the cards ARE the
+// glossary. Review-driven hardening: pairs come only from chapters STRICTLY
+// BEFORE the one being generated (regenerating ch5 must not treat stale
+// ch5/ch10 as canon), cross-chapter dedupe, an injection cap, and the prose
+// fallback trusts ONLY the injection-header line format (a free-prose regex
+// proved to absorb junk prefixes like "我们最终采用了冻结参数集" and then
+// get canonized by the reuse rule — a garbage-feedback loop).
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 export type TermPair = { standard: string; jargon: string; chapter: number }
 
-const PAIR_PATTERN = /([^\s「」（）()，。；：、"'\\/]{2,16})（会话内称「([^」]{1,16})」）/g
+/** Trusted fallback: only pairs formatted exactly like the injection header. */
+const HEADER_LINE = /^- ([^\s「」（）()，。；：、"'/]{2,16})（会话内称「([^」]{1,16})」）$/gm
 
 export function extractTermPairs(text: string): { standard: string; jargon: string }[] {
   const pairs: { standard: string; jargon: string }[] = []
-  for (const match of text.matchAll(PAIR_PATTERN)) {
+  for (const match of text.matchAll(HEADER_LINE)) {
     pairs.push({ standard: match[1]!, jargon: match[2]! })
   }
-  return dedupe(pairs)
+  return pairs
 }
 
-function dedupe(
-  pairs: { standard: string; jargon: string }[]
-): { standard: string; jargon: string }[] {
-  const seen = new Set<string>()
-  return pairs.filter((p) => {
-    const key = `${p.standard}=${p.jargon}`
-    if (seen.has(key)) {
-      return false
-    }
-    seen.add(key)
-    return true
-  })
-}
-
-/** Pairs established in already-written chapter cards (index < current). */
-export function establishedTerms(sessionDir: string): TermPair[] {
-  const pairs: TermPair[] = []
+/** Pairs established in chapter cards with index < currentChapter. */
+export function establishedTerms(sessionDir: string, currentChapter: number): TermPair[] {
+  const byPair = new Map<string, TermPair>()
   if (!existsSync(sessionDir)) {
-    return pairs
+    return []
   }
   for (const name of readdirSync(sessionDir).sort()) {
     if (
       !/^\d+-.*\.md$/.test(name) ||
-      name.includes('index') ||
+      /^0+-index/.test(name) ||
       name.endsWith('.superseded.md') ||
-      name.endsWith('.new.md')
+      name.endsWith('.new.md') ||
+      name.endsWith('.legacy.md')
     ) {
       continue
     }
     const chapter = Number(/^(\d+)-/.exec(name)?.[1] ?? '0')
+    if (chapter >= currentChapter) {
+      continue
+    }
     const text = readFileSync(join(sessionDir, name), 'utf8')
     for (const pair of extractTermPairs(text)) {
-      pairs.push({ ...pair, chapter })
+      const key = `${pair.standard}=${pair.jargon}`
+      if (!byPair.has(key)) {
+        byPair.set(key, { ...pair, chapter })
+      }
     }
   }
-  return pairs
+  return [...byPair.values()]
 }
+
+const INJECTION_CAP = 60
 
 /** Rolling-injection header for the next chapter's digest. */
 export function termInjectionHeader(pairs: TermPair[]): string {
@@ -64,8 +64,13 @@ export function termInjectionHeader(pairs: TermPair[]): string {
     return ''
   }
   const lines = ['已确立标准术语（前章定稿，沿用同一写法，禁止改用近义表述）：']
-  for (const pair of pairs) {
+  for (const pair of pairs.slice(0, INJECTION_CAP)) {
     lines.push(`- ${pair.standard}（会话内称「${pair.jargon}」）`)
+  }
+  if (pairs.length > INJECTION_CAP) {
+    lines.push(
+      `（另有 ${pairs.length - INJECTION_CAP} 对早期低频术语未列出，如遇未见过的会话黑话按术语规范自行括注）`
+    )
   }
   return `${lines.join('\n')}\n\n`
 }
@@ -75,7 +80,7 @@ export type TermConflict = { jargon: string; renderings: string[]; chapters: num
 /** Post-hoc lint: same jargon rendered differently across chapters. */
 export function lintTerms(sessionDir: string): TermConflict[] {
   const byJargon = new Map<string, Map<string, number[]>>()
-  for (const pair of establishedTerms(sessionDir)) {
+  for (const pair of establishedTerms(sessionDir, Number.MAX_SAFE_INTEGER)) {
     if (!byJargon.has(pair.jargon)) {
       byJargon.set(pair.jargon, new Map())
     }

@@ -51,7 +51,8 @@ export function parseCard(text: string): RoadmapCard {
         keywords: values.get('keywords') ? unscalar(values.get('keywords')!).split('、') : [],
         symptom: values.get('symptom') ? unscalar(values.get('symptom')!) : undefined,
         fix: values.get('fix') ? unscalar(values.get('fix')!) : undefined,
-        seq: values.get('seq') !== undefined ? Number(values.get('seq')) : undefined
+        seq: values.get('seq') !== undefined ? Number(values.get('seq')) : undefined,
+        quote: values.get('quote') ? unscalar(values.get('quote')!) : undefined
       })
     }
   }

@@ -15,6 +15,7 @@ import {
 } from './tui-reader'
 import { parseChapterJson } from './summarizer'
 import { rebuildPitsIndex } from './pits-index'
+import { establishedTerms, extractTermPairs, lintTerms } from './term-consistency'
 
 let fixtureDir: string
 let fixtureDb: Database
@@ -379,5 +380,64 @@ describe('pits layer (rebuild from cards)', () => {
   })
   it('returns null when no structured pits exist', () => {
     expect(rebuildPitsIndex(join(fixtureDir, 'no-such-root'))).toBeNull()
+  })
+})
+
+describe('term consistency (review-hardened)', () => {
+  it('extracts only trusted header-format lines, never free prose', () => {
+    const prose = '我们最终采用了冻结参数集（会话内称「冻结卡」）继续推进'
+    expect(extractTermPairs(prose)).toEqual([])
+    const header = '- 冻结参数集（会话内称「冻结卡」）'
+    expect(extractTermPairs(header)).toEqual([{ standard: '冻结参数集', jargon: '冻结卡' }])
+  })
+  it('establishedTerms excludes current and later chapters, dedupes across chapters', () => {
+    const dir = join(fixtureDir, 'term-root', 'sess')
+    mkdirSync(dir, { recursive: true })
+    writeCard(dir, {
+      ...chapterCard(1, 'a'),
+      body: '- 冻结参数集（会话内称「冻结卡」）\n\n- 帽盖模型轨（会话内称「帽轨」）'
+    })
+    writeCard(dir, { ...chapterCard(2, 'b'), body: '- 冻结参数集（会话内称「冻结卡」）' })
+    writeCard(dir, { ...chapterCard(3, 'c'), body: '- 未来术语（会话内称「未来」）' })
+    const pairsFor3 = establishedTerms(dir, 3)
+    expect(pairsFor3).toHaveLength(2) // dedupe: 冻结参数集 appears once despite ch1+ch2
+    const pairsFor2 = establishedTerms(dir, 2)
+    expect(pairsFor2.every((p) => p.chapter < 2)).toBe(true)
+  })
+  it('lintTerms detects same jargon with different standard renderings', () => {
+    const dir = join(fixtureDir, 'term-root2', 'sess')
+    mkdirSync(dir, { recursive: true })
+    writeCard(dir, { ...chapterCard(1, 'a'), body: '- 帽盖模型轨（会话内称「帽轨」）' })
+    writeCard(dir, { ...chapterCard(2, 'b'), body: '- 帽形模型轨（会话内称「帽轨」）' })
+    const conflicts = lintTerms(dir)
+    expect(conflicts).toHaveLength(1)
+    expect(conflicts[0].renderings.sort()).toEqual(['帽形模型轨', '帽盖模型轨'])
+  })
+})
+
+describe('pit quote survives the full chain', () => {
+  it('normalizePits carries quote; parseChapterJson keeps pit quote and terms', () => {
+    const noisy = JSON.stringify({
+      title: 'T',
+      points: [{ text: 'p', seq: 1, quote: '原文引用一' }],
+      decisions: [{ text: 'd', seq: 2, quote: '原文引用二' }],
+      artifacts: [],
+      pitfalls: [
+        { text: '坑', keywords: ['k'], symptom: 's', fix: 'f', seq: 3, quote: '原文引用三' }
+      ],
+      terms: [{ standard: '冻结参数集', jargon: '冻结卡' }]
+    })
+    const parsed = parseChapterJson(noisy)
+    expect(parsed?.pitfalls[0].quote).toBe('原文引用三')
+    expect(parsed?.decisions[0].quote).toBe('原文引用二')
+    expect(parsed?.terms?.[0]).toEqual({ standard: '冻结参数集', jargon: '冻结卡' })
+  })
+  it('PitRecord quote round-trips through serializeCard/parseCard', () => {
+    const card = chapterCard(1, 'q')
+    card.pits = [{ text: '坑X', keywords: ['k'], seq: 7, quote: '逐字原文引用' }]
+    const text = serializeCard(card)
+    expect(text).toContain('quote:')
+    const parsed = parseCard(text)
+    expect(parsed.pits[0].quote).toBe('逐字原文引用')
   })
 })

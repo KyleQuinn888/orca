@@ -20,7 +20,10 @@ export type PitfallEntry = {
   symptom?: string
   fix?: string
   seq?: number
+  quote?: string
 }
+
+export type TermPairOut = { standard: string; jargon: string }
 
 export type SummarizedChapter = {
   title: string
@@ -28,6 +31,9 @@ export type SummarizedChapter = {
   decisions: SeqText[]
   artifacts: string[]
   pitfalls: PitfallEntry[]
+  /** Structured term pairs the model itself declared (primary source for
+   * the rolling terminology injection; prose regex is only a fallback). */
+  terms?: TermPairOut[]
 }
 
 const RETRY_DELAYS_MS = [2000, 4000]
@@ -35,11 +41,15 @@ const RETRY_DELAYS_MS = [2000, 4000]
 export async function summarizeChapter(args: {
   digest: string
   promptTemplate: string
+  /** Stable per-session dir: keeps the child cwd (embedded in the -p system
+   * prompt) constant so the provider prefix cache survives across chapters. */
+  sessionDir?: string
+  digestName?: string
   zcodeBin?: string
 }): Promise<SummarizerResult> {
   const bin = args.zcodeBin ?? 'zcode'
-  const dir = mkdtempSync(join(tmpdir(), 'roadmap-summarize-'))
-  const digestFile = join(dir, 'digest.txt')
+  const dir = args.sessionDir ?? mkdtempSync(join(tmpdir(), 'roadmap-summarize-'))
+  const digestFile = join(dir, args.digestName ?? `digest-${Date.now()}.txt`)
   writeFileSync(digestFile, args.digest, 'utf8')
   const prompt = args.promptTemplate.replace('{{DIGEST_FILE}}', digestFile)
   let lastError = 'unknown error'
@@ -51,7 +61,9 @@ export async function summarizeChapter(args: {
       const stdout = await runZcode(bin, prompt, dir)
       const parsed = parseChapterJson(stdout)
       if (parsed) {
-        cleanupTempDir(dir)
+        if (args.sessionDir === undefined) {
+          cleanupTempDir(dir)
+        }
         return { kind: 'llm', card: parsed }
       }
       lastError = 'reply carried no parseable chapter JSON'
@@ -62,7 +74,9 @@ export async function summarizeChapter(args: {
       }
     }
   }
-  cleanupTempDir(dir)
+  if (args.sessionDir === undefined) {
+    cleanupTempDir(dir)
+  }
   return { kind: 'heuristic', card: heuristicCard(args.digest), reason: lastError }
 }
 
@@ -140,6 +154,7 @@ export function parseChapterJson(stdout: string): SummarizedChapter | null {
         points?: (string | SeqText)[]
         decisions?: (string | SeqText)[]
         pitfalls?: (string | PitfallEntry)[]
+        terms?: TermPairOut[]
       }
       if (
         typeof parsed.title === 'string' &&
@@ -164,7 +179,8 @@ export function parseChapterJson(stdout: string): SummarizedChapter | null {
                   : [],
                 symptom: typeof item.symptom === 'string' ? item.symptom : undefined,
                 fix: typeof item.fix === 'string' ? item.fix : undefined,
-                seq: typeof item.seq === 'number' ? item.seq : undefined
+                seq: typeof item.seq === 'number' ? item.seq : undefined,
+                quote: typeof item.quote === 'string' ? item.quote : undefined
               }
             })
             .filter((pit) => pit.text.length > 0)
@@ -173,7 +189,12 @@ export function parseChapterJson(stdout: string): SummarizedChapter | null {
           points: normalize(parsed.points),
           decisions: normalize(parsed.decisions),
           artifacts: parsed.artifacts ?? [],
-          pitfalls: normalizePits(parsed.pitfalls)
+          pitfalls: normalizePits(parsed.pitfalls),
+          terms: Array.isArray(parsed.terms)
+            ? parsed.terms
+                .filter((t) => t && typeof t.standard === 'string' && typeof t.jargon === 'string')
+                .slice(0, 40)
+            : undefined
         }
       }
     } catch {
