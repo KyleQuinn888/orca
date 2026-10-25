@@ -7,6 +7,22 @@ import { tuiEvidence, type Evidence } from './anchor'
 
 import type { SummarizedChapter } from './summarizer'
 
+/**
+ * S6 forgery guard: LLM free text is spliced into card bodies, so any line
+ * that would parse as a structural block marker ('## …' headings, bare
+ * 'pits:'/'anchors:'/'evidence:' keys) gets mangled with a '·' prefix, and
+ * stray newlines collapse to '；' — parseCard can then never read a forged
+ * evidence/pits block out of a body. Idempotent.
+ */
+export function sanitizeLlmText(text: string): string {
+  return text
+    .split('\n')
+    .map((line) =>
+      line.startsWith('## ') || /^(pits|anchors|evidence):$/.test(line) ? `·${line}` : line
+    )
+    .join('；')
+}
+
 export function renderCard(
   session: TuiSession,
   window: ChapterWindow,
@@ -50,19 +66,21 @@ export function renderCard(
     `# Ch.${window.index} ${result.card.title}${result.kind === 'heuristic' ? '（启发式降级）' : ''}`,
     result.reason && result.kind === 'heuristic' ? `> 降级原因：${result.reason}\n` : '',
     '## 要点',
-    ...result.card.points.map((p) => `- ${p.text}`),
+    ...result.card.points.map((p) => `- ${sanitizeLlmText(p.text)}`),
     '',
     '## 关键决策',
     ...(result.card.decisions.length > 0
-      ? result.card.decisions.map((d) => `- ${d.text}`)
+      ? result.card.decisions.map((d) => `- ${sanitizeLlmText(d.text)}`)
       : ['- 无']),
     '',
     '## 涉及文件/产物',
-    ...(result.card.artifacts.length > 0 ? result.card.artifacts.map((a) => `- ${a}`) : ['- 无']),
+    ...(result.card.artifacts.length > 0
+      ? result.card.artifacts.map((a) => `- ${sanitizeLlmText(a)}`)
+      : ['- 无']),
     '',
     '## 坑',
     ...(result.card.pitfalls.length > 0
-      ? result.card.pitfalls.map((p) => `- ${p.text}`)
+      ? result.card.pitfalls.map((p) => `- ${sanitizeLlmText(p.text)}`)
       : ['- 本段无'])
   ].join('\n')
   return {
@@ -122,11 +140,14 @@ function complementRanges(
   return gaps
 }
 
-function slugify(title: string): string {
+/** Filename-safe slug: strips path separators/metacharacters, collapses
+ * traversal dots, trims, caps length — never empty, never a path fragment. */
+export function slugify(title: string): string {
   return (
     title
       .replace(/[\\/:*?"<>|\s]+/g, '-')
-      .replace(/^-+|-+$/g, '')
+      .replace(/\.{2,}/g, '.')
+      .replace(/^[.-]+|[.-]+$/g, '')
       .slice(0, 60) || 'untitled'
   )
 }

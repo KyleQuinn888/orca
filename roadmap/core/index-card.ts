@@ -5,6 +5,7 @@
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { escapeCell, isChapterCardFile } from './chapter-files'
 import { parseCard, writeCard, type RoadmapCard } from './card'
 
 export function buildIndexCard(args: {
@@ -80,14 +81,13 @@ function renderIndexBody(chapters: RoadmapCard[]): string {
     const heading = /^#\s+(?:Ch\.\d+\s+)?(.+)$/m.exec(card.body)
     const f = card.frontmatter
     lines.push(
-      `| ${chapterIndex(card)} | ${f.chapter?.slug ?? ''} | ${escapeCell(heading?.[1] ?? f.chapter?.slug ?? '')} | seq ${f.span.firstMsgSeq}–${f.span.lastMsgSeq} | ${f.span.userMsg.human} | ${f.time.firstTime.slice(0, 16)} | ${f.quality}/${f.provenance} | ${f.source} |`
+      `| ${chapterIndex(card)} | ${escapeCell(f.chapter?.slug ?? '', 80)} | ${escapeCell(
+        heading?.[1] ?? f.chapter?.slug ?? '',
+        80
+      )} | seq ${f.span.firstMsgSeq}–${f.span.lastMsgSeq} | ${f.span.userMsg.human} | ${f.time.firstTime.slice(0, 16)} | ${f.quality}/${f.provenance} | ${f.source} |`
     )
   }
   return lines.join('\n')
-}
-
-function escapeCell(text: string): string {
-  return text.replace(/\|/g, '\\|').slice(0, 80)
 }
 
 export function refreshIndex(directory: string, args: Parameters<typeof buildIndexCard>[0]): void {
@@ -96,7 +96,7 @@ export function refreshIndex(directory: string, args: Parameters<typeof buildInd
   const chapters: RoadmapCard[] = []
   if (existsSync(directory)) {
     for (const name of readdirSync(directory).sort()) {
-      if (!/^\d+-.*\.md$/.test(name) || name.endsWith('.new.md') || name.includes('index')) {
+      if (!isChapterCardFile(name)) {
         continue
       }
       try {

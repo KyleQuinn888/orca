@@ -11,6 +11,8 @@
 
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
+import { isChapterCardFile } from './chapter-files'
+import { parseCard } from './card'
 
 export type TermPair = { standard: string; jargon: string; chapter: number }
 
@@ -32,13 +34,7 @@ export function establishedTerms(sessionDir: string, currentChapter: number): Te
     return []
   }
   for (const name of readdirSync(sessionDir).sort()) {
-    if (
-      !/^\d+-.*\.md$/.test(name) ||
-      /^0+-index/.test(name) ||
-      name.endsWith('.superseded.md') ||
-      name.endsWith('.new.md') ||
-      name.endsWith('.legacy.md')
-    ) {
+    if (!isChapterCardFile(name)) {
       continue
     }
     const chapter = Number(/^(\d+)-/.exec(name)?.[1] ?? '0')
@@ -46,7 +42,16 @@ export function establishedTerms(sessionDir: string, currentChapter: number): Te
       continue
     }
     const text = readFileSync(join(sessionDir, name), 'utf8')
-    for (const pair of extractTermPairs(text)) {
+    // Structured `terms:` block is the primary source (model-declared);
+    // header-format lines remain the fallback for cards without the block.
+    let declared: { standard: string; jargon: string }[] | null = null
+    try {
+      const card = parseCard(text)
+      declared = card.terms && card.terms.length > 0 ? card.terms : null
+    } catch {
+      declared = null
+    }
+    for (const pair of declared ?? extractTermPairs(text)) {
       const key = `${pair.standard}=${pair.jargon}`
       if (!byPair.has(key)) {
         byPair.set(key, { ...pair, chapter })

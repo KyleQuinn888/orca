@@ -4,7 +4,7 @@
 
 import type { CardAnchorsDefault, CardFrontmatter, CardSource, UncoveredRange } from './card'
 import type { Evidence } from './anchor'
-import type { PitRecord, RoadmapCard } from './card'
+import type { PitRecord, RoadmapCard, TermRecord } from './card'
 
 export class CardParseError extends Error {
   constructor(message: string) {
@@ -56,11 +56,24 @@ export function parseCard(text: string): RoadmapCard {
       })
     }
   }
+  const terms: TermRecord[] = []
+  const termsMatch = /\nterms:\n([\s\S]*)$/.exec(body)
+  if (termsMatch) {
+    for (const block of termsMatch[1].matchAll(
+      /  - standard: ([^\n]+)\n([\s\S]*?)(?=\n  - standard:|$)/g
+    )) {
+      const jargon = /^    jargon: ?(.*)$/m.exec(block[2])
+      if (jargon) {
+        terms.push({ standard: unscalar(block[1]), jargon: unscalar(jargon[1]) })
+      }
+    }
+  }
   return {
     frontmatter,
     anchors,
     evidence,
     pits,
+    terms,
     body: evidenceMatch ? body.slice(0, evidenceMatch.index) : body
   }
 }
@@ -301,7 +314,3 @@ function unscalar(value: string): string {
   const quoted = /^'(.*)'$/s.exec(value)
   return quoted ? quoted[1].replace(/''/g, "'") : value
 }
-
-export type WriteResult =
-  | { outcome: 'written'; path: string }
-  | { outcome: 'hand-edited-kept'; path: string; draftPath: string }

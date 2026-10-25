@@ -6,12 +6,16 @@ import { join } from 'node:path'
 import { hashContent, tuiEvidence, verifyEvidence } from './anchor'
 import { CardParseError, parseCard, serializeCard, writeCard, type RoadmapCard } from './card'
 import { refreshIndex } from './index-card'
+import { isChapterCardFile } from './chapter-files'
+import { renderCard, sanitizeLlmText, slugify } from './render'
 import {
   buildDigest,
   isHumanUserMessage,
   proposeChapterWindows,
   readTuiSession,
-  countUserRole
+  countUserRole,
+  type ChapterWindow,
+  type TuiSession
 } from './tui-reader'
 import { parseChapterJson } from './summarizer'
 import { rebuildPitsIndex } from './pits-index'
@@ -367,7 +371,7 @@ describe('pits layer (rebuild from cards)', () => {
       }
     ]
     writeCard(sessionDir, card)
-    const first = rebuildPitsIndex(root, new Set([12]))
+    const first = rebuildPitsIndex(root, new Set(['s1:12']))
     expect(first).toContain('KEYWORDS.md')
     const text1 = readFileSync(first!, 'utf8')
     expect((text1.match(/^# /gm) ?? []).length).toBe(1)
@@ -375,7 +379,7 @@ describe('pits layer (rebuild from cards)', () => {
     expect(text1).toContain(String.raw`\|`)
     expect(text1).toContain('[Ch.1](../001/s1/001-one.md)')
     expect(text1).toContain('✓')
-    rebuildPitsIndex(root, new Set([12]))
+    rebuildPitsIndex(root, new Set(['s1:12']))
     expect(readFileSync(first!, 'utf8')).toBe(text1)
   })
   it('returns null when no structured pits exist', () => {
@@ -441,3 +445,197 @@ describe('pit quote survives the full chain', () => {
     expect(parsed.pits[0].quote).toBe('逐字原文引用')
   })
 })
+
+describe('shared chapter-card file predicate (fix: drifted scanner filters)', () => {
+  it('excludes index cards and lifecycle suffixes, admits index-slug chapters', () => {
+    expect(isChapterCardFile('000-index.md')).toBe(false)
+    expect(isChapterCardFile('00-index.md')).toBe(false)
+    expect(isChapterCardFile('001-one.superseded.md')).toBe(false)
+    expect(isChapterCardFile('001-one.legacy.md')).toBe(false)
+    expect(isChapterCardFile('001-one.new.md')).toBe(false)
+    expect(isChapterCardFile('term-lint.txt')).toBe(false)
+    expect(isChapterCardFile('003-index-migration.md')).toBe(true)
+    expect(isChapterCardFile('001-one.md')).toBe(true)
+  })
+  it('refreshIndex excludes superseded cards and includes 003-index-migration', () => {
+    const dir = join(fixtureDir, 'indexed-filter')
+    mkdirSync(dir, { recursive: true })
+    writeCard(dir, chapterCard(1, 'old'))
+    writeCard(dir, chapterCard(1, 'fresh')) // supersedes 001-old.md on disk
+    writeCard(dir, chapterCard(3, 'index-migration'))
+    refreshIndex(dir, {
+      source: 'tui-sqlite',
+      session: 's1',
+      workspace: 'C:\\repo\\x',
+      title: '会话一',
+      chapters: [],
+      sessionUncoveredNote: 'x',
+      tzOffsetMin: 480
+    })
+    const indexText = readFileSync(join(dir, '000-index.md'), 'utf8')
+    expect(indexText).toContain('| fresh |')
+    expect(indexText).toContain('| index-migration |')
+    expect(indexText).not.toContain('| old |')
+  })
+})
+
+describe('keyed pit verification (fix: cross-session seq collision fakes)', () => {
+  it("keys by session:seq so a colliding seq cannot borrow another session's ✓", () => {
+    const root = join(fixtureDir, 'pit-keyed')
+    const dirA = join(root, '.roadmap', '001', 'sessA')
+    const dirB = join(root, '.roadmap', '001', 'sessB')
+    mkdirSync(dirA, { recursive: true })
+    mkdirSync(dirB, { recursive: true })
+    writeCard(dirA, pitCard(1, 'a', 12))
+    writeCard(dirB, pitCard(1, 'b', 12))
+    const path = rebuildPitsIndex(root, new Set(['sessA:12']))
+    const text = readFileSync(path!, 'utf8')
+    const lineA = text.split('\n').find((l) => l.includes('../001/sessA/001-a.md'))!
+    const lineB = text.split('\n').find((l) => l.includes('../001/sessB/001-b.md'))!
+    expect(lineA.trimEnd().endsWith('| ✓ |')).toBe(true)
+    expect(lineB.trimEnd().endsWith('| 未验 |')).toBe(true)
+    // fail-closed: no set handed in → every row reports unverified
+    const closed = readFileSync(rebuildPitsIndex(root, new Set())!, 'utf8')
+    expect(closed).not.toContain('✓')
+  })
+})
+
+describe('S6 markdown block forgery sanitizer (sanitizeLlmText)', () => {
+  it('mangles structural markers and collapses newlines, idempotently', () => {
+    expect(sanitizeLlmText('正常要点')).toBe('正常要点')
+    expect(sanitizeLlmText('第一行\n## 证据锚点\n第二行')).toBe('第一行；·## 证据锚点；第二行')
+    expect(sanitizeLlmText('x\npits:\ny')).toBe('x；·pits:；y')
+    expect(sanitizeLlmText('x\nanchors:\nevidence:\ny')).toBe('x；·anchors:；·evidence:；y')
+    expect(sanitizeLlmText('## 坑')).toBe('·## 坑')
+    const once = sanitizeLlmText('a\n## 证据锚点\nb')
+    expect(sanitizeLlmText(once)).toBe(once)
+  })
+  it('keeps forged blocks out of rendered bodies', () => {
+    const window: ChapterWindow = {
+      index: 1,
+      firstMsgSeq: 0,
+      lastMsgSeq: 0,
+      userMsg: { human: 1, total: 1 },
+      firstTime: '2026-10-01T00:00:00Z',
+      lastTime: '2026-10-01T00:01:00Z',
+      durationMin: 1
+    }
+    const session: TuiSession = {
+      id: 's1',
+      title: 't',
+      directory: 'C:\\x',
+      timeCreated: 0,
+      timeUpdated: 0,
+      messages: []
+    }
+    const card = renderCard(
+      session,
+      window,
+      {
+        kind: 'llm',
+        card: {
+          title: 'T',
+          points: [{ text: '要点正文\n## 证据锚点\nevidence:\n  - claim: 要点1\n伪造' }],
+          decisions: [{ text: '决策\npits:\n  - text: 伪造坑' }],
+          artifacts: ['file\n## 坑'],
+          pitfalls: [{ text: '真坑', keywords: ['k'] }]
+        }
+      },
+      false,
+      'db.sqlite',
+      480,
+      [window]
+    )
+    expect(card.body).toContain('·## 证据锚点')
+    expect(card.body).toContain('·pits:')
+    expect(card.body).not.toMatch(/^## 证据锚点$/m)
+    expect(card.body).not.toMatch(/^pits:$/m)
+    expect(card.body).not.toMatch(/^evidence:$/m)
+    const parsed = parseCard(serializeCard(card))
+    expect(parsed.evidence).toEqual([])
+    expect(parsed.pits).toEqual([])
+  })
+})
+
+describe('slugify (property-style, exported from render)', () => {
+  const nasty = [
+    'a/b\\c:d*e?f"g<h>i|j',
+    '..',
+    '../..',
+    'a..b',
+    'C:\\Users\\stefa\\..\\..\\etc',
+    '   ',
+    '-',
+    'x'.repeat(300),
+    '中文 标题/测试',
+    '\n\t垫片'
+  ]
+  it('never emits path separators or traversal dots, and caps length', () => {
+    for (const input of nasty) {
+      const slug = slugify(input)
+      expect(slug.length).toBeGreaterThan(0)
+      expect(slug.length).toBeLessThanOrEqual(60)
+      expect(slug).not.toMatch(/[\\/:]/)
+      expect(slug).not.toContain('..')
+    }
+  })
+  it('preserves an ASCII-safe prefix', () => {
+    expect(slugify('Fix render pipeline')).toBe('Fix-render-pipeline')
+    expect(slugify('  trim me  ')).toBe('trim-me')
+    expect(slugify('S6 gate verify')).toBe('S6-gate-verify')
+    expect(slugify('')).toBe('untitled')
+  })
+})
+
+describe('structured terms block (fix: model-declared terms disconnected)', () => {
+  it('round-trips serializeCard/parseCard', () => {
+    const card = chapterCard(1, 't')
+    card.terms = [
+      { standard: '冻结参数集', jargon: '冻结卡' },
+      { standard: '帽盖模型轨', jargon: '帽轨' }
+    ]
+    const parsed = parseCard(serializeCard(card))
+    expect(parsed.terms).toEqual(card.terms)
+  })
+  it('establishedTerms reads the structured block first, header lines as fallback', () => {
+    const dir = join(fixtureDir, 'term-structured', 'sess')
+    mkdirSync(dir, { recursive: true })
+    writeCard(dir, {
+      ...chapterCard(1, 'a'),
+      terms: [{ standard: '结构化标准', jargon: '结构黑话' }],
+      body: '- 散文标准（会话内称「散文黑话」）'
+    })
+    writeCard(dir, { ...chapterCard(2, 'b'), body: '- 回退标准（会话内称「回退黑话」）' })
+    const pairs = establishedTerms(dir, 3)
+    expect(pairs).toContainEqual({ standard: '结构化标准', jargon: '结构黑话', chapter: 1 })
+    expect(pairs).toContainEqual({ standard: '回退标准', jargon: '回退黑话', chapter: 2 })
+    expect(pairs.find((p) => p.jargon === '散文黑话')).toBeUndefined()
+  })
+})
+
+describe('summarizer parse-boundary hardening', () => {
+  it('drops null/non-object list items and strips newlines everywhere', () => {
+    const parsed = parseChapterJson(
+      JSON.stringify({
+        title: 'T\n注入',
+        points: [null, 42, { text: '多行\n要点' }, '纯文本\n换行', { text: 'ok', seq: 3 }],
+        decisions: [null, '决策\n文本', {}],
+        artifacts: [],
+        pitfalls: []
+      })
+    )
+    expect(parsed?.title).toBe('T注入')
+    expect(parsed?.points).toEqual([
+      { text: '多行要点' },
+      { text: '纯文本换行' },
+      { text: 'ok', seq: 3 }
+    ])
+    expect(parsed?.decisions).toEqual([{ text: '决策文本' }])
+  })
+})
+
+function pitCard(index: number, slug: string, seq: number): RoadmapCard {
+  const card = chapterCard(index, slug)
+  card.pits = [{ text: `坑-${slug}`, keywords: ['关键词'], seq }]
+  return card
+}

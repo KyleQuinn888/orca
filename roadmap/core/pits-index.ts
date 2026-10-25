@@ -14,6 +14,7 @@ import {
   writeFileSync
 } from 'node:fs'
 import { join } from 'node:path'
+import { escapeCell, isChapterCardFile } from './chapter-files'
 import { parseCard } from './card'
 
 export type PitRow = {
@@ -30,11 +31,12 @@ export type PitRow = {
 
 /**
  * Rebuild the whole KEYWORDS.md from all chapter cards under
- * root/.roadmap/001 (each session directory). The verifiedBySeq set marks
- * rows whose seq resolves in the source DB (the S6 guarantee lives on
- * cards; here we surface it).
+ * root/.roadmap/001 (each session directory). The verifiedBySeq set carries
+ * keys `${sessionId}:${seq}` — a bare seq would let one session's verified
+ * row vouch for another session's colliding seq (cross-session fake ✓).
+ * When the set is OMITTED every row reports unverified (fail-closed).
  */
-export function rebuildPitsIndex(root: string, verifiedBySeq?: Set<number>): string | null {
+export function rebuildPitsIndex(root: string, verifiedBySeq?: Set<string>): string | null {
   const sessionsDir = join(root, '.roadmap', '001')
   if (!existsSync(sessionsDir)) {
     return null
@@ -48,13 +50,7 @@ export function rebuildPitsIndex(root: string, verifiedBySeq?: Set<number>): str
     const rows: PitRow[] = []
     let sessionTitle = sessionId
     for (const name of readdirSync(sessionDir).sort()) {
-      if (
-        !/^\d+-.*\.md$/.test(name) ||
-        name.endsWith('.new.md') ||
-        name.endsWith('.legacy.md') ||
-        name.endsWith('.superseded.md') ||
-        name.includes('index')
-      ) {
+      if (!isChapterCardFile(name)) {
         continue
       }
       try {
@@ -72,7 +68,10 @@ export function rebuildPitsIndex(root: string, verifiedBySeq?: Set<number>): str
             symptom: pit.symptom,
             fix: pit.fix,
             text: pit.text,
-            verified: verifiedBySeq ? pit.seq !== undefined && verifiedBySeq.has(pit.seq) : true
+            verified:
+              pit.seq !== undefined &&
+              verifiedBySeq !== undefined &&
+              verifiedBySeq.has(`${sessionId}:${pit.seq}`)
           })
         }
       } catch {
@@ -89,7 +88,10 @@ export function rebuildPitsIndex(root: string, verifiedBySeq?: Set<number>): str
           (r) =>
             `| ${escapeCell(r.keywords.join('、')) || escapeCell(r.text.slice(0, 12))} | ${escapeCell(
               r.symptom && r.fix ? `${r.symptom} → ${r.fix}` : r.text
-            )} | [Ch.${r.chapter}](../001/${r.session}/${String(r.chapter).padStart(3, '0')}-${r.slug}.md) seq ${r.seq ?? '?'} | ${r.verified ? '✓' : '未验'} |`
+            )} | ${escapeCell(
+              `[Ch.${r.chapter}](../001/${r.session}/${String(r.chapter).padStart(3, '0')}-${r.slug}.md) seq ${r.seq ?? '?'}`,
+              300
+            )} | ${r.verified ? '✓' : '未验'} |`
         )
       ].join('\n')
       sections.push(table)
@@ -110,8 +112,4 @@ export function rebuildPitsIndex(root: string, verifiedBySeq?: Set<number>): str
   writeFileSync(tmp, next, 'utf8')
   renameSync(tmp, path)
   return path
-}
-
-function escapeCell(text: string): string {
-  return text.replace(/\|/g, '\\|').replace(/\n/g, ' ').slice(0, 120)
 }

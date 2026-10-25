@@ -102,17 +102,19 @@ function runZcode(bin: string, prompt: string, cwd: string): Promise<string> {
     child.stdout.on('data', (chunk) => (stdout += chunk))
     child.stderr.on('data', (chunk) => (stderr += chunk))
     child.on('error', (error) => reject(`spawn failed (${command.cmd}): ${String(error)}`))
+    const timer = setTimeout(() => {
+      child.kill()
+      reject('zcode -p timed out after 420s')
+    }, 420_000)
+    timer.unref()
     child.on('close', (code) => {
+      clearTimeout(timer)
       if (code === 0 && stdout.trim().length > 0) {
         resolve(stdout)
       } else {
         reject(`zcode -p exited ${code}: ${stderr.slice(0, 400) || stdout.slice(0, 200)}`)
       }
     })
-    setTimeout(() => {
-      child.kill()
-      reject('zcode -p timed out after 420s')
-    }, 420_000).unref()
   })
 }
 
@@ -139,6 +141,9 @@ function resolveZcodeCommand(bin: string): { cmd: string; prefixArgs: string[] }
       zcodeCommandCache = { cmd: 'node', prefixArgs: [jsEntry] }
       return zcodeCommandCache
     }
+    console.warn(
+      `[roadmap] zcode npm entry not found at ${jsEntry}; falling back to PATH spawn which may fail on Windows`
+    )
   } catch {
     // fall through to bare spawn
   }
@@ -161,10 +166,29 @@ export function parseChapterJson(stdout: string): SummarizedChapter | null {
         Array.isArray(parsed.points) &&
         parsed.points.length > 0
       ) {
-        const normalize = (
-          items: (string | { text: string; seq?: number })[] | undefined
-        ): SeqText[] =>
-          (items ?? []).map((item) => (typeof item === 'string' ? { text: item } : item))
+        // Parse-boundary hardening: null/non-object list items are dropped
+        // (not only in pitfalls), and newlines are stripped from every
+        // free-text field so scalar()/body can never see multi-line junk.
+        const normalize = (items: unknown[] | undefined): SeqText[] =>
+          (items ?? [])
+            .filter(
+              (item): item is string | Record<string, unknown> =>
+                typeof item === 'string' || (typeof item === 'object' && item !== null)
+            )
+            .map((item) => {
+              if (typeof item === 'string') {
+                return { text: item.replace(/\n/g, '') }
+              }
+              const entry: SeqText = { text: String(item.text ?? '').replace(/\n/g, '') }
+              if (typeof item.seq === 'number') {
+                entry.seq = item.seq
+              }
+              if (typeof item.quote === 'string') {
+                entry.quote = item.quote
+              }
+              return entry
+            })
+            .filter((entry) => entry.text.length > 0)
         const normalizePits = (items: (string | PitfallEntry)[] | undefined): PitfallEntry[] =>
           (items ?? [])
             .filter((item): item is string | PitfallEntry => item !== null && item !== undefined)
@@ -173,19 +197,20 @@ export function parseChapterJson(stdout: string): SummarizedChapter | null {
                 return { text: item }
               }
               return {
-                text: String(item.text ?? ''),
+                text: String(item.text ?? '').replace(/\n/g, ''),
                 keywords: Array.isArray(item.keywords)
                   ? item.keywords.filter((k): k is string => typeof k === 'string')
                   : [],
-                symptom: typeof item.symptom === 'string' ? item.symptom : undefined,
-                fix: typeof item.fix === 'string' ? item.fix : undefined,
+                symptom:
+                  typeof item.symptom === 'string' ? item.symptom.replace(/\n/g, '') : undefined,
+                fix: typeof item.fix === 'string' ? item.fix.replace(/\n/g, '') : undefined,
                 seq: typeof item.seq === 'number' ? item.seq : undefined,
                 quote: typeof item.quote === 'string' ? item.quote : undefined
               }
             })
             .filter((pit) => pit.text.length > 0)
         return {
-          title: parsed.title,
+          title: parsed.title.replace(/\n/g, ''),
           points: normalize(parsed.points),
           decisions: normalize(parsed.decisions),
           artifacts: parsed.artifacts ?? [],

@@ -67,6 +67,10 @@ export type PitRecord = {
   quote?: string
 }
 
+/** Model-declared terminology pair (structured `terms:` block; primary
+ * source for the rolling term injection). */
+export type TermRecord = { standard: string; jargon: string }
+
 export type RoadmapCard = {
   frontmatter: CardFrontmatter
   anchors: CardAnchorsDefault | null
@@ -74,6 +78,8 @@ export type RoadmapCard = {
   /** Structured pits persisted IN the card (second durable store); the
    * project KEYWORDS.md layer rebuilds from these. */
   pits: PitRecord[]
+  /** Structured term pairs persisted IN the card. */
+  terms?: TermRecord[]
   body: string
 }
 
@@ -175,6 +181,14 @@ export function serializeCard(card: RoadmapCard): string {
       }
     }
     blocks.push(pitLines.join('\n'))
+  }
+  if ((card.terms ?? []).length > 0) {
+    const termLines: string[] = ['terms:']
+    for (const term of card.terms!) {
+      termLines.push(`  - standard: ${scalar(term.standard)}`)
+      termLines.push(`    jargon: ${scalar(term.jargon)}`)
+    }
+    blocks.push(termLines.join('\n'))
   }
   return [
     ...lines,
