@@ -52,7 +52,7 @@ export function createRoadmapService(
   const unsubscribers: (() => void)[] = []
   let running = false
   const promptTemplate = readFileSync(
-    join(import.meta.dirname, '..', '..', '..', 'roadmap', 'prompts', 'task-node.md'),
+    join(process.cwd(), 'roadmap', 'prompts', 'task-node.md'),
     'utf8'
   )
 
