@@ -206,8 +206,6 @@ export function createRoadmapService(
   }
 
   async function backfill(): Promise<void> {
-    // Scan recent opt-in sessions without .roadmap/ and process them
-    // Implementation depends on session enumeration API
     console.log('[roadmap] backfill: scanning opt-in sessions from last 7 days')
     for (const sessionId of state.optedIn) {
       const workspace = deps.getWorkspacePath(sessionId)
@@ -221,7 +219,11 @@ export function createRoadmapService(
         !hasCards ||
         (sessionState.scanCursor.seq === 0 && sessionState.summarizedCursor.seq === 0)
       ) {
-        await processSession(sessionId, 'backfill')
+        try {
+          await processSession(sessionId, 'backfill')
+        } catch (e) {
+          console.error(`[roadmap] backfill processSession threw:`, e)
+        }
       }
     }
   }

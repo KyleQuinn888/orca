@@ -5,7 +5,7 @@
 import { join } from 'node:path'
 import { app } from 'electron'
 import { existsSync } from 'node:fs'
-import { DatabaseSync } from 'node:sqlite'
+import Database from '../sqlite/sync-database'
 import type { JournalDb } from './journal-row-io'
 
 // ─── Journal DB ─────────────────────────────────────────────────────────
@@ -16,14 +16,14 @@ export function openRoadmapJournalDb(_sessionId: string): JournalDb | null {
     return null
   }
   try {
-    const db = new DatabaseSync(dbPath)
+    const db = new Database(dbPath)
     const query = (sql: string, ...params: unknown[]) => {
-      type SqlValue = string | number | bigint | Uint8Array | null
-      const bound = params as SqlValue[]
       const stmt = db.prepare(sql)
       return {
-        all: (...p: unknown[]) => stmt.all(...bound, ...(p as SqlValue[])) as unknown[],
-        get: (...p: unknown[]) => stmt.get(...bound, ...(p as SqlValue[])) as unknown
+        all: (...p: unknown[]) =>
+          stmt.all(...([...params, ...p] as Parameters<typeof stmt.all>)) as unknown[],
+        get: (...p: unknown[]) =>
+          stmt.get(...([...params, ...p] as Parameters<typeof stmt.get>)) as unknown
       }
     }
     return { query, close: () => db.close() }
