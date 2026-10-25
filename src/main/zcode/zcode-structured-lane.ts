@@ -16,6 +16,8 @@ import { ZcodeTimelineTranslator } from './zcode-timeline-translator'
 import { mapZcodeProtocolQuestions } from './zcode-protocol-questions'
 
 const RETRY_MS = 250
+/** Refused rounds before a held turn.end is called stuck in the log. */
+const STUCK_RETRY_WARN_ROUNDS = 40
 
 /** The tool call an interaction request names, when it names one. */
 function toolCallIdOf(params: unknown): string | null {
@@ -58,7 +60,15 @@ export type ZcodeDispatchSettlement = {
 }
 
 export class ZcodeStructuredLane {
-  readonly translator = new ZcodeTimelineTranslator()
+  readonly translator = new ZcodeTimelineTranslator((reason, envelope) => {
+    if (typeof envelope.type === 'string' && envelope.type.startsWith('turn.')) {
+      // A completion the translator cannot shape is a turn that never ends.
+      console.warn(
+        `[zcode-lane] dropped ${String(envelope.type)} (reason ${reason}, ` +
+          `seq=${typeof envelope.seq === 'number' ? envelope.seq : '?'}, session ${this.sessionId})`
+      )
+    }
+  })
   readonly assembler: ReturnType<typeof createProviderTimelineAssembler>
   /** Interaction requests held for the person, by their server request id. */
   readonly pendingPrompts = new Map<string, ZcodeHeldPrompt>()
@@ -75,6 +85,8 @@ export class ZcodeStructuredLane {
   }
   /** Events the sink refused under backpressure, re-applied until admitted. */
   private readonly retry: ProviderTimelineEvent[] = []
+  /** Consecutive refused rounds across retries; reset by any admitted event. */
+  private retryRounds = 0
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   /** The send whose turn has not ended; its dispatch settles when the turn does. */
   private armedSend: string | null = null
@@ -137,6 +149,12 @@ export class ZcodeStructuredLane {
       const envelope = params as { type?: unknown; seq?: unknown }
       if (typeof envelope.seq === 'number') {
         if (envelope.seq <= this.lastSeq) {
+          if (envelope.type === 'turn.completed' || envelope.type === 'turn.failed') {
+            // A completion the seq guard eats leaves the UI spinning — never silently.
+            console.warn(
+              `[zcode-lane] ${String(envelope.type)} seq=${envelope.seq} eaten by guard lastSeq=${this.lastSeq} session=${this.sessionId}`
+            )
+          }
           return
         }
         this.lastSeq = envelope.seq
@@ -300,10 +318,22 @@ export class ZcodeStructuredLane {
       if ('admission' in applied && !applied.admission.accepted) {
         // A refused turn.end would leave the row running and the clock ticking
         // until the child dies: hold it and re-apply once the sink drains.
+        // A stuck retry is the difference between a busy and a dead chat, so
+        // count rounds: a turn.end still refused after many rounds means the
+        // row never settles and the UI spins forever — say so, loudly.
+        this.retryRounds += 1
+        if (event.type === 'turn.end' && this.retryRounds === STUCK_RETRY_WARN_ROUNDS) {
+          console.warn(
+            `[zcode-lane] turn.end admission refused ${STUCK_RETRY_WARN_ROUNDS} rounds ` +
+              `(session ${this.sessionId}, turn ${this.armedTurn ?? event.turn ?? '?'}): ` +
+              `the turn may never settle. reason=${JSON.stringify(applied.admission.reason ?? null)}`
+          )
+        }
         this.retry.push(event)
         this.scheduleRetry()
         continue
       }
+      this.retryRounds = 0
       // The dispatch the armed send opened settles with its turn's end: the
       // journal row alone never releases the chat's working state.
       if (
