@@ -2,10 +2,10 @@
 // body sections, evidence construction). Split from build.ts for the
 // max-lines ratchet.
 
-import type { ChapterWindow, TuiSession } from './core/tui-reader'
-import { tuiEvidence, type Evidence } from './core/anchor'
+import type { ChapterWindow, TuiSession } from './tui-reader'
+import { tuiEvidence, type Evidence } from './anchor'
 
-import type { SummarizedChapter } from './core/summarizer'
+import type { SummarizedChapter } from './summarizer'
 
 export function renderCard(
   session: TuiSession,
