@@ -14216,7 +14216,27 @@
             "fc3095d2ed": "explorer",
             "aiVaultSessionHistory": "Agents",
             "folderWorkspaces": "Attached worktrees",
-            "parentPrChecks": "PR Checks"
+            "parentPrChecks": "PR Checks",
+            "roadmap": "Roadmap"
+          },
+          "RoadmapPanel": {
+            "title": "Roadmap",
+            "chapterLabel": "Ch.{{value0}}",
+            "noWorkspace": "No workspace",
+            "noWorkspaceActive": "No workspace active",
+            "oneSession": "{{value0}} · 1 session",
+            "sessionCount": "{{value0}} · {{value1}} sessions",
+            "sessionsView": "Sessions",
+            "projectView": "Project",
+            "pitsView": "Pits",
+            "viewAriaLabel": "Roadmap view",
+            "loading": "Reading roadmap",
+            "noRoadmap": "No roadmap yet — run `bun roadmap/build.ts <sessionId>` to generate chapter cards",
+            "noSessions": "No session chapters yet",
+            "noProjectHistory": "No project history yet — chapters accumulate per session",
+            "noPits": "No pitfalls recorded yet",
+            "pitVerified": "Verified against the source",
+            "pitUnverified": "Not verified yet"
           },
           "right": {
             "panel": {
