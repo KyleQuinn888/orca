@@ -51,14 +51,23 @@ export function consequenceOf(snap: R2Snapshot, group: R2InboxGroup): Consequenc
     }
   }
 
-  const cutChapters = group.cuts.map((c) => c.chapter).sort((a, b) => a - b)
+  // Boundary set = proposed cuts UNION existing milestone starts: a cut only
+  // breaks the milestone it lands in; untouched milestones must stay intact.
+  const firstOf = new Map<number, string>()
+  for (const m of snap.milestones) {
+    const head = m.chapterIndexes.filter((n) => chapters.includes(n))[0]
+    if (head !== undefined && !firstOf.has(head)) {
+      firstOf.set(head, m.id)
+    }
+  }
+  const bounds = [...new Set([...group.cuts.map((c) => c.chapter), ...firstOf.keys()])]
+    .filter((n) => n > (chapters[0] ?? 0) && n <= (chapters.at(-1) ?? 0))
+    .sort((a, b) => a - b)
   const segments: Array<{ from: number; to: number }> = []
   let start = chapters[0] ?? 0
-  for (const cut of cutChapters) {
-    if (cut > start && cut <= (chapters.at(-1) ?? 0)) {
-      segments.push({ from: start, to: cut - 1 })
-      start = cut
-    }
+  for (const b of bounds) {
+    segments.push({ from: start, to: b - 1 })
+    start = b
   }
   if (chapters.length) {
     segments.push({ from: start, to: chapters.at(-1)! })
@@ -88,8 +97,7 @@ export function consequenceOf(snap: R2Snapshot, group: R2InboxGroup): Consequenc
   let newCount = 0
   for (const seg of segments) {
     const headMid = owner.get(seg.from) ?? ''
-    const headM = snap.milestones.find((m) => m.id === headMid)
-    const startsAtHead = headM != null && (headM.chapterIndexes.filter((n) => chapters.includes(n))[0] ?? -1) === seg.from
+    const startsAtHead = firstOf.get(seg.from) === headMid && headMid !== ''
     const replaced = [...new Set(chapters.slice(seg.from - (chapters[0] ?? 1), seg.to - (chapters[0] ?? 1) + 1).map((n) => owner.get(n) ?? '').filter(Boolean))]
     if (startsAtHead) {
       after.push({ mid: headMid, label: byLabel(headMid), chapterFrom: seg.from, chapterTo: seg.to, isNew: false, replaces: [] })
