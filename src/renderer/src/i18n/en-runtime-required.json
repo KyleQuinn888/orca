@@ -833,6 +833,11 @@
             "7550998473": "Copy",
             "c57eda6822": "edit"
           },
+          "RoadmapPanel": {
+            "pitsView": "Pits",
+            "projectView": "Project",
+            "sessionsView": "Sessions"
+          },
           "Search": {
             "1ec640c9c7": "match"
           },

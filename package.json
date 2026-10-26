@@ -88,6 +88,8 @@
     "typecheck:tsc:cli": "pnpm run build:packages && tsc --noEmit -p config/tsconfig.cli.json --composite false",
     "typecheck:tsc:web": "pnpm run build:packages && tsc --noEmit -p config/tsconfig.web.json --composite false",
     "typecheck:tsc": "pnpm run build:packages && tsc --noEmit -p config/tsconfig.node.json --composite false && tsc --noEmit -p config/tsconfig.cli.json --composite false && tsc --noEmit -p config/tsconfig.web.json --composite false",
+    "roadmap": "bun roadmap/build.ts",
+    "roadmap:test": "bun test roadmap/",
     "ensure:electron-runtime": "node config/scripts/ensure-native-runtime.mjs --runtime=electron",
     "start": "pnpm run build:packages && pnpm run ensure:electron-runtime && electron-vite preview",
     "dev": "pnpm run build:packages && pnpm run ensure:electron-runtime && node config/scripts/run-electron-vite-dev.mjs",

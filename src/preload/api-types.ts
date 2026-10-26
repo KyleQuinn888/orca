@@ -7,6 +7,7 @@ import type {
   MinimaxCredentialsApi,
   ZcodePlanCredentialsApi
 } from './api/agent-account-api'
+import type { RoadmapApi } from './api/roadmap-bridge'
 import type { HooksApi } from './api/agent-hook-api'
 import type { SkillsApi } from './api/agent-skill-api'
 import type { AgentAwakeApi, AgentStatusApi } from './api/agent-status-api'
@@ -139,6 +140,7 @@ export type PreloadApi = {
   aiVault: AiVaultApi
   nativeChat: NativeChatApi
   fs: FilesystemApi['fs']
+  roadmap: RoadmapApi
   git: Merged<GitInspectionApi & GitOperationApi>
   ui: Merged<UiCommandEventApi & UiWindowApi>
   runtime: RuntimeApi['runtime']

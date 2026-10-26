@@ -138,6 +138,7 @@ export type RuntimeStore = {
     tabAutoGenerateTitle?: GlobalSettings['tabAutoGenerateTitle']
     terminalCopyTrimsGutter?: GlobalSettings['terminalCopyTrimsGutter']
     experimentalNativeChat?: GlobalSettings['experimentalNativeChat']
+    sessionRoadmap?: GlobalSettings['sessionRoadmap']
     nativeChatProviders?: GlobalSettings['nativeChatProviders']
     defaultTaskSource?: GlobalSettings['defaultTaskSource']
     defaultTaskViewPreset?: GlobalSettings['defaultTaskViewPreset']

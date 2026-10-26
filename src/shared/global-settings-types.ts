@@ -225,6 +225,8 @@ export type GlobalSettings = GlobalSettingsBase & {
   terminalUrlMiddleClickBehavior?: 'open' | 'actions' | 'none'
   /** New supported agent launches use structured Chat UI; off defaults to terminal UI. */
   experimentalNativeChat?: boolean
+  /** Opt-in session roadmap: auto-summarize opt-in sessions into .roadmap/ chapter cards. */
+  sessionRoadmap?: boolean
   /** Opt-in: resume working structured chats automatically on the next launch. Off still offers
    *  the list, so the user sees exactly what would run before anything spends tokens. */
   nativeChatResumeWorkOnRestart?: boolean

@@ -3,6 +3,7 @@
 // and compaction, as one bounded step each.
 
 import type { AgentJournalMessageItem } from '../../shared/agent-session-journal-types'
+import type { NativeChatBlock } from '../../shared/native-chat-types'
 import type { AgentSessionDispatchOutcome } from '../native-chat/agent-session-wire/structured-agent-session-adapter'
 import { agentSessionFailureFact, providerDiagnosticOf } from '../../shared/agent-session-failure'
 import { agentSessionFailureWords } from '../../shared/agent-session-failure-words'
@@ -117,7 +118,12 @@ export async function dispatchZcodeTurn(
   // chat reads working forever.
   session.lane.inputAccepted(input.clientMessageId, input.requestedAt ?? Date.now())
   try {
-    await sendZcodePromptWithBusyRetry(session, text, timeoutMs)
+    await sendZcodePromptWithBusyRetry(
+      session,
+      text,
+      zcodePromptAttachments(input.body.blocks),
+      timeoutMs
+    )
   } catch (error) {
     // The provider refused its own answer: words for the person, never a retry.
     if (isZcodeAppServerRequestError(error)) {
@@ -145,6 +151,54 @@ export async function dispatchZcodeTurn(
 const SEND_BUSY_RETRY_INTERVAL_MS = 1_000
 const SEND_BUSY_RETRY_WINDOW_MS = 30_000
 
+/** `image-ref` blocks → the protocol's prompt attachments (desktop sends images this way; a
+ *  prompt without them leaves the model reading only the "[Image #1]" placeholder text). */
+export function zcodePromptAttachments(blocks: readonly unknown[]): Record<string, unknown>[] {
+  const attachments: Record<string, unknown>[] = []
+  for (const block of blocks as NativeChatBlock[]) {
+    if (block.type !== 'image-ref') {
+      continue
+    }
+    if (typeof block.path === 'string' && block.path.length > 0) {
+      const filename = block.path.split(/[\\/]/).pop() ?? 'pasted.png'
+      attachments.push({
+        kind: 'image',
+        filename,
+        mimeType: imageMimeOf(filename),
+        localPath: block.path
+      })
+    } else if (typeof block.url === 'string' && block.url.startsWith('data:')) {
+      // Strict shape: the server decodes dataBase64 verbatim, so a non-image or
+      // non-base64 data URL must be dropped here, not forwarded to fail there.
+      const match = /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/i.exec(block.url)
+      if (match !== null && match[2].length > 0) {
+        attachments.push({
+          kind: 'image',
+          filename: `pasted.${mimeExtensionOf(match[1].toLowerCase())}`,
+          mimeType: match[1].toLowerCase(),
+          dataBase64: match[2]
+        })
+      }
+    }
+  }
+  return attachments
+}
+
+function imageMimeOf(filename: string): string {
+  const extension = filename.slice(filename.lastIndexOf('.') + 1).toLowerCase()
+  if (extension === 'jpg' || extension === 'jpeg') {
+    return 'image/jpeg'
+  }
+  if (extension === 'webp' || extension === 'gif') {
+    return `image/${extension}`
+  }
+  return 'image/png'
+}
+
+function mimeExtensionOf(mimeType: string): string {
+  return mimeType === 'image/jpeg' ? 'jpg' : mimeType.slice('image/'.length) || 'png'
+}
+
 /** The server's words for a second prompt while its turn is still closing. */
 function isPromptStillRunningRefusal(error: unknown): boolean {
   return (
@@ -163,6 +217,7 @@ function isPromptStillRunningRefusal(error: unknown): boolean {
 async function sendZcodePromptWithBusyRetry(
   session: ZcodeSessionLike,
   text: string,
+  attachments: Record<string, unknown>[],
   timeoutMs: number
 ): Promise<void> {
   const deadline = Date.now() + Math.min(timeoutMs, SEND_BUSY_RETRY_WINDOW_MS)
@@ -170,7 +225,11 @@ async function sendZcodePromptWithBusyRetry(
     try {
       await session.connection.request(
         'session/send',
-        { sessionId: session.providerSessionId, content: text },
+        {
+          sessionId: session.providerSessionId,
+          content: text,
+          ...(attachments.length > 0 ? { attachments } : {})
+        },
         { timeoutMs }
       )
       return

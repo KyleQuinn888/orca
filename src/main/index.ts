@@ -134,6 +134,27 @@ if (preflightReady) {
   state.osOpenedDocuments.capture(process.argv)
   registerMainProcessIpcHandlers()
   installMainProcessQuitHandlers()
+  // Session roadmap: auto-summarize opt-in sessions (settings.sessionRoadmap defaults false)
+  void import('./roadmap/roadmap-bootstrap')
+    .then(async ({ bootstrapRoadmap }) => {
+      const { openRoadmapJournalDb, getSessionTitle, probeZcode } =
+        await import('./roadmap/roadmap-runtime')
+      const { wireRoadmapToRuntime } = await import('./roadmap/roadmap-runtime-wiring')
+      const runtime = wireRoadmapToRuntime()
+      bootstrapRoadmap({
+        getUserDataDir: () => app.getPath('userData'),
+        getJournalDb: openRoadmapJournalDb,
+        getWorkspacePath: (sessionId) => runtime.resolveWorkspacePath(sessionId),
+        getSessionTitle,
+        isLocalSession: runtime.isLocalSession,
+        onJournalCommit: runtime.onJournalCommit,
+        onTurnCompletion: runtime.onTurnCompletion,
+        onIdle: runtime.onIdle,
+        zcodeAvailable: probeZcode,
+        onQuit: runtime.onQuit
+      })
+    })
+    .catch((e) => console.warn('[roadmap] bootstrap failed:', e))
   void app.whenReady().then(async () => {
     try {
       await initializeMainProcessReady({

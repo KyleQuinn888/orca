@@ -3,6 +3,8 @@ import type { MarkdownViewMode, OpenFile, PendingEditorReveal } from '@/store/sl
 import type { GitDiffResult } from '../../../../shared/git-diff-compare-types'
 import type { GitStatusEntry } from '../../../../shared/git-status-types'
 import { CheckRunDetailsPanel } from './CheckRunDetailsPanel'
+import { lazy, Suspense } from 'react'
+const RoadmapCanvasPanel = lazy(() => import('../roadmap-canvas/RoadmapCanvasPanel'))
 import { CombinedDiffViewer, MarkdownPreview } from './editor-lazy-views'
 import { EditorConflictReviewSurface } from './EditorConflictReviewSurface'
 import { EditorDiffFileSurface } from './EditorDiffFileSurface'
@@ -123,6 +125,14 @@ export function EditorContent({
       activeFile.diffSource === 'combined-uncommitted' ||
       activeFile.diffSource === 'combined-branch' ||
       activeFile.diffSource === 'combined-commit')
+
+  if (activeFile.mode === 'roadmap-canvas') {
+    return (
+      <Suspense fallback={<div className='flex h-full items-center justify-center text-sm text-muted-foreground'>…</div>}>
+        <RoadmapCanvasPanel worktreeId={activeFile.worktreeId} />
+      </Suspense>
+    )
+  }
 
   if (activeFile.mode === 'check-details') {
     const checkRunDetails = activeFile.checkRunDetails

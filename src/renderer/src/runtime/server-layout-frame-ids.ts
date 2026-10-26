@@ -41,6 +41,7 @@ const TAB_ID_RULES: Record<TabContentType, 'terminal' | 'kept'> = {
   diff: 'kept',
   'conflict-review': 'kept',
   'check-details': 'kept',
+    'roadmap-canvas': 'kept',
   'agent-session': 'kept',
   browser: 'kept',
   simulator: 'kept'

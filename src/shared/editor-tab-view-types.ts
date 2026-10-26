@@ -109,3 +109,5 @@ export type EditorTabView =
     }
   | { mode: 'conflict-review'; conflictReview?: ConflictReviewState }
   | { mode: 'check-details'; checkRunDetails?: OpenCheckRunDetailsState }
+  /** Project roadmap canvas: a virtual editor tab driven by the workspace's .roadmap snapshot. */
+  | { mode: 'roadmap-canvas' }

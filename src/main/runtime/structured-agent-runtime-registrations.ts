@@ -195,6 +195,8 @@ function createZcodeAdapter(context: StructuredAgentAdapterContext): StructuredA
     // Orca's own browser pages back the zcode agent's browser-use commands; a
     // host that lends no surface keeps discovery empty (honest degradation).
     browser: new ZcodeBrowserBackend(deps.zcodeBrowserSurface ?? (() => null)),
+    // Lane diagnostics (dropped turn completions) must reach the trace file.
+    logger: deps.logger,
     resolveLaunch: withSupportedZcodeCli(
       composeStructuredLaunch(
         ZCODE_STRUCTURED_AGENT,

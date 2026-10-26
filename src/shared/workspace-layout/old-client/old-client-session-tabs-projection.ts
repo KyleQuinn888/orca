@@ -163,7 +163,9 @@ function projectTab(tab: LayoutTab, scope: Scope): RuntimeMobileSessionSnapshotT
       return row ? [row] : []
     }
     // A simulator needs the desktop to draw it; the window lists none either.
+    // The roadmap canvas is desktop-only for the same reason.
     case 'simulator':
+    case 'roadmap-canvas':
       return []
   }
 }
