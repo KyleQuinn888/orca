@@ -21,6 +21,25 @@ function fixture(): FileMap {
       `  lastTime: '2026-${last}:00.000Z'`, ...(verified ? ['anchorsVerifiedAt: 2026-10-25T00:43:15.456Z'] : []), 'quality: draft'
     ].join('\n'))
   }
+  f.set(
+    '001/sA/001-章.md',
+    [
+      '---',
+      'title: 推进 A',
+      'time:',
+      `  firstTime: '2026-10-03T13:28:00.000Z'`,
+      `  lastTime: '2026-10-03T16:40:00.000Z'`,
+      'anchorsVerifiedAt: 2026-10-25T00:43:15.456Z',
+      'quality: draft',
+      '---',
+      '',
+      '# Ch.1 章',
+      '',
+      '## 要点',
+      '- 核心判读：冻结卡内 Gf 不可标定，三档全部高出试验带。',
+      '- 次要点。'
+    ].join('\n')
+  )
   I('001/sB/000-index.md', [
     "session: sB", "title: 预演 B", "workspace: 'C:/ws/paperB'",
     "time:", "  firstTime: '2026-10-11T09:12:00.000Z'", "  lastTime: '2026-10-12T17:40:00.000Z'"
@@ -56,6 +75,8 @@ describe('buildSnapshot', () => {
     expect(s.chapters.filter((c) => !c.superseded)).toHaveLength(3)
     expect(s.chapters.find((c) => c.index === 1 && !c.superseded)?.verified).toBe(true)
     expect(s.chapters.find((c) => c.index === 2 && !c.superseded)?.verified).toBe(false)
+    const s1 = s.chapters.find((c) => c.index === 1 && !c.superseded)
+    expect(s1?.summary).toBe('核心判读：冻结卡内 Gf 不可标定，三档全部高出试验带。')
     expect(s.pitCount).toBe(2) // unique pit-ids
     expect(milestoneLabel(s, 'm-live')).toBe('M1')
   })

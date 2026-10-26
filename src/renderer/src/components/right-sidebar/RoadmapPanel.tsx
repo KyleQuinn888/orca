@@ -89,12 +89,36 @@ export default function RoadmapPanel(): React.JSX.Element {
             <div className="mb-1 text-[10.5px] text-muted-foreground">
               LLM 提议 · {g.by} · {g.at.slice(0, 16).replace('T', ' ')}
             </div>
-            {g.cuts.map((c) => (
-              <div key={c.chapter} className="flex gap-1.5 py-0.5">
-                <span className="font-semibold text-[#d29922]">Ch.{c.chapter} 前</span>
-                <span className="min-w-0 flex-1 truncate" title={c.evidence}>{c.evidence}</span>
-              </div>
-            ))}
+            {g.cuts.map((c) => {
+              const prev = snapshot?.chapters.find((x) => x.session === g.session && !x.superseded && x.index === c.chapter - 1)
+              const next = snapshot?.chapters.find((x) => x.session === g.session && !x.superseded && x.index === c.chapter)
+              return (
+                <div key={c.chapter} className="py-0.5">
+                  <div className="flex gap-1.5">
+                    <span className="font-semibold text-[#d29922]">Ch.{c.chapter} 前</span>
+                    <span className="min-w-0 flex-1 truncate" title={c.evidence}>{c.evidence}</span>
+                  </div>
+                  {(prev || next) && (
+                    <div className="mt-0.5 ml-1 border-l-2 border-[#4b4b4b] pl-1.5">
+                      {prev && (
+                        <div className="text-[10px] leading-snug">
+                          <span className="text-muted-foreground">▸ 前段收止 Ch.{prev.index}：</span>
+                          <span className="text-[#c8c8c8]">{prev.title}</span>
+                          {prev.summary && <span className="block truncate pl-4 text-muted-foreground" title={prev.summary}>{prev.summary}</span>}
+                        </div>
+                      )}
+                      {next && (
+                        <div className="text-[10px] leading-snug">
+                          <span className="text-muted-foreground">▸ 后段开启 Ch.{next.index}：</span>
+                          <span className="text-[#c8c8c8]">{next.title}</span>
+                          {next.summary && <span className="block truncate pl-4 text-muted-foreground" title={next.summary}>{next.summary}</span>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
             <InboxActions worktreePath={worktreePath} group={g} />
           </div>
         ))}
@@ -259,7 +283,7 @@ function InboxActions({ worktreePath, group }: InboxActionsProps): React.JSX.Ele
     )
   }
   if (phase === 'writing') {
-    return <div className="mt-1 text-[10px] text-[#4fc1ff]">已写入 · 等待重组…</div>
+    return <div className="mt-1 text-[10px] text-[#4fc1ff]">排队/已写入 · 等待重组…（锁占用时自动重试）</div>
   }
   if (phase === 'error') {
     return (

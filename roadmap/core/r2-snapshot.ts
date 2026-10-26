@@ -8,6 +8,8 @@ export type R2Chapter = {
   index: number
   /** .roadmap-relative card path (001/<sid>/NNN-*.md) for opening the card. */
   file: string
+  /** First key-point bullet from the card body — review-card context. */
+  summary: string
   title: string
   firstTime: string
   lastTime: string
@@ -152,6 +154,7 @@ export function buildSnapshot(files: FileMap): SnapshotResult {
         session: m[1],
         index: Number(m[2]),
         file: path,
+        summary: chapterSummary(files.get(path) ?? ''),
         // chapter cards carry the session title in `title`; the chapter's own name is chapter.slug
         title: nested(f, 'chapter', 'slug') || f.flat.title || path,
         firstTime: nested(f, 'time', 'firstTime'),
@@ -245,8 +248,10 @@ function buildInbox(raw: string | undefined): R2InboxGroup[] {
   const groups = new Map<string, R2InboxGroup>()
   const resolved = new Set<string>()
   for (const ev of events) {
+    // Why ||: gidOfTarget returns '' (not nullish) for review events — a ?? chain
+    // would short-circuit and never reach the reviewTarget branch.
     const gid =
-      ev.proposalGroupId ?? gidOfTarget(ev.target) ?? (ev.op === 'review' ? (ev.reviewTarget?.proposalGroupId ?? '') : '')
+      ev.proposalGroupId || gidOfTarget(ev.target) || (ev.op === 'review' ? (ev.reviewTarget?.proposalGroupId ?? '') : '')
     if (ev.op === 'add-cut' && gid) {
       const g = groups.get(gid) ?? {
         proposalGroupId: gid,
@@ -282,6 +287,21 @@ function countPits(raw: string | undefined): number {
     if (m) {ids.add(m[1])}
   }
   return ids.size
+}
+
+/** First bullet under `## 要点` in a chapter card body, trimmed for review context. */
+function chapterSummary(raw: string): string {
+  const body = raw.split(/^---[\s\S]*?---/)[1] ?? ''
+  const points = /^##\s*要点\s*$/m.exec(body)
+  if (!points) {
+    return ''
+  }
+  const after = body.slice(points.index + points[0].length)
+  const bullet = /^[-*]\s+(.+)$/m.exec(after)
+  if (!bullet) {
+    return ''
+  }
+  return bullet[1].replace(/[*_`]/g, '').trim().slice(0, 90)
 }
 
 /** Milestone display ordinal (spec §2.2): M1..Mn by start time within the snapshot. */

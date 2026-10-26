@@ -157,9 +157,19 @@ export const useRoadmapR2 = create<RoadmapR2Store>((set, get) => ({
   submitInboxWrite: async (worktreePath, gid, sessionId, decision) => {
     set((st) => ({ inboxWrites: { ...st.inboxWrites, [gid]: 'writing' } }))
     try {
-      const res = await window.api.roadmap.reviewProposal({ worktreePath, sessionId, proposalGroupId: gid, decision, reason: 'r2:inbox' })
+      // Spec §1.1: human actions queue outside the aggregation lock; an active
+      // aggregation (LLM naming can run minutes) answers "lock held" until done.
+      const maxAttempts = 10
+      let res: { ok: boolean; error?: string } = { ok: false, error: 'not attempted' }
+      for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        res = await window.api.roadmap.reviewProposal({ worktreePath, sessionId, proposalGroupId: gid, decision, reason: 'r2:inbox' })
+        if (res.ok || !(res.error ?? '').includes('lock held')) {
+          break
+        }
+        await new Promise((resolve) => setTimeout(resolve, 15000))
+      }
       if (!res.ok) {
-        set((st) => ({ inboxWrites: { ...st.inboxWrites, [gid]: 'error' }, inboxWriteError: { ...st.inboxWriteError, [gid]: res.error } }))
+        set((st) => ({ inboxWrites: { ...st.inboxWrites, [gid]: 'error' }, inboxWriteError: { ...st.inboxWriteError, [gid]: res.error ?? 'unknown' } }))
         return
       }
       // written; the watcher's next load (new generation) drops the group from the inbox

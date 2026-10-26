@@ -29,16 +29,22 @@ export function registerRoadmapIpcHandlers(): void {
       }
       const dir002 = join(args.worktreePath, '.roadmap', '002')
       const lock = AggregateLock.acquire(dir002)
-      const loaded = loadMarks(dir002)
-      if (!loaded.ok) {
-        return { ok: false, error: `marks unavailable: ${loaded.error}` }
+      try {
+        const loaded = loadMarks(dir002)
+        if (!loaded.ok) {
+          return { ok: false, error: `marks unavailable: ${loaded.error}` }
+        }
+        const store = new MarksStore(dir002, lock, loaded.events)
+        const message = verbReview(store, [...loaded.events], args.sessionId, args.proposalGroupId, args.decision, args.reason ?? 'r2:inbox')
+        if (message.startsWith('REFUSED')) {
+          return { ok: false, error: message }
+        }
+        return { ok: true, message }
+      } finally {
+        // Why mandatory: acquire() starts a heartbeat interval — in the main
+        // process a missing release holds the aggregate lock forever.
+        lock.release()
       }
-      const store = new MarksStore(dir002, lock, loaded.events)
-      const message = verbReview(store, [...loaded.events], args.sessionId, args.proposalGroupId, args.decision, args.reason ?? 'r2:inbox')
-      if (message.startsWith('REFUSED')) {
-        return { ok: false, error: message }
-      }
-      return { ok: true, message }
     } catch (error) {
       return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
