@@ -136,7 +136,7 @@ export function CanvasTimeline({
                   {chTotal} 章 · {snapshot.milestones.filter((m) => m.session === blk.sid).length} 里程碑
                 </div>
                 {blk.expanded && (
-                  <div className="absolute left-[3px] right-[3px]" style={{ bottom: 20 }}>
+                  <div className="absolute left-[3px] right-[3px]" style={{ bottom: 38 }}>
                     {blk.rows.map((row) => (
                       <div key={row.mid} className="relative h-[17px] border-t border-dashed border-[#3a3a3a]" title={`${milestoneLabel(snapshot, row.mid)} ${snapshot.milestones.find((m) => m.id === row.mid)?.title ?? ''}`}>
                         {row.cells.map((c) => {
@@ -160,24 +160,26 @@ export function CanvasTimeline({
                     ))}
                   </div>
                 )}
-                {/* milestone band */}
-                <div className="absolute left-1 right-1 bottom-1 h-3 flex gap-[1px]">
+                {/* milestone band — two-line reserve: M# over title */}
+                <div className="absolute left-1 right-1 bottom-1 h-8 flex gap-[1px]">
                   {blk.segments.map((seg) => {
                     const span = xAt(seg.endMs) - xAt(seg.startMs)
                     const total = xAt(Date.parse(sess?.lastTime ?? '')) - xAt(Date.parse(sess?.firstTime ?? ''))
                     const msSel = selection.level === 'milestone' && selection.mid === seg.mid
+                    const segTitle = snapshot.milestones.find((m) => m.id === seg.mid)?.title ?? ''
                     return (
                       <div
                         key={seg.mid}
-                        className={`h-full rounded-[2px] min-w-2 flex items-center justify-center text-[8.5px] font-bold text-[#1e1e1e] cursor-pointer ${msSel ? 'outline outline-2 outline-[#4fc1ff]' : 'hover:outline hover:outline-1.5 hover:outline-foreground'}`}
+                        className={`h-full rounded-[3px] min-w-2 flex flex-col justify-center overflow-hidden px-1 cursor-pointer ${msSel ? 'outline outline-2 outline-[#4fc1ff]' : 'hover:outline hover:outline-1.5 hover:outline-foreground'}`}
                         style={{ width: `${Math.max((span / Math.max(total, 1)) * 100, 8)}%`, background: colorOf(seg.mid) }}
-                        title={`${milestoneLabel(snapshot, seg.mid)} ${snapshot.milestones.find((m) => m.id === seg.mid)?.title ?? ''}`}
+                        title={`${milestoneLabel(snapshot, seg.mid)} ${segTitle}`}
                         onClick={(e) => {
                           e.stopPropagation()
                           onSelect({ level: 'milestone', sid: blk.sid, mid: seg.mid })
                         }}
                       >
-                        {milestoneLabel(snapshot, seg.mid)}
+                        <span className="text-[8px] font-bold leading-[1.15] text-[#1e1e1e]">{milestoneLabel(snapshot, seg.mid)}</span>
+                        <span className="truncate text-[8px] leading-[1.15] text-[#1e1e1e]">{segTitle}</span>
                       </div>
                     )
                   })}

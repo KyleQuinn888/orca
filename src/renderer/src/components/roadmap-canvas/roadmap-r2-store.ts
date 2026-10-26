@@ -149,7 +149,7 @@ export const useRoadmapR2 = create<RoadmapR2Store>((set, get) => ({
     set((s) => ({ treeOpen: { ...s.treeOpen, [sid]: !(s.treeOpen[sid] ?? true) } }))
   },
   toggleTreeMs: (key) => {
-    set((s) => ({ treeMsOpen: { ...s.treeMsOpen, [key]: !(s.treeMsOpen[key] ?? true) } }))
+    set((s) => ({ treeMsOpen: { ...s.treeMsOpen, [key]: !(s.treeMsOpen[key] ?? false) } }))
   },
   setSidebarView: (view) => {
     set({ sidebarView: view })
@@ -160,7 +160,7 @@ export const useRoadmapR2 = create<RoadmapR2Store>((set, get) => ({
     if (!(s.treeOpen[sid] ?? true)) {
       patch.treeOpen = { ...s.treeOpen, [sid]: true }
     }
-    if (mid && !(s.treeMsOpen[`${sid}/${mid}`] ?? true)) {
+    if (mid && !(s.treeMsOpen[`${sid}/${mid}`] ?? false)) {
       patch.treeMsOpen = { ...s.treeMsOpen, [`${sid}/${mid}`]: true }
     }
     if (Object.keys(patch).length > 0) {

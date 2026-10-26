@@ -129,27 +129,27 @@ export default function RoadmapPanel(): React.JSX.Element {
                     <div className="ml-3.5 border-l border-border pl-1.5">
                       {ms.map((m) => {
                         const msKey = `${s.id}/${m.id}`
-                        const mOpen = treeMsOpen[msKey] ?? true
+                        // Owner ruling: milestone chapters default COLLAPSED; clicking the card expands (and selects).
+                        const mOpen = treeMsOpen[msKey] ?? false
                         const mSel = selection.level === 'milestone' && selection.mid === m.id
                         const colorIdx = msOrder.findIndex((x) => x.id === m.id) % MS_COLORS.length
                         return (
-                          <div key={m.id}>
+                          <div key={m.id} className="my-1">
                             <div
-                              className={`flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 text-[12px] ${mSel ? 'bg-[#4fc1ff24]' : 'hover:bg-[#2d2d30]'}`}
-                              onClick={() => onSelect({ level: 'milestone', sid: s.id, mid: m.id })}
+                              className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-1.5 py-1 ${mSel ? 'border-[#4fc1ff] bg-[#4fc1ff1f]' : 'border-border bg-[#2d2d30] hover:border-[#6b6b6b]'}`}
+                              onClick={() => {
+                                toggleTreeMs(msKey)
+                                onSelect({ level: 'milestone', sid: s.id, mid: m.id })
+                              }}
                             >
-                              <span
-                                className="w-2.5 text-[9px] text-muted-foreground"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  toggleTreeMs(msKey)
-                                }}
-                              >
-                                {mOpen ? '▾' : '▸'}
+                              <span className="text-[9px] text-muted-foreground">{mOpen ? '▾' : '▸'}</span>
+                              <span className="h-2.5 w-2.5 flex-none rounded-[3px]" style={{ background: MS_COLORS[colorIdx] }} />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-[11.5px] text-[#e8e8e8]">{m.title}</span>
+                                <span className="block text-[9.5px] text-muted-foreground">
+                                  Ch.{m.chapterIndexes[0]}–{m.chapterIndexes.at(-1)} · {m.chapterIndexes.length} 章
+                                </span>
                               </span>
-                              <span className="h-2 w-2 flex-none rounded-[2px]" style={{ background: MS_COLORS[colorIdx] }} />
-                              <span className="min-w-0 flex-1 truncate text-[11.5px]">{m.title}</span>
-                              <span className="text-[9.5px] text-muted-foreground">Ch.{m.chapterIndexes[0]}–{m.chapterIndexes.at(-1)}</span>
                             </div>
                             {mOpen &&
                               snapshot.chapters
