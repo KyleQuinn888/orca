@@ -209,6 +209,7 @@ export type EditorFilesSlice = {
     state: CheckRunDetailsTabPatch
   ) => void
   reloadOpenCheckRunDetailsTab: (fileId: string) => Promise<void>
+  openRoadmapCanvas: (worktreeId: string) => void
   openBranchAllDiffs: (
     worktreeId: string,
     worktreePath: string,

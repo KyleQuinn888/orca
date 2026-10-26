@@ -14219,6 +14219,22 @@
             "parentPrChecks": "PR Checks",
             "roadmap": "Roadmap"
           },
+          "roadmap": {
+            "canvasTabLabel": "项目画布",
+            "canvasZoom": "缩放",
+            "canvasZoomMonth": "月",
+            "canvasZoomWeek": "周",
+            "canvasZoomDay": "日",
+            "canvasZoomFit": "适配",
+            "canvasLoading": "载入项目画布…",
+            "canvasEmpty": "这个项目还没有可读取的路线图。",
+            "canvasError": "读取 .roadmap 失败",
+            "canvasWorktreeGone": "工作区不可用。",
+            "legendCont": "接续（推断）",
+            "legendOverlap": "重叠带 = 并行",
+            "legendVerified": "实线格=已验 · 虚线格=未验",
+            "legendFork": "fork 检测：当前未检出"
+          },
           "RoadmapPanel": {
             "title": "Roadmap",
             "chapterLabel": "Ch.{{value0}}",

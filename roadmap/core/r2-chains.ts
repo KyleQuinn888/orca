@@ -103,8 +103,12 @@ export function deriveRelations(snap: R2Snapshot): Relations {
   // arcs: one per chain — first milestone start of head session -> tail session end
   const arcs: Arc[] = []
   for (const ch of chains) {
-    const head = byId.get(ch.members[0])
-    const tail = byId.get(ch.members.at(-1))
+    const headId = ch.members[0]
+    if (!headId) {continue}
+    const head = byId.get(headId)
+    const tailId = ch.members.at(-1)
+    if (!tailId) {continue}
+    const tail = byId.get(tailId)
     if (!head || !tail) {continue}
     const headMs = firstMilestoneStart(snap.milestones, head.id) ?? t(head.firstTime)
     const toMs = t(tail.lastTime)

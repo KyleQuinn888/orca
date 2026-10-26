@@ -21,6 +21,7 @@
     "../roadmap/core/chapter-files.ts",
     "../roadmap/core/index-card.ts",
     "../roadmap/core/pits-index.ts",
+    "../roadmap/core/pit-cells.ts",
     "../roadmap/core/term-consistency.ts",
     "../src/renderer/src/store/slices/worktrees/create/worktree-create-payload.ts",
     "../src/renderer/src/components/native-chat/native-chat-resolution-receipt.ts",
