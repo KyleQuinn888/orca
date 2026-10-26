@@ -168,12 +168,14 @@ export function zcodePromptAttachments(blocks: readonly unknown[]): Record<strin
         localPath: block.path
       })
     } else if (typeof block.url === 'string' && block.url.startsWith('data:')) {
-      const match = /^data:([^;,]+)[^,]*,(.*)$/s.exec(block.url)
-      if (match !== null) {
+      // Strict shape: the server decodes dataBase64 verbatim, so a non-image or
+      // non-base64 data URL must be dropped here, not forwarded to fail there.
+      const match = /^data:(image\/[a-z0-9.+-]+);base64,([A-Za-z0-9+/=]+)$/i.exec(block.url)
+      if (match !== null && match[2].length > 0) {
         attachments.push({
           kind: 'image',
-          filename: `pasted.${mimeExtensionOf(match[1])}`,
-          mimeType: match[1],
+          filename: `pasted.${mimeExtensionOf(match[1].toLowerCase())}`,
+          mimeType: match[1].toLowerCase(),
           dataBase64: match[2]
         })
       }
@@ -184,7 +186,7 @@ export function zcodePromptAttachments(blocks: readonly unknown[]): Record<strin
 
 function imageMimeOf(filename: string): string {
   const extension = filename.slice(filename.lastIndexOf('.') + 1).toLowerCase()
-  if (extension === 'jpg') {
+  if (extension === 'jpg' || extension === 'jpeg') {
     return 'image/jpeg'
   }
   if (extension === 'webp' || extension === 'gif') {

@@ -27,9 +27,7 @@ describe('zcodePromptAttachments', () => {
 
   it('maps a data: URL image-ref to a dataBase64 attachment', () => {
     expect(
-      zcodePromptAttachments([
-        { type: 'image-ref', url: 'data:image/jpeg;base64,QUJD' }
-      ])
+      zcodePromptAttachments([{ type: 'image-ref', url: 'data:image/jpeg;base64,QUJD' }])
     ).toEqual([
       { kind: 'image', filename: 'pasted.jpg', mimeType: 'image/jpeg', dataBase64: 'QUJD' }
     ])
@@ -53,6 +51,30 @@ describe('zcodePromptAttachments', () => {
         { type: 'text', text: '[Image #1]' },
         { type: 'image-ref' },
         { type: 'image-ref', url: 'https://example.com/cat.png' }
+      ])
+    ).toEqual([])
+  })
+
+  it('classifies .jpeg as image/jpeg', () => {
+    expect(zcodePromptAttachments([{ type: 'image-ref', path: '/tmp/photo.jpeg' }])).toEqual([
+      {
+        kind: 'image',
+        filename: 'photo.jpeg',
+        mimeType: 'image/jpeg',
+        localPath: '/tmp/photo.jpeg'
+      }
+    ])
+  })
+
+  it('drops non-image, non-base64, empty, and non-lowercase-scheme data URLs', () => {
+    expect(
+      zcodePromptAttachments([
+        { type: 'image-ref', url: 'data:text/plain;base64,QUJD' },
+        { type: 'image-ref', url: 'data:image/png,QUJD' },
+        { type: 'image-ref', url: 'data:image/png;base64,' },
+        // Orca's composer only ever emits lowercase data URLs; anything else is
+        // not vouched for, so it drops rather than guesses at the encoding.
+        { type: 'image-ref', url: 'DATA:IMAGE/PNG;BASE64,QUJD' }
       ])
     ).toEqual([])
   })

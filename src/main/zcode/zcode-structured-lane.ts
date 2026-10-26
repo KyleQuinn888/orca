@@ -123,11 +123,17 @@ export class ZcodeStructuredLane extends ZcodeLaneInteractions {
   /** One lane diagnostic, named for log search: ndjson when a logger was wired,
    *  console for tests and the unpackaged dev runs. */
   private diagnose(message: string, fields: Record<string, unknown>): void {
-    const entry = { scope: 'zcode-lane', sessionId: this.sessionId, ...fields }
-    if (this.logger !== undefined) {
-      this.logger.warn(message, entry)
-    } else {
-      console.warn(`[zcode-lane] ${message}`, JSON.stringify(entry))
+    // A diagnostic must never fail the event path it reports on: by the time a
+    // logger throws, lastSeq has advanced and the event would be lost for good.
+    try {
+      const entry = { scope: 'zcode-lane', sessionId: this.sessionId, ...fields }
+      if (this.logger !== undefined) {
+        this.logger.warn(message, entry)
+      } else {
+        console.warn(`[zcode-lane] ${message}`, JSON.stringify(entry))
+      }
+    } catch {
+      // The lane's own diagnostics are best-effort by contract.
     }
   }
 
