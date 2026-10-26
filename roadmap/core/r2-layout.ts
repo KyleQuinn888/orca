@@ -61,7 +61,8 @@ export function computeLayout(snap: R2Snapshot, rel: Relations, optsIn?: Partial
   const o = { ...DEFAULT_OPTS, ...optsIn }
   const timed = snap.sessions.filter((s) => !Number.isNaN(ms(s.firstTime)) && !Number.isNaN(ms(s.lastTime)))
   const ordered = [...timed].sort((a, b) => ms(a.firstTime) - ms(b.firstTime))
-  const t0 = ordered.length ? Math.min(...ordered.map((s) => ms(s.firstTime))) - 86400000 : 0
+  // 1h (not 1 day) left pad: horizontal space is the scarce axis — blocks hug the left edge
+  const t0 = ordered.length ? Math.min(...ordered.map((s) => ms(s.firstTime))) - 3600000 : 0
   const t1 = ordered.length ? Math.max(...ordered.map((s) => ms(s.lastTime))) + 86400000 : 1
   const x = (t: number) => ((t - t0) / 86400000) * o.dayPx
 

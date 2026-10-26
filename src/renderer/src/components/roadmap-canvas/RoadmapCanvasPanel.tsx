@@ -53,7 +53,7 @@ export default function RoadmapCanvasPanel({ worktreeId }: { worktreeId: string 
     if (!snapshot || !relations) {
       return 32
     }
-    const width = (scrollRef.current?.clientWidth ?? 1200) - 110
+    const width = (scrollRef.current?.clientWidth ?? 1200) - 30
     const probe = computeLayout(snapshot, relations, { dayPx: 32 })
     return Math.max(4, Math.min(300, probe.fitDayPx(Math.max(width, 200))))
   }, [snapshot, relations])
@@ -145,7 +145,7 @@ export default function RoadmapCanvasPanel({ worktreeId }: { worktreeId: string 
       {/* canvas + inspector */}
       <div className="flex min-h-0 flex-1 flex-col">
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-sleek">
-          <div className="mx-10 mb-16 mt-5 ml-[60px]">
+          <div className="mx-2 mb-16 mt-5 ml-2">
             <CanvasTimeline
               snapshot={snapshot}
               relations={relations}
