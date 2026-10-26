@@ -117,9 +117,6 @@ export function CanvasTimeline({
           const chTotal = snapshot.chapters.filter((c) => c.session === blk.sid && !c.superseded).length
           return (
             <div key={blk.sid} className="absolute left-0 border-b border-[#2a2a2a]" style={{ top: layout.laneTops[blk.sid], width: totalW, height: layout.laneHeights[blk.sid] }}>
-              <div className="absolute -left-[170px] top-6 w-[160px] text-right text-[10.5px] text-muted-foreground">
-                <span className="block text-[11.5px] text-foreground">{fmtDate(Date.parse(sess?.firstTime ?? ''))} – {fmtDate(Date.parse(sess?.lastTime ?? ''))}</span>
-              </div>
               <div
                 className={`absolute top-[10px] rounded-md border bg-[#2d2d30] cursor-pointer overflow-hidden ${isSel ? 'border-[#4fc1ff] shadow-[0_0_0_1.5px_#4fc1ff]' : 'border-[#4b4b4b] hover:border-foreground'}`}
                 style={{ left: blk.x, width: blk.w, height: blk.h }}
@@ -141,7 +138,7 @@ export function CanvasTimeline({
                   {chTotal} 章 · {snapshot.milestones.filter((m) => m.session === blk.sid).length} 里程碑
                 </div>
                 {blk.expanded && (
-                  <div className="absolute left-[3px] right-[3px]" style={{ bottom: 38 }}>
+                  <div className="absolute left-[3px] right-[3px]" style={{ bottom: 50 }}>
                     {blk.rows.map((row) => (
                       <div key={row.mid} className="relative h-[17px] border-t border-dashed border-[#3a3a3a]" title={`${milestoneLabel(snapshot, row.mid)} ${snapshot.milestones.find((m) => m.id === row.mid)?.title ?? ''}`}>
                         {row.cells.map((c) => {
@@ -165,8 +162,8 @@ export function CanvasTimeline({
                     ))}
                   </div>
                 )}
-                {/* milestone band — two-line reserve: M# over title */}
-                <div className="absolute left-1 right-1 bottom-1 h-8 flex gap-[1px]">
+                {/* milestone band — M# over a two-line wrapped title (matches sidebar card) */}
+                <div className="absolute left-1 right-1 bottom-1 h-10 flex gap-[1px]">
                   {blk.segments.map((seg) => {
                     const span = xAt(seg.endMs) - xAt(seg.startMs)
                     const total = xAt(Date.parse(sess?.lastTime ?? '')) - xAt(Date.parse(sess?.firstTime ?? ''))
@@ -175,7 +172,7 @@ export function CanvasTimeline({
                     return (
                       <div
                         key={seg.mid}
-                        className={`h-full rounded-[3px] min-w-2 flex flex-col justify-center overflow-hidden px-1 cursor-pointer ${msSel ? 'outline outline-2 outline-[#4fc1ff]' : 'hover:outline hover:outline-1.5 hover:outline-foreground'}`}
+                        className={`h-full rounded-[3px] min-w-2 flex flex-col justify-start gap-[1px] overflow-hidden px-1 py-[2px] cursor-pointer ${msSel ? 'outline outline-2 outline-[#4fc1ff]' : 'hover:outline hover:outline-1.5 hover:outline-foreground'}`}
                         style={{ width: `${Math.max((span / Math.max(total, 1)) * 100, 8)}%`, background: colorOf(seg.mid) }}
                         title={`${milestoneLabel(snapshot, seg.mid)} ${segTitle}`}
                         onClick={(e) => {
@@ -184,7 +181,7 @@ export function CanvasTimeline({
                         }}
                       >
                         <span className="text-[8px] font-bold leading-[1.15] text-[#1e1e1e]">{milestoneLabel(snapshot, seg.mid)}</span>
-                        <span className="truncate text-[8px] leading-[1.15] text-[#1e1e1e]">{segTitle}</span>
+                        <span className="line-clamp-2 break-words text-[8px] leading-[1.15] text-[#1e1e1e]">{segTitle}</span>
                       </div>
                     )
                   })}

@@ -19,8 +19,8 @@ export const DEFAULT_OPTS: LayoutOpts = {
   dayPx: 32,
   minBlockW: 150,
   minCellW: 12,
-  collapsedH: 76,
-  expandedBaseH: 86,
+  collapsedH: 84,
+  expandedBaseH: 94,
   rowH: 17,
   lanePad: 22,
   expandedSid: null

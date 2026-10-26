@@ -7,6 +7,7 @@ import { useAppStore } from '@/store'
 import { resolveRuntimePath } from '../../../../shared/cross-platform-path'
 import { useActiveWorktree, useActiveWorktreeId } from '@/store/selectors'
 import { translate } from '@/i18n/i18n'
+import { milestoneLabel } from '../../../../../roadmap/core/r2-snapshot'
 import type { Selection } from '../../../../../roadmap/core/r2-selection'
 import { useRoadmapR2 as useR2Loader } from '../roadmap-canvas/use-roadmap-r2'
 import { useRoadmapR2 } from '../roadmap-canvas/roadmap-r2-store'
@@ -128,7 +129,9 @@ export default function RoadmapPanel(): React.JSX.Element {
         )}
         {sidebarView === 'sessions' && snapshot && (
           <div className="py-1">
-            {snapshot.sessions.map((s) => {
+            {[...snapshot.sessions]
+              .sort((a, b) => (a.lastTime < b.lastTime ? 1 : -1))
+              .map((s) => {
               const open = treeOpen[s.id] ?? true
               const sessSel = selection.level !== 'project' && selection.sid === s.id
               const ms = snapshot.milestones
@@ -166,9 +169,9 @@ export default function RoadmapPanel(): React.JSX.Element {
                               <span className="text-[9px] text-muted-foreground">{mOpen ? '▾' : '▸'}</span>
                               <span className="h-2.5 w-2.5 flex-none rounded-[3px]" style={{ background: MS_COLORS[colorIdx] }} />
                               <span className="min-w-0 flex-1">
-                                <span className="block truncate text-[11.5px] text-[#e8e8e8]">{m.title}</span>
+                                <span className="line-clamp-2 break-words text-[11.5px] leading-snug text-[#e8e8e8]">{m.title}</span>
                                 <span className="block text-[9.5px] text-muted-foreground">
-                                  Ch.{m.chapterIndexes[0]}–{m.chapterIndexes.at(-1)} · {m.chapterIndexes.length} 章
+                                  {milestoneLabel(snapshot, m.id)} · Ch.{m.chapterIndexes[0]}–{m.chapterIndexes.at(-1)} · {m.chapterIndexes.length} 章
                                 </span>
                               </span>
                             </div>
@@ -200,7 +203,7 @@ export default function RoadmapPanel(): React.JSX.Element {
                   )}
                 </div>
               )
-            })}
+              })}
           </div>
         )}
         {sidebarView === 'pits' && (

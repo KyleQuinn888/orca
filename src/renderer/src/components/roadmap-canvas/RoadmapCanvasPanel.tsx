@@ -53,7 +53,7 @@ export default function RoadmapCanvasPanel({ worktreeId }: { worktreeId: string 
     if (!snapshot || !relations) {
       return 32
     }
-    const width = (scrollRef.current?.clientWidth ?? 1200) - 220
+    const width = (scrollRef.current?.clientWidth ?? 1200) - 110
     const probe = computeLayout(snapshot, relations, { dayPx: 32 })
     return Math.max(4, Math.min(300, probe.fitDayPx(Math.max(width, 200))))
   }, [snapshot, relations])
@@ -143,9 +143,9 @@ export default function RoadmapCanvasPanel({ worktreeId }: { worktreeId: string 
         </button>
       </div>
       {/* canvas + inspector */}
-      <div className="flex min-h-0 flex-1">
-        <div ref={scrollRef} className="flex-1 overflow-auto scrollbar-sleek">
-          <div className="mx-10 mb-16 mt-5 ml-[190px]">
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div ref={scrollRef} className="min-h-0 flex-1 overflow-auto scrollbar-sleek">
+          <div className="mx-10 mb-16 mt-5 ml-[60px]">
             <CanvasTimeline
               snapshot={snapshot}
               relations={relations}
@@ -159,7 +159,7 @@ export default function RoadmapCanvasPanel({ worktreeId }: { worktreeId: string 
           </div>
         </div>
         {inspectorOpen && (
-          <aside className="w-[300px] flex-none overflow-y-auto scrollbar-sleek border-l border-border bg-[#252526] p-3">
+          <aside className="h-[210px] max-h-[40%] flex-none overflow-y-auto scrollbar-sleek border-t border-border bg-[#252526] px-4 py-2.5">
             <CanvasInspector snapshot={snapshot} selection={selection} onSelect={handleSelect} onOpenChapter={openChapterCard} />
           </aside>
         )}
