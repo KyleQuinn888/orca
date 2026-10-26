@@ -27,11 +27,13 @@ function gapText(a: string, b: string): string {
 export function CanvasInspector({
   snapshot,
   selection,
-  onSelect
+  onSelect,
+  onOpenChapter
 }: {
   snapshot: R2Snapshot
   selection: Selection
   onSelect: (sel: Selection) => void
+  onOpenChapter: (file: string) => void
 }): React.JSX.Element {
   const colorOf = (mid: string): string => {
     const order = [...snapshot.milestones].sort((a, b) => (a.firstTime < b.firstTime ? -1 : 1))
@@ -124,8 +126,8 @@ export function CanvasInspector({
       <InsRow k="时间" v={`${fmt(Date.parse(c.firstTime))} → ${fmt(Date.parse(c.lastTime))}`} />
       <InsRow k="时长" v={gapText(c.firstTime, c.lastTime)} />
       <InsRow k="状态" v={c.verified ? '✓ 锚点已验' : '○ 锚点未验'} />
-      <div className="mt-2 text-[11.5px] text-muted-foreground">要点 / 决策 / 产物 / 坑引用 — 章卡内容（同侧栏章详情）。</div>
-      {m && <button className="mt-2 rounded border border-border px-2 py-0.5 text-[11px]" onClick={() => onSelect({ level: 'milestone', sid: sess.id, mid: m.id })}>← 里程碑</button>}
+      <button className="mt-2 rounded border border-[#4fc1ff] px-2 py-0.5 text-[11px] text-[#4fc1ff]" onClick={() => onOpenChapter(c.file)}>打开章卡 ›</button>
+      {m && <button className="mt-2 ml-2 rounded border border-border px-2 py-0.5 text-[11px]" onClick={() => onSelect({ level: 'milestone', sid: sess.id, mid: m.id })}>← 里程碑</button>}
     </div>
   )
 }

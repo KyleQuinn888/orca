@@ -4,6 +4,7 @@
 
 import { LoaderCircle } from 'lucide-react'
 import { useAppStore } from '@/store'
+import { resolveRuntimePath } from '../../../../shared/cross-platform-path'
 import { useActiveWorktree, useActiveWorktreeId } from '@/store/selectors'
 import { translate } from '@/i18n/i18n'
 import type { Selection } from '../../../../../roadmap/core/r2-selection'
@@ -27,6 +28,7 @@ export default function RoadmapPanel(): React.JSX.Element {
   const treeOpen = useRoadmapR2((s) => s.treeOpen)
   const treeMsOpen = useRoadmapR2((s) => s.treeMsOpen)
   const setExpandedSid = useRoadmapR2((s) => s.setExpandedSid)
+  const ensureTreeOpen = useRoadmapR2((s) => s.ensureTreeOpen)
   // Pits rows still come from the v1 parser; it reads the same KEYWORDS.md layer.
   const pitsData = useRoadmapPanelData(worktreePath)
 
@@ -37,7 +39,26 @@ export default function RoadmapPanel(): React.JSX.Element {
     select(sel)
     if (sel.level === 'chapter') {
       setExpandedSid(sel.sid)
+      const m = snapshot?.milestones.find((x) => x.session === sel.sid && x.chapterIndexes.includes(sel.chapter))
+      ensureTreeOpen(sel.sid, m?.id)
     }
+  }
+
+  const openChapterCard = (file: string): void => {
+    if (!worktreePath || !worktreeId) {
+      return
+    }
+    useAppStore.getState().openFile(
+      {
+        filePath: resolveRuntimePath(resolveRuntimePath(worktreePath, '.roadmap'), file),
+        relativePath: `.roadmap/${file}`,
+        worktreeId,
+        runtimeEnvironmentId: null,
+        language: 'markdown',
+        mode: 'edit'
+      },
+      { preview: true, focusEditor: true, suppressActiveRuntimeFallback: true }
+    )
   }
 
   const openCanvas = (): void => {
@@ -162,6 +183,8 @@ export default function RoadmapPanel(): React.JSX.Element {
                                       key={c.index}
                                       className={`flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 pl-5 text-[11px] ${chSel ? 'bg-[#4fc1ff24]' : 'hover:bg-[#2d2d30]'}`}
                                       onClick={() => onSelect({ level: 'chapter', sid: s.id, chapter: c.index })}
+                                      onDoubleClick={() => openChapterCard(c.file)}
+                                      title="Double-click to open the chapter card"
                                     >
                                       <span className="w-8 flex-none text-[10px] text-muted-foreground">Ch.{c.index}</span>
                                       <span className="min-w-0 flex-1 truncate">{c.title}</span>

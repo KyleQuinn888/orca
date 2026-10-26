@@ -31,6 +31,8 @@ type CanvasTimelineProps = {
   selection: Selection
   onSelect: (sel: Selection) => void
   onToggleExpand: (sid: string | null) => void
+  /** UI zoom: scales the whole canvas (text included), unlike dayPx which only spreads time. */
+  uiScale: number
 }
 
 export function CanvasTimeline({
@@ -40,7 +42,8 @@ export function CanvasTimeline({
   expandedSid,
   selection,
   onSelect,
-  onToggleExpand
+  onToggleExpand,
+  uiScale
 }: CanvasTimelineProps): React.JSX.Element {
   const layout = useMemo(() => computeLayout(snapshot, relations, { dayPx, expandedSid }), [snapshot, relations, dayPx, expandedSid])
   const colorOf = useMemo(() => {
@@ -65,8 +68,10 @@ export function CanvasTimeline({
     )
   }
 
+  // CSS zoom (not transform): Chromium recomputes layout boxes so scroll ranges,
+  // hit-testing and text all scale together (Electron-only feature, fine here).
   return (
-    <div className="relative select-none" style={{ width: totalW, minWidth: totalW }}>
+    <div className="relative select-none" style={{ zoom: uiScale, width: totalW, minWidth: totalW }}>
       {/* ruler */}
       <div className="relative h-[26px] border-b border-border">
         <span className="absolute top-0 border-l border-border pl-1 text-[10.5px] text-muted-foreground">

@@ -6,6 +6,8 @@
 export type R2Chapter = {
   session: string
   index: number
+  /** .roadmap-relative card path (001/<sid>/NNN-*.md) for opening the card. */
+  file: string
   title: string
   firstTime: string
   lastTime: string
@@ -149,6 +151,7 @@ export function buildSnapshot(files: FileMap): SnapshotResult {
       chapters.push({
         session: m[1],
         index: Number(m[2]),
+        file: path,
         // chapter cards carry the session title in `title`; the chapter's own name is chapter.slug
         title: nested(f, 'chapter', 'slug') || f.flat.title || path,
         firstTime: nested(f, 'time', 'firstTime'),

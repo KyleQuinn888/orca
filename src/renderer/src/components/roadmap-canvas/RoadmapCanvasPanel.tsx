@@ -1,9 +1,10 @@
 // Project canvas host — a virtual editor tab (check-details pattern) rendering
 // the R2 timeline + inspector from the shared roadmap store.
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { useAppStore } from '@/store'
+import { resolveRuntimePath } from '../../../../shared/cross-platform-path'
 import { translate } from '@/i18n/i18n'
 import { useRoadmapR2 } from './use-roadmap-r2'
 import { useRoadmapR2 as useR2Store } from './roadmap-r2-store'
@@ -28,8 +29,25 @@ export default function RoadmapCanvasPanel({ worktreeId }: { worktreeId: string 
   const select = useR2Store((s) => s.select)
   const setExpandedSid = useR2Store((s) => s.setExpandedSid)
   const [dayPx, setDayPx] = useState(32)
+  const [uiScale, setUiScale] = useState(1)
   const [inspectorOpen, setInspectorOpen] = useState(true)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) {
+      return
+    }
+    const onWheel = (e: WheelEvent): void => {
+      if (!e.ctrlKey) {
+        return
+      }
+      e.preventDefault()
+      setUiScale((cur) => Math.max(0.75, Math.min(2.5, +(cur + (e.deltaY < 0 ? 0.15 : -0.15)).toFixed(2))))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [])
 
   const fitDayPx = useMemo(() => {
     if (!snapshot || !relations) {
@@ -39,6 +57,23 @@ export default function RoadmapCanvasPanel({ worktreeId }: { worktreeId: string 
     const probe = computeLayout(snapshot, relations, { dayPx: 32 })
     return Math.max(4, Math.min(300, probe.fitDayPx(Math.max(width, 200))))
   }, [snapshot, relations])
+
+  const openChapterCard = (file: string): void => {
+    if (!worktreePath || !worktree) {
+      return
+    }
+    useAppStore.getState().openFile(
+      {
+        filePath: resolveRuntimePath(resolveRuntimePath(worktreePath, '.roadmap'), file),
+        relativePath: `.roadmap/${file}`,
+        worktreeId,
+        runtimeEnvironmentId: null,
+        language: 'markdown',
+        mode: 'edit'
+      },
+      { preview: true, focusEditor: true, suppressActiveRuntimeFallback: true }
+    )
+  }
 
   if (!worktreePath) {
     return <Center>{translate('auto.components.roadmap.canvasWorktreeGone', '工作区不可用。')}</Center>
@@ -88,6 +123,21 @@ export default function RoadmapCanvasPanel({ worktreeId }: { worktreeId: string 
           <span>{translate('auto.components.roadmap.legendVerified', '实线格=已验 · 虚线格=未验')}</span>
           <span>{translate('auto.components.roadmap.legendFork', 'fork 检测：当前未检出')}</span>
         </div>
+        <div className="flex items-center gap-1">
+          <button
+            className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground"
+            onClick={() => setUiScale((cur) => Math.max(0.75, +(cur - 0.15).toFixed(2)))}
+          >
+            −
+          </button>
+          <span className="w-10 text-center text-[11px] text-muted-foreground">{Math.round(uiScale * 100)}%</span>
+          <button
+            className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted-foreground"
+            onClick={() => setUiScale((cur) => Math.min(2.5, +(cur + 0.15).toFixed(2)))}
+          >
+            ＋
+          </button>
+        </div>
         <button className="rounded border border-border px-2 py-0.5 text-[11px] text-muted-foreground" onClick={() => setInspectorOpen((v) => !v)}>
           {inspectorOpen ? '→' : '←'}
         </button>
@@ -104,12 +154,13 @@ export default function RoadmapCanvasPanel({ worktreeId }: { worktreeId: string 
               selection={selection}
               onSelect={handleSelect}
               onToggleExpand={setExpandedSid}
+              uiScale={uiScale}
             />
           </div>
         </div>
         {inspectorOpen && (
           <aside className="w-[300px] flex-none overflow-y-auto scrollbar-sleek border-l border-border bg-[#252526] p-3">
-            <CanvasInspector snapshot={snapshot} selection={selection} onSelect={handleSelect} />
+            <CanvasInspector snapshot={snapshot} selection={selection} onSelect={handleSelect} onOpenChapter={openChapterCard} />
           </aside>
         )}
       </div>
