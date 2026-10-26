@@ -149,7 +149,8 @@ export function buildSnapshot(files: FileMap): SnapshotResult {
       chapters.push({
         session: m[1],
         index: Number(m[2]),
-        title: f.flat.title ?? path,
+        // chapter cards carry the session title in `title`; the chapter's own name is chapter.slug
+        title: nested(f, 'chapter', 'slug') || f.flat.title || path,
         firstTime: nested(f, 'time', 'firstTime'),
         lastTime: nested(f, 'time', 'lastTime'),
         verified: rawHas(path, 'anchorsVerifiedAt', files),
