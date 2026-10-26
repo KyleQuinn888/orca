@@ -10,6 +10,7 @@ import { useRoadmapR2 } from './use-roadmap-r2'
 import { useRoadmapR2 as useR2Store } from './roadmap-r2-store'
 import { CanvasTimeline } from './CanvasTimeline'
 import { CanvasInspector } from './CanvasInspector'
+import { ReviewDetail } from './ReviewDetail'
 import { computeLayout } from '../../../../../roadmap/core/r2-layout'
 import { deriveRelations } from '../../../../../roadmap/core/r2-chains'
 
@@ -28,6 +29,11 @@ export default function RoadmapCanvasPanel({ worktreeId }: { worktreeId: string 
   const expandedSid = useR2Store((s) => s.expandedSid)
   const select = useR2Store((s) => s.select)
   const setExpandedSid = useR2Store((s) => s.setExpandedSid)
+  const reviewOpen = useR2Store((s) => s.reviewOpen)
+  const setReviewOpen = useR2Store((s) => s.setReviewOpen)
+  const inboxWrites = useR2Store((s) => s.inboxWrites)
+  const inboxWriteError = useR2Store((s) => s.inboxWriteError)
+  const submitInboxWrite = useR2Store((s) => s.submitInboxWrite)
   const [dayPx, setDayPx] = useState(32)
   const [uiScale, setUiScale] = useState(1)
   const [inspectorOpen, setInspectorOpen] = useState(true)
@@ -88,6 +94,7 @@ export default function RoadmapCanvasPanel({ worktreeId }: { worktreeId: string 
     return <Center>{translate('auto.components.roadmap.canvasEmpty', '这个项目还没有可读取的路线图。')}</Center>
   }
 
+  const reviewGroup = reviewOpen ? snapshot.inbox.find((g) => g.proposalGroupId === reviewOpen) ?? null : null
   const handleSelect = (sel: Parameters<typeof select>[0]): void => {
     select(sel)
     if (sel.level === 'chapter') {
@@ -158,7 +165,19 @@ export default function RoadmapCanvasPanel({ worktreeId }: { worktreeId: string 
             />
           </div>
         </div>
-        {inspectorOpen && (
+        {reviewGroup && worktreePath ? (
+          <aside className="h-[55%] flex-none border-t border-border bg-[#252526]">
+            <ReviewDetail
+              snapshot={snapshot}
+              group={reviewGroup}
+              onDone={() => setReviewOpen(null)}
+              onApprove={() => void submitInboxWrite(worktreePath, reviewGroup.proposalGroupId, reviewGroup.session, 'approve')}
+              onReject={() => void submitInboxWrite(worktreePath, reviewGroup.proposalGroupId, reviewGroup.session, 'reject')}
+              phase={inboxWrites[reviewGroup.proposalGroupId]}
+              errMsg={inboxWriteError[reviewGroup.proposalGroupId]}
+            />
+          </aside>
+        ) : inspectorOpen && (
           <aside className="h-[210px] max-h-[40%] flex-none overflow-y-auto scrollbar-sleek border-t border-border bg-[#252526] px-4 py-2.5">
             <CanvasInspector snapshot={snapshot} selection={selection} onSelect={handleSelect} onOpenChapter={openChapterCard} />
           </aside>

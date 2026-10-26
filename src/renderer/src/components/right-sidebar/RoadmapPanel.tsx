@@ -87,38 +87,14 @@ export default function RoadmapPanel(): React.JSX.Element {
         {inbox.slice(0, 3).map((g) => (
           <div key={g.proposalGroupId} className="mx-2.5 rounded border border-dashed border-[#d29922] p-2 text-[11.5px]">
             <div className="mb-1 text-[10.5px] text-muted-foreground">
-              LLM 提议 · {g.by} · {g.at.slice(0, 16).replace('T', ' ')}
+              LLM 提议 · {g.cuts.length} 切点 · {g.by} · {g.at.slice(0, 16).replace('T', ' ')}
             </div>
-            {g.cuts.map((c) => {
-              const prev = snapshot?.chapters.find((x) => x.session === g.session && !x.superseded && x.index === c.chapter - 1)
-              const next = snapshot?.chapters.find((x) => x.session === g.session && !x.superseded && x.index === c.chapter)
-              return (
-                <div key={c.chapter} className="py-0.5">
-                  <div className="flex gap-1.5">
-                    <span className="font-semibold text-[#d29922]">Ch.{c.chapter} 前</span>
-                    <span className="min-w-0 flex-1 truncate" title={c.evidence}>{c.evidence}</span>
-                  </div>
-                  {(prev || next) && (
-                    <div className="mt-0.5 ml-1 border-l-2 border-[#4b4b4b] pl-1.5">
-                      {prev && (
-                        <div className="text-[10px] leading-snug">
-                          <span className="text-muted-foreground">▸ 前段收止 Ch.{prev.index}：</span>
-                          <span className="text-[#c8c8c8]">{prev.title}</span>
-                          {prev.summary && <span className="block truncate pl-4 text-muted-foreground" title={prev.summary}>{prev.summary}</span>}
-                        </div>
-                      )}
-                      {next && (
-                        <div className="text-[10px] leading-snug">
-                          <span className="text-muted-foreground">▸ 后段开启 Ch.{next.index}：</span>
-                          <span className="text-[#c8c8c8]">{next.title}</span>
-                          {next.summary && <span className="block truncate pl-4 text-muted-foreground" title={next.summary}>{next.summary}</span>}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+            {g.cuts.map((c) => (
+              <div key={c.chapter} className="line-clamp-2 break-words leading-snug" title={c.evidence}>
+                <span className="font-semibold text-[#d29922]">Ch.{c.chapter} 前</span>
+                <span className="text-muted-foreground"> {c.evidence}</span>
+              </div>
+            ))}
             <InboxActions worktreePath={worktreePath} group={g} />
           </div>
         ))}
@@ -246,75 +222,34 @@ export default function RoadmapPanel(): React.JSX.Element {
   )
 }
 
-type InboxActionsProps = {
-  worktreePath: string | null
-  group: { proposalGroupId: string; session: string }
-}
 
-function InboxActions({ worktreePath, group }: InboxActionsProps): React.JSX.Element {
+function InboxActions({ worktreePath, group }: { worktreePath: string | null; group: { proposalGroupId: string; session: string } }): React.JSX.Element {
   const phase = useRoadmapR2((st) => st.inboxWrites[group.proposalGroupId])
   const errMsg = useRoadmapR2((st) => st.inboxWriteError[group.proposalGroupId])
-  const begin = useRoadmapR2((st) => st.beginInboxWrite)
-  const cancel = useRoadmapR2((st) => st.cancelInboxWrite)
-  const submit = useRoadmapR2((st) => st.submitInboxWrite)
-  if (phase === 'confirming') {
-    return (
-      <div className="mt-1.5 rounded border border-border bg-[#252526] p-1.5 text-[10.5px]">
-        <div className="text-muted-foreground">
-          确认后将记录 user review（approve → {group.proposalGroupId.slice(0, 11)}…），随后等待重聚合。
-        </div>
-        <div className="mt-1 flex gap-1.5">
-          <button
-            className="rounded border border-[#4fc1ff] bg-[#4fc1ff] px-2 py-0.5 text-[11px] font-semibold text-[#1e1e1e] disabled:opacity-50"
-            disabled={!worktreePath || phase !== 'confirming'}
-            onClick={() => {
-              if (worktreePath) {
-                void submit(worktreePath, group.proposalGroupId, group.session, 'approve')
-              }
-            }}
-          >
-            确认批准
-          </button>
-          <button className="rounded border border-border px-2 py-0.5 text-[11px]" onClick={() => cancel(group.proposalGroupId)}>
-            取消
-          </button>
-        </div>
-      </div>
-    )
-  }
+  const setReviewOpen = useRoadmapR2((st) => st.setReviewOpen)
   if (phase === 'writing') {
-    return <div className="mt-1 text-[10px] text-[#4fc1ff]">排队/已写入 · 等待重组…（锁占用时自动重试）</div>
+    return <div className="mt-1 text-[10px] text-[#4fc1ff]">排队/写入中 · 等待重组…</div>
   }
   if (phase === 'error') {
-    return (
-      <div className="mt-1 text-[10px] text-[#f0883e]">
-        写入失败：{errMsg || '未知错误'}
-        <button className="ml-1.5 rounded border border-border px-1.5" onClick={() => begin(group.proposalGroupId)}>
-          重试
-        </button>
-      </div>
-    )
+    return <div className="mt-1 text-[10px] text-[#f0883e]">失败：{errMsg || '未知'}</div>
   }
   return (
-    <div className="mt-1 flex items-center gap-1.5">
-      <button
-        className="rounded border border-[#4fc1ff] bg-[#4fc1ff] px-2 py-0.5 text-[11px] font-semibold text-[#1e1e1e]"
-        onClick={() => begin(group.proposalGroupId)}
-      >
-        批准
-      </button>
-      <button
-        className="rounded border border-border px-2 py-0.5 text-[11px]"
-        disabled={!worktreePath}
-        onClick={() => {
-          if (worktreePath) {
-            void submit(worktreePath, group.proposalGroupId, group.session, 'reject')
+    <button
+      className="mt-1.5 w-full rounded border border-[#4fc1ff] px-2 py-1 text-[11px] font-semibold text-[#4fc1ff] hover:bg-[#4fc1ff1a]"
+      onClick={() => {
+        setReviewOpen(group.proposalGroupId)
+        if (worktreePath) {
+          // review surface lives in the canvas tab (timeline stays visible as context)
+          const wt = useAppStore.getState().getKnownWorktreeById(
+            useAppStore.getState().activeWorktreeId ?? ''
+          )
+          if (wt) {
+            useAppStore.getState().openRoadmapCanvas(wt.id)
           }
-        }}
-      >
-        拒绝
-      </button>
-      <span className="text-[10px] text-muted-foreground">◷ 72h 自动转正</span>
-    </div>
+        }
+      }}
+    >
+      审查详情 ›
+    </button>
   )
 }

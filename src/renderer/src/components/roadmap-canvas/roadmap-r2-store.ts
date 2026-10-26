@@ -27,6 +27,9 @@ type RoadmapR2Store = {
   sidebarView: 'sessions' | 'pits'
   /** Inbox write states per proposal group (R2b): confirm -> writing -> done/error. */
   inboxWrites: Record<string, 'confirming' | 'writing' | 'error'>
+  /** Canvas review mode: the proposal group whose full review surface is open. */
+  reviewOpen: string | null
+  setReviewOpen: (gid: string | null) => void
   inboxWriteError: Record<string, string>
   beginInboxWrite: (gid: string) => void
   cancelInboxWrite: (gid: string) => void
@@ -144,6 +147,10 @@ export const useRoadmapR2 = create<RoadmapR2Store>((set, get) => ({
   sidebarView: 'sessions',
   inboxWrites: {},
   inboxWriteError: {},
+  reviewOpen: null,
+  setReviewOpen: (gid) => {
+    set({ reviewOpen: gid })
+  },
   beginInboxWrite: (gid) => {
     set((st) => ({ inboxWrites: { ...st.inboxWrites, [gid]: 'confirming' }, inboxWriteError: { ...st.inboxWriteError, [gid]: '' } }))
   },
