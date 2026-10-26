@@ -11,7 +11,10 @@ import {
 } from '../native-chat/agent-session-wire/structured-agent-session-registry'
 import { subscribeAgentSessionUploadRemoval } from '../native-chat/agent-session-attachments/agent-session-attachment-store-registry'
 
+import { registerRoadmapIpcHandlers } from '../ipc/roadmap'
+
 export function registerMainProcessIpcHandlers(): void {
+  registerRoadmapIpcHandlers()
   ipcMain.handle('app:awaitFirstWindowStartupServices', async () => {
     await Promise.all([
       state.firstWindowStartupServicesReady,

@@ -25,6 +25,12 @@ type RoadmapR2Store = {
   treeOpen: Record<string, boolean>
   treeMsOpen: Record<string, boolean>
   sidebarView: 'sessions' | 'pits'
+  /** Inbox write states per proposal group (R2b): confirm -> writing -> done/error. */
+  inboxWrites: Record<string, 'confirming' | 'writing' | 'error'>
+  inboxWriteError: Record<string, string>
+  beginInboxWrite: (gid: string) => void
+  cancelInboxWrite: (gid: string) => void
+  submitInboxWrite: (worktreePath: string, gid: string, sessionId: string, decision: 'approve' | 'reject') => Promise<void>
   select: (sel: Selection) => void
   setExpandedSid: (sid: string | null) => void
   toggleTree: (sid: string) => void
@@ -136,6 +142,40 @@ export const useRoadmapR2 = create<RoadmapR2Store>((set, get) => ({
   treeOpen: {},
   treeMsOpen: {},
   sidebarView: 'sessions',
+  inboxWrites: {},
+  inboxWriteError: {},
+  beginInboxWrite: (gid) => {
+    set((st) => ({ inboxWrites: { ...st.inboxWrites, [gid]: 'confirming' }, inboxWriteError: { ...st.inboxWriteError, [gid]: '' } }))
+  },
+  cancelInboxWrite: (gid) => {
+    set((st) => {
+      const next = { ...st.inboxWrites }
+      delete next[gid]
+      return { inboxWrites: next }
+    })
+  },
+  submitInboxWrite: async (worktreePath, gid, sessionId, decision) => {
+    set((st) => ({ inboxWrites: { ...st.inboxWrites, [gid]: 'writing' } }))
+    try {
+      const res = await window.api.roadmap.reviewProposal({ worktreePath, sessionId, proposalGroupId: gid, decision, reason: 'r2:inbox' })
+      if (!res.ok) {
+        set((st) => ({ inboxWrites: { ...st.inboxWrites, [gid]: 'error' }, inboxWriteError: { ...st.inboxWriteError, [gid]: res.error } }))
+        return
+      }
+      // written; the watcher's next load (new generation) drops the group from the inbox
+      set((st) => {
+        const next = { ...st.inboxWrites }
+        delete next[gid]
+        return { inboxWrites: next }
+      })
+      await get().loadNow(worktreePath)
+    } catch (error) {
+      set((st) => ({
+        inboxWrites: { ...st.inboxWrites, [gid]: 'error' },
+        inboxWriteError: { ...st.inboxWriteError, [gid]: error instanceof Error ? error.message : String(error) }
+      }))
+    }
+  },
   select: (sel) => {
     set({ selection: sel })
     if (sel.level === 'chapter' || sel.level === 'milestone' || sel.level === 'session') {

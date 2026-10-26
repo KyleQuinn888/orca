@@ -59,6 +59,7 @@ import { updaterApi } from './api/updater-bridge'
 import { docPreviewApi } from './api/doc-preview-bridge'
 import { notebookApi } from './api/notebook-bridge'
 import { fsApi } from './api/fs-bridge'
+import { roadmapApi } from './api/roadmap-bridge'
 import { gitApi } from './api/git-bridge'
 import { uiApi } from './api/ui-bridge'
 import { statsApi } from './api/stats-bridge'
@@ -160,6 +161,7 @@ const api = {
   docPreview: docPreviewApi,
   notebook: notebookApi,
   fs: fsApi,
+  roadmap: roadmapApi,
   git: gitApi,
   ui: uiApi,
   stats: statsApi,

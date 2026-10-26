@@ -6,6 +6,7 @@ import type { ChapterWindow, TuiSession } from './tui-reader'
 import { tuiEvidence, type Evidence } from './anchor'
 
 import type { SummarizedChapter } from './summarizer'
+import type { CardFrontmatter, RoadmapCard } from './card'
 
 /**
  * S6 forgery guard: LLM free text is spliced into card bodies, so any line

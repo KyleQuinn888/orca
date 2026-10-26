@@ -95,7 +95,7 @@ export default function RoadmapPanel(): React.JSX.Element {
                 <span className="min-w-0 flex-1 truncate" title={c.evidence}>{c.evidence}</span>
               </div>
             ))}
-            <div className="mt-1 text-[10px] text-muted-foreground">◷ 72h 自动转正 · 批准/拒绝 R2b 接入</div>
+            <InboxActions worktreePath={worktreePath} group={g} />
           </div>
         ))}
         {inbox.length === 0 && <div className="px-3 text-[10.5px] text-muted-foreground">✓ 没有待审切点</div>}
@@ -218,6 +218,79 @@ export default function RoadmapPanel(): React.JSX.Element {
           />
         )}
       </div>
+    </div>
+  )
+}
+
+type InboxActionsProps = {
+  worktreePath: string | null
+  group: { proposalGroupId: string; session: string }
+}
+
+function InboxActions({ worktreePath, group }: InboxActionsProps): React.JSX.Element {
+  const phase = useRoadmapR2((st) => st.inboxWrites[group.proposalGroupId])
+  const errMsg = useRoadmapR2((st) => st.inboxWriteError[group.proposalGroupId])
+  const begin = useRoadmapR2((st) => st.beginInboxWrite)
+  const cancel = useRoadmapR2((st) => st.cancelInboxWrite)
+  const submit = useRoadmapR2((st) => st.submitInboxWrite)
+  if (phase === 'confirming') {
+    return (
+      <div className="mt-1.5 rounded border border-border bg-[#252526] p-1.5 text-[10.5px]">
+        <div className="text-muted-foreground">
+          确认后将记录 user review（approve → {group.proposalGroupId.slice(0, 11)}…），随后等待重聚合。
+        </div>
+        <div className="mt-1 flex gap-1.5">
+          <button
+            className="rounded border border-[#4fc1ff] bg-[#4fc1ff] px-2 py-0.5 text-[11px] font-semibold text-[#1e1e1e] disabled:opacity-50"
+            disabled={!worktreePath || phase !== 'confirming'}
+            onClick={() => {
+              if (worktreePath) {
+                void submit(worktreePath, group.proposalGroupId, group.session, 'approve')
+              }
+            }}
+          >
+            确认批准
+          </button>
+          <button className="rounded border border-border px-2 py-0.5 text-[11px]" onClick={() => cancel(group.proposalGroupId)}>
+            取消
+          </button>
+        </div>
+      </div>
+    )
+  }
+  if (phase === 'writing') {
+    return <div className="mt-1 text-[10px] text-[#4fc1ff]">已写入 · 等待重组…</div>
+  }
+  if (phase === 'error') {
+    return (
+      <div className="mt-1 text-[10px] text-[#f0883e]">
+        写入失败：{errMsg || '未知错误'}
+        <button className="ml-1.5 rounded border border-border px-1.5" onClick={() => begin(group.proposalGroupId)}>
+          重试
+        </button>
+      </div>
+    )
+  }
+  return (
+    <div className="mt-1 flex items-center gap-1.5">
+      <button
+        className="rounded border border-[#4fc1ff] bg-[#4fc1ff] px-2 py-0.5 text-[11px] font-semibold text-[#1e1e1e]"
+        onClick={() => begin(group.proposalGroupId)}
+      >
+        批准
+      </button>
+      <button
+        className="rounded border border-border px-2 py-0.5 text-[11px]"
+        disabled={!worktreePath}
+        onClick={() => {
+          if (worktreePath) {
+            void submit(worktreePath, group.proposalGroupId, group.session, 'reject')
+          }
+        }}
+      >
+        拒绝
+      </button>
+      <span className="text-[10px] text-muted-foreground">◷ 72h 自动转正</span>
     </div>
   )
 }

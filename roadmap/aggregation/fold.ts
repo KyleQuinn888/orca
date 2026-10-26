@@ -6,6 +6,8 @@ import type { MarkEvent } from './marks-store'
 import { collectUserPositions } from './user-trace'
 import { chapterSetHash, positionOfSeq, SIGNAL_TIER, type Chapter, type Signal } from './chapters'
 
+export type { Chapter, Signal } from './chapters'
+
 export type Source =
   | { kind: 'signal'; signalType: string; seq: number; tier: number; sortKey: number }
   | {

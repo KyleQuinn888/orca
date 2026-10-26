@@ -5,6 +5,7 @@
 
 import { readFileSync, writeFileSync, existsSync, renameSync, mkdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
+import type { AggregateLock } from './aggregate-lock'
 import { createHash, randomBytes } from 'node:crypto'
 
 // ─── Types ──────────────────────────────────────────────────────────────

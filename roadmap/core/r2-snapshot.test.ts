@@ -82,6 +82,23 @@ describe('buildSnapshot', () => {
     expect(buildSnapshot(f).reason).toBe('generation-mismatch')
   })
 
+  test('human review (approve/reject) resolves the group in the inbox', () => {
+    const f = fixture()
+    const before = JSON.parse(f.get('002/boundaries.json')!)
+    before.events.push({
+      id: 'mk-4',
+      op: 'review',
+      at: '2026-10-25T18:00:00.000Z',
+      session: 'sB',
+      by: 'user',
+      reviewTarget: { proposalGroupId: 'pg-open' },
+      decision: 'approve',
+      reason: 'r2:inbox'
+    })
+    f.set('002/boundaries.json', JSON.stringify(before))
+    expect(buildSnapshot(f).snapshot!.inbox).toHaveLength(0)
+  })
+
   test('missing INDEX -> no-index', () => {
     const f = fixture()
     f.delete('INDEX.md')

@@ -222,6 +222,8 @@ type MarkEvent = {
   anchor?: { chapter?: number }
   evidence?: string
   target?: unknown
+  reviewTarget?: { proposalGroupId?: string; markId?: string }
+  decision?: 'approve' | 'reject'
 }
 
 function gidOfTarget(target: unknown): string {
@@ -243,7 +245,8 @@ function buildInbox(raw: string | undefined): R2InboxGroup[] {
   const groups = new Map<string, R2InboxGroup>()
   const resolved = new Set<string>()
   for (const ev of events) {
-    const gid = ev.proposalGroupId ?? gidOfTarget(ev.target)
+    const gid =
+      ev.proposalGroupId ?? gidOfTarget(ev.target) ?? (ev.op === 'review' ? (ev.reviewTarget?.proposalGroupId ?? '') : '')
     if (ev.op === 'add-cut' && gid) {
       const g = groups.get(gid) ?? {
         proposalGroupId: gid,
@@ -258,7 +261,7 @@ function buildInbox(raw: string | undefined): R2InboxGroup[] {
       }
       groups.set(gid, g)
     } else if (gid) {
-      // promote / reject-stale / suppress-cut resolve the group (any target shape)
+      // promote / reject-stale / suppress-cut / human review (approve or reject) resolve the group
       resolved.add(gid)
     }
   }
