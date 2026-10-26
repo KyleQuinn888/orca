@@ -12,6 +12,7 @@ import {
   readZcodeRestingOptions
 } from './zcode-structured-options'
 import type { StructuredAgentSessionHost } from '../native-chat/agent-session-wire/structured-agent-session-host'
+import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import {
   AgentSessionPreSpawnError,
   AgentSessionPromptUnavailableError,
@@ -96,6 +97,9 @@ export type ZcodeStructuredSessionAdapterDeps = {
   browser?: ZcodeBrowserBackend
   /** Held sends changed with no row: every reader re-derives current work. */
   onWorkChanged?: (sessionId: string) => void
+  /** Lane diagnostics (dropped completions, stuck retries) reach main.trace.ndjson;
+   *  console.warn alone is invisible in a packaged desktop. */
+  logger?: Pick<StructuredAgentSessionLogger, 'warn'>
 }
 
 const ZCODE_SUBSCRIBE_DELIVERY = 'desktop-continuous'
@@ -204,7 +208,8 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
           events: input.events,
           sessionId,
           generation: input.identity.sessionId,
-          providerSessionId
+          providerSessionId,
+          logger: this.deps.logger
         }
       )
       const session: ZcodeSession = {

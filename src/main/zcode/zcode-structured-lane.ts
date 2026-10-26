@@ -8,36 +8,22 @@
 // person (or the child's death) settles them.
 
 import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
+import type { StructuredAgentSessionLogger } from '../native-chat/agent-session-wire/structured-agent-session-logger'
 import type { ProviderTimelineSink } from '../native-chat/agent-session-timeline/provider-timeline-plan'
 import { providerTimelineSink } from '../native-chat/agent-session-timeline/provider-timeline-plan'
 import { createProviderTimelineAssembler } from '../native-chat/agent-session-timeline/provider-timeline-assembler'
 import type { ProviderTimelineEvent } from '../native-chat/agent-session-timeline/provider-timeline-event'
 import { ZcodeTimelineTranslator } from './zcode-timeline-translator'
-import { mapZcodeProtocolQuestions } from './zcode-protocol-questions'
+import { ZcodeLaneInteractions, type ZcodeHeldPrompt } from './zcode-lane-interactions'
+
+export type { ZcodeHeldPrompt }
 
 const RETRY_MS = 250
 /** Refused rounds before a held turn.end is called stuck in the log. */
 const STUCK_RETRY_WARN_ROUNDS = 40
 
-/** The tool call an interaction request names, when it names one. */
-function toolCallIdOf(params: unknown): string | null {
-  const value = (params as { toolCallId?: unknown } | null | undefined)?.toolCallId
-  return typeof value === 'string' ? value : null
-}
-import type { ZcodeAppServerConnection } from './zcode-app-server-connection'
-
-/** What a held interaction request needs to be answered over the transport.
- *  Question texts ride along because the server's answer merge keys the
- *  answers record by the question text, not by any id. */
-export type ZcodeHeldPrompt = {
-  kind: 'approval' | 'question'
-  requestId: number | string
-  /** The tool call the interaction belongs to: an unanswered question is
-   *  re-asked every few seconds under a fresh interaction and wire id, and
-   *  only the newest ask of a tool call stays answerable. */
-  toolCallId?: string
-  questions?: readonly { id: string; question: string }[]
-}
+/** Lane diagnostics reach the host's trace file; without a logger, console. */
+type LaneDiagnosticsLogger = Pick<StructuredAgentSessionLogger, 'warn'>
 
 /** An event sink with no journal behind it: the protocol still runs, the timeline drops. */
 const NO_TIMELINE_EVENT_SINK = {
@@ -59,19 +45,43 @@ export type ZcodeDispatchSettlement = {
   }
 }
 
-export class ZcodeStructuredLane {
+export class ZcodeStructuredLane extends ZcodeLaneInteractions {
+  /** Diagnostics a packaged desktop can still see; console.warn goes nowhere there. */
+  private readonly logger: LaneDiagnosticsLogger | undefined
+
+  constructor(
+    private readonly onDispatchSettled: ((settlement: ZcodeDispatchSettlement) => void) | undefined,
+    input: {
+      events: StructuredAgentSessionEventSink | undefined
+      sessionId: string
+      generation: string
+      providerSessionId: string
+      logger?: LaneDiagnosticsLogger
+    }
+  ) {
+    super()
+    this.sessionId = input.sessionId
+    this.logger = input.logger
+    const sink = (providerTimelineSink(input.events ?? NO_TIMELINE_EVENT_SINK) ??
+      noTimelineSink()) as ProviderTimelineSink
+    this.assembler = createProviderTimelineAssembler({
+      sink,
+      sessionId: input.sessionId,
+      agent: 'zcode',
+      generation: input.generation,
+      namespace: input.providerSessionId
+    })
+  }
   readonly translator = new ZcodeTimelineTranslator((reason, envelope) => {
     if (typeof envelope.type === 'string' && envelope.type.startsWith('turn.')) {
       // A completion the translator cannot shape is a turn that never ends.
-      console.warn(
-        `[zcode-lane] dropped ${String(envelope.type)} (reason ${reason}, ` +
-          `seq=${typeof envelope.seq === 'number' ? envelope.seq : '?'}, session ${this.sessionId})`
-      )
+      this.diagnose(`dropped ${String(envelope.type)}`, {
+        reason,
+        seq: typeof envelope.seq === 'number' ? envelope.seq : undefined
+      })
     }
   })
   readonly assembler: ReturnType<typeof createProviderTimelineAssembler>
-  /** Interaction requests held for the person, by their server request id. */
-  readonly pendingPrompts = new Map<string, ZcodeHeldPrompt>()
   /** The highest session/event seq applied; a re-delivered envelope drops. */
   private lastSeq = 0
 
@@ -110,25 +120,15 @@ export class ZcodeStructuredLane {
   }
   private sessionId = ''
 
-  constructor(
-    private readonly onDispatchSettled: ((settlement: ZcodeDispatchSettlement) => void) | undefined,
-    input: {
-      events: StructuredAgentSessionEventSink | undefined
-      sessionId: string
-      generation: string
-      providerSessionId: string
+  /** One lane diagnostic, named for log search: ndjson when a logger was wired,
+   *  console for tests and the unpackaged dev runs. */
+  private diagnose(message: string, fields: Record<string, unknown>): void {
+    const entry = { scope: 'zcode-lane', sessionId: this.sessionId, ...fields }
+    if (this.logger !== undefined) {
+      this.logger.warn(message, entry)
+    } else {
+      console.warn(`[zcode-lane] ${message}`, JSON.stringify(entry))
     }
-  ) {
-    this.sessionId = input.sessionId
-    const sink = (providerTimelineSink(input.events ?? NO_TIMELINE_EVENT_SINK) ??
-      noTimelineSink()) as ProviderTimelineSink
-    this.assembler = createProviderTimelineAssembler({
-      sink,
-      sessionId: input.sessionId,
-      agent: 'zcode',
-      generation: input.generation,
-      namespace: input.providerSessionId
-    })
   }
 
   /** One transport notification; session/event envelopes carry the conversation. */
@@ -151,9 +151,10 @@ export class ZcodeStructuredLane {
         if (envelope.seq <= this.lastSeq) {
           if (envelope.type === 'turn.completed' || envelope.type === 'turn.failed') {
             // A completion the seq guard eats leaves the UI spinning — never silently.
-            console.warn(
-              `[zcode-lane] ${String(envelope.type)} seq=${envelope.seq} eaten by guard lastSeq=${this.lastSeq} session=${this.sessionId}`
-            )
+            this.diagnose(`${String(envelope.type)} eaten by seq guard`, {
+              seq: envelope.seq,
+              lastSeq: this.lastSeq
+            })
           }
           return
         }
@@ -176,65 +177,6 @@ export class ZcodeStructuredLane {
   /** One session/event envelope directly (seq already guarded by the adapter). */
   event(envelope: unknown): void {
     this.applyAll(this.translator.translate(envelope as never))
-  }
-
-  /** The transport pushed a permission request: journal its card, hold the answer. */
-  permissionRequest(
-    connection: ZcodeAppServerConnection,
-    requestId: number | string,
-    params: unknown
-  ): void {
-    this.retireReaskedPrompt('approval', toolCallIdOf(params))
-    this.pendingPrompts.set(String(requestId), {
-      kind: 'approval',
-      requestId,
-      ...(toolCallIdOf(params) !== null ? { toolCallId: toolCallIdOf(params) ?? undefined } : {})
-    })
-    this.applyAll(
-      this.translator.translate({
-        type: 'permission.requested',
-        timestamp: Date.now(),
-        payload: params as Record<string, unknown>
-      })
-    )
-    void connection
-  }
-
-  /** The transport pushed a user-input request: journal its card, hold the answer. */
-  userInputRequest(requestId: number | string, params: unknown): void {
-    const questions = mapZcodeProtocolQuestions(
-      (params as { questions?: unknown } | null | undefined)?.questions
-    )
-    this.retireReaskedPrompt('question', toolCallIdOf(params))
-    this.pendingPrompts.set(String(requestId), {
-      kind: 'question',
-      requestId,
-      ...(toolCallIdOf(params) !== null ? { toolCallId: toolCallIdOf(params) ?? undefined } : {}),
-      ...(questions.length > 0
-        ? { questions: questions.map(({ id, question }) => ({ id, question })) }
-        : {})
-    })
-    this.applyAll(
-      this.translator.translate({
-        type: 'userInput.requested',
-        timestamp: Date.now(),
-        payload: params as Record<string, unknown>
-      })
-    )
-  }
-
-  /** An unanswered interaction is re-asked every few seconds under a fresh
-   *  interaction and wire id; the older ask of the same tool call is no longer
-   *  answerable, so its hold retires here — elimination stays at one. */
-  private retireReaskedPrompt(kind: 'approval' | 'question', toolCallId: string | null): void {
-    if (toolCallId === null) {
-      return
-    }
-    for (const [key, held] of this.pendingPrompts) {
-      if (held.kind === kind && held.toolCallId === toolCallId) {
-        this.pendingPrompts.delete(key)
-      }
-    }
   }
 
   /** Orca's send reached the provider. */
@@ -272,44 +214,7 @@ export class ZcodeStructuredLane {
     this.assembler.apply({ type: 'session.ended', verdict: { state: 'unverifiable' } })
   }
 
-  /** The protocol answer for the one held request, built from what the person chose. */
-  answerFor(
-    pending: ZcodeHeldPrompt,
-    response:
-      | { kind: 'option'; optionId: string }
-      | { kind: 'answers'; answers: { questionId: string; optionIds: string[]; other?: string }[] }
-  ): Record<string, unknown> {
-    if (pending.kind === 'approval') {
-      // The wire result schema is strict: {decision, reason?}. The card's
-      // deny option (and only it) is a denial; allow_once, allow_project and
-      // approvals of every other name all read as allow.
-      return {
-        decision: response.kind === 'option' && response.optionId === 'deny' ? 'deny' : 'allow'
-      }
-    }
-    if (response.kind !== 'answers') {
-      return { action: 'decline' }
-    }
-    // The server merges content.answers keyed by the question TEXT (it derives
-    // those keys from the tool input); synthesized card ids map back by order.
-    const answers: Record<string, string> = {}
-    response.answers.forEach((answer, index) => {
-      const question = pending.questions?.[index]?.question
-      if (question === undefined) {
-        return
-      }
-      const value = answer.other ?? answer.optionIds.join(', ')
-      if (value.length > 0) {
-        answers[question] = value
-      }
-    })
-    if (Object.keys(answers).length === 0) {
-      return { action: 'decline' }
-    }
-    return { action: 'accept', content: { answers } }
-  }
-
-  private applyAll(events: readonly ProviderTimelineEvent[]): void {
+  protected applyAll(events: readonly ProviderTimelineEvent[]): void {
     for (const event of events) {
       if (event.type === 'turn.open' && event.turn !== undefined) {
         this.armedTurn = event.turn
@@ -323,10 +228,12 @@ export class ZcodeStructuredLane {
         // row never settles and the UI spins forever — say so, loudly.
         this.retryRounds += 1
         if (event.type === 'turn.end' && this.retryRounds === STUCK_RETRY_WARN_ROUNDS) {
-          console.warn(
-            `[zcode-lane] turn.end admission refused ${STUCK_RETRY_WARN_ROUNDS} rounds ` +
-              `(session ${this.sessionId}, turn ${this.armedTurn ?? event.turn ?? '?'}): ` +
-              `the turn may never settle. reason=${JSON.stringify(applied.admission.reason ?? null)}`
+          this.diagnose(
+            `turn.end admission refused ${STUCK_RETRY_WARN_ROUNDS} rounds — the turn may never settle`,
+            {
+              turn: this.armedTurn ?? event.turn ?? null,
+              reason: applied.admission.reason ?? null
+            }
           )
         }
         this.retry.push(event)
