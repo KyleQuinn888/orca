@@ -187,6 +187,13 @@ export function buildSnapshot(files: FileMap): SnapshotResult {
   if (idxMilestones > 0 && milestones.length === 0) {
     return { ok: false, reason: 'generation-mismatch', detail: `INDEX claims ${idxMilestones} milestones, 0 draft m-cards` }
   }
+  // Milestones must be in start-time order: 002 files enumerate in ULID (alphabetical)
+  // order, which routinely disagrees with time order and corrupted canvas band order.
+  const msTime = (x: { firstTime: string; chapterIndexes: number[] }): number => {
+    const t = Date.parse(x.firstTime)
+    return Number.isNaN(t) ? Infinity : t
+  }
+  milestones.sort((a, b) => msTime(a) - msTime(b) || (a.chapterIndexes[0] ?? 0) - (b.chapterIndexes[0] ?? 0))
 
   // ── 002: inbox from boundaries.json events ──
   const inbox = buildInbox(files.get('002/boundaries.json'))

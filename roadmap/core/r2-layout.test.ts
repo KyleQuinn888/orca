@@ -58,6 +58,72 @@ describe('computeLayout', () => {
   })
 })
 
+describe('milestone ordering', () => {
+  function reversed(): FileMap {
+    // m-aaa.md enumerates FIRST (alphabetical) but starts LATER; m-zzz starts earlier.
+    const f: FileMap = new Map()
+    const I = (p2: string, front: string) => f.set(p2, `---\n${front}\n---\n`)
+    I('INDEX.md', `sessions: 1
+milestones: 2
+chapters: 2
+generatedAt: '2026-10-25T16:41:26.836Z'`)
+    I('001/sA/000-index.md', `session: sA
+title: A
+workspace: 'C:/ws'
+time:
+  firstTime: '2026-10-01T00:00:00Z'
+  lastTime: '2026-10-04T00:00:00Z'`)
+    I('001/sA/001-a.md', `title: A
+time:
+  firstTime: '2026-10-01T00:00:00Z'
+  lastTime: '2026-10-02T00:00:00Z'
+quality: draft`)
+    I('001/sA/002-b.md', `title: A
+time:
+  firstTime: '2026-10-02T00:00:00Z'
+  lastTime: '2026-10-04T00:00:00Z'
+quality: draft`)
+    f.set('002/m-aaa.md', `---
+id: mA
+title: late
+sessions:
+  - session: sA
+    chapters: [2]
+time:
+  firstTime: '2026-10-02T00:00:00Z'
+  lastTime: '2026-10-04T00:00:00Z'
+quality: draft
+---
+`)
+    f.set('002/m-zzz.md', `---
+id: mZ
+title: early
+sessions:
+  - session: sA
+    chapters: [1]
+time:
+  firstTime: '2026-10-01T00:00:00Z'
+  lastTime: '2026-10-02T00:00:00Z'
+quality: draft
+---
+`)
+    return f
+  }
+
+  test('snapshot and band segments are time-ordered despite ULID file order', () => {
+    const snap = buildSnapshot(reversed()).snapshot!
+    expect(snap.milestones.map((m) => m.id)).toEqual(['mZ', 'mA'])
+    const L = computeLayout(snap, deriveRelations(snap), { dayPx: 32 })
+    const a = L.blocks.find((b) => b.sid === 'sA')!
+    expect(a.segments.map((x) => x.mid)).toEqual(['mZ', 'mA'])
+    expect(a.segments[0].startMs).toBeLessThan(a.segments[1].startMs)
+    // the snapshot array handed to computeLayout unsorted also comes out sorted (defense)
+    const shuffled = { ...snap, milestones: [...snap.milestones].reverse() }
+    const L2 = computeLayout(shuffled as typeof snap, deriveRelations(snap), { dayPx: 32 })
+    expect(L2.blocks[0].segments.map((x) => x.mid)).toEqual(['mZ', 'mA'])
+  })
+})
+
 describe('reResolve', () => {
   const snap = buildSnapshot(snap2()).snapshot!
   const evolved = buildSnapshot(snap2()).snapshot!

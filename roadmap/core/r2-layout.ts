@@ -74,6 +74,9 @@ export function computeLayout(snap: R2Snapshot, rel: Relations, optsIn?: Partial
     const segs: MsSegment[] = snap.milestones
       .filter((m) => m.session === s.id)
       .map((m) => ({ mid: m.id, startMs: ms(m.firstTime), endMs: ms(m.lastTime) }))
+      // defense-in-depth: band segments and drill rows must be time-ordered even if
+      // a caller hand-builds an unsorted snapshot
+      .sort((a, b) => a.startMs - b.startMs)
     const rows: BlockRow[] = []
     if (expanded) {
       for (const seg of segs) {
