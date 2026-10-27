@@ -40,6 +40,11 @@ export type RoadmapServiceDeps = {
   onTurnCompletion: (listener: (event: { sessionId: string }) => void) => () => void
   onIdle: (listener: (sessionId: string) => void) => () => void
   zcodeAvailable: () => boolean
+  /** L1 feature switch (spec §1): OFF rejects new generation per-trigger (no
+   * restart needed). TODO(next): wire to the persisted GlobalSettings store —
+   * today the boot-time settings.sessionRoadmap check is a phantom (comment only).
+   */
+  featureEnabled?: () => boolean
 }
 
 export type RoadmapService = {
@@ -105,6 +110,9 @@ export function createRoadmapService(
   async function processSession(sessionId: string, trigger: string): Promise<void> {
     // Terminal states (excluded/deleted) override every writer (spec §0)
     if (!running || !deps.isLocalSession(sessionId) || isTerminal(state, sessionId)) {
+      return
+    }
+    if (deps.featureEnabled && !deps.featureEnabled()) {
       return
     }
     if (!deps.zcodeAvailable()) {
