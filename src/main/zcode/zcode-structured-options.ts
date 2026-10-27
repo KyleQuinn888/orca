@@ -19,7 +19,12 @@ export function readZcodeLiveOptions(session: ZcodeOptionsSession): AgentSession
     current: {
       ...session.reportedOptions,
       ...(session.reportedOptions.mode !== undefined
-        ? { permissionMode: permissionForZcodeMode(session.reportedOptions.mode) }
+        ? {
+            permissionMode: permissionForZcodeMode(session.reportedOptions.mode),
+            // The upstream picker (permission-own capable) reads only the reported
+            // spelling; without it the mode pill greys out with no current value.
+            reportedPermissionMode: permissionForZcodeMode(session.reportedOptions.mode)
+          }
         : {})
     },
     models: []
