@@ -24,7 +24,10 @@ const SID_RE = /^[A-Za-z0-9_-]+$/
  * supersedes the session's 002 milestone cards, rebuilds INDEX + pits, and the
  * caller writes the `deleted` tombstone afterwards.
  */
-export async function deleteSessionArtifacts(deps: DeleteDeps, sessionId: string): Promise<DeleteOutcome> {
+export async function deleteSessionArtifacts(
+  deps: DeleteDeps,
+  sessionId: string
+): Promise<DeleteOutcome> {
   if (!SID_RE.test(sessionId)) {
     return { ok: false, error: 'invalid session id' }
   }
@@ -67,7 +70,10 @@ export async function deleteSessionArtifacts(deps: DeleteDeps, sessionId: string
       rebuildPitsIndex(workspace)
     } catch (e) {
       // projections stale but artifacts gone; reconciliation re-runs this
-      return { ok: false, error: `projection rebuild failed: ${e instanceof Error ? e.message : String(e)}` }
+      return {
+        ok: false,
+        error: `projection rebuild failed: ${e instanceof Error ? e.message : String(e)}`
+      }
     }
     return { ok: true }
   } finally {
@@ -108,27 +114,39 @@ function supersedeIfOwned(cardPath: string, sessionId: string): void {
 function rebuildWorkspaceIndex(roadmapDir: string): void {
   const dir001 = join(roadmapDir, '001')
   const dir002 = join(roadmapDir, '002')
-  const sessions = existsSync(dir001) ? readdirSync(dir001).filter((n) => SID_RE.test(n)) : []
+  const sessions = existsSync(dir001)
+    ? readdirSync(dir001).filter((n) => SID_RE.test(n) && n !== 'milestones')
+    : []
   let chapters = 0
   for (const sid of sessions) {
     const d = join(dir001, sid)
-    chapters += readdirSync(d).filter((n) => /^\d{3}-.*\.md$/.test(n) && !n.endsWith('.superseded.md')).length
+    chapters += readdirSync(d).filter(
+      (n) => /^\d{3}-.*\.md$/.test(n) && !n.endsWith('.superseded.md') && !n.startsWith('000-')
+    ).length
   }
-  const milestones: Array<{ title: string; ch: string; summary: string }> = []
+  const milestones: { title: string; ch: string; summary: string }[] = []
   if (existsSync(dir002)) {
-    for (const name of readdirSync(dir002).filter((n) => /^m-[^/]+\.md$/.test(n) && !n.includes('.bak'))) {
+    for (const name of readdirSync(dir002).filter(
+      (n) => /^m-[^/]+\.md$/.test(n) && !n.includes('.bak')
+    )) {
       const raw = readFileSync(join(dir002, name), 'utf-8')
       const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(raw)
       if (!fm || !/^quality: draft$/m.test(fm[1])) {
         continue
       }
       const title = /^title: (.+)$/m.exec(fm[1])?.[1] ?? name
-      const chs = /chapters: \[([^\]]*)\]/.exec(fm[1])?.[1]
-        .split(',')
-        .map((x) => Number(x.trim()))
-        .filter((n) => !Number.isNaN(n)) ?? []
+      const chs =
+        /chapters: \[([^\]]*)\]/
+          .exec(fm[1])?.[1]
+          .split(',')
+          .map((x) => Number(x.trim()))
+          .filter((n) => !Number.isNaN(n)) ?? []
       const summary = (fm[1].match(/^summary: (.+)$/m)?.[1] ?? '').slice(0, 80)
-      milestones.push({ title, ch: chs.length ? `Ch.${Math.min(...chs)}-${Math.max(...chs)}` : '—', summary })
+      milestones.push({
+        title,
+        ch: chs.length ? `Ch.${Math.min(...chs)}-${Math.max(...chs)}` : '—',
+        summary
+      })
     }
   }
   const body = [
