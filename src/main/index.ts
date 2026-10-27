@@ -1,3 +1,5 @@
+import { appendFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { app, clipboard, dialog, type BrowserWindow } from 'electron'
 import { parseSkillShareId } from '../shared/skill-share-link'
 import { createMacAppActivationHandler } from './window/macos-app-activation'
@@ -147,6 +149,17 @@ if (preflightReady) {
       const runtime = wireRoadmapToRuntime()
       bootstrapRoadmap({
         getUserDataDir: () => app.getPath('userData'),
+        // Packaged builds swallow console.warn; a file answers whether bootstrap
+        // ran at all when the session rows show no roadmap status line.
+        onBoot: (note: string) => {
+          try {
+            appendFileSync(
+              join(app.getPath('userData'), 'logs', 'roadmap-bootstrap.log'),
+              `${new Date().toISOString()} ${note}
+`
+            )
+          } catch {}
+        },
         getJournalDb: openRoadmapJournalDb,
         getWorkspacePath: (sessionId) => runtime.resolveWorkspacePath(sessionId),
         getSessionTitle,
@@ -162,7 +175,16 @@ if (preflightReady) {
         featureEnabled: () => persistedStore?.getSettings?.().sessionRoadmap === true
       })
     })
-    .catch((e) => console.warn('[roadmap] bootstrap failed:', e))
+    .catch((e) => {
+      console.warn('[roadmap] bootstrap failed:', e)
+      try {
+        appendFileSync(
+          join(app.getPath('userData'), 'logs', 'roadmap-bootstrap.log'),
+          `${new Date().toISOString()} bootstrap failed: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}
+`
+        )
+      } catch {}
+    })
   void app.whenReady().then(async () => {
     try {
       await initializeMainProcessReady({

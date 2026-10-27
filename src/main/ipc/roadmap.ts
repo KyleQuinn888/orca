@@ -20,9 +20,14 @@ export type RoadmapReviewRequest = {
 export type RoadmapReviewResponse = { ok: true; message: string } | { ok: false; error: string }
 
 export function registerRoadmapIpcHandlers(): void {
+  let warnedNoService = false
   ipcMain.handle('roadmap:sessionInfo', (_e, args: { sessionId: string }) => {
     const service = getRoadmapService()
     if (!service) {
+      if (!warnedNoService) {
+        warnedNoService = true
+        console.warn('[roadmap] sessionInfo asked before/without a service')
+      }
       return null
     }
     return service.sessionInfo(args.sessionId)

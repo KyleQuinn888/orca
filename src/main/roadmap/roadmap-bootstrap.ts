@@ -22,13 +22,17 @@ export function bootstrapRoadmap(deps: {
   zcodeAvailable: RoadmapServiceDeps['zcodeAvailable']
   featureEnabled?: RoadmapServiceDeps['featureEnabled']
   onQuit: (hook: () => void) => void
+  /** Packaged diagnostics: bootstrap milestones land in a file console cannot lose. */
+  onBoot?: (note: string) => void
 }): void {
+  deps.onBoot?.('bootstrap start')
   const state = loadState(deps.getUserDataDir())
 
   service = createRoadmapService(deps, state) // deps carry featureEnabled through (L1 gate)
 
   // Start on bootstrap (settings check happens per-session via optedIn)
   service.start()
+  deps.onBoot?.('service started')
 
   // Backfill on startup (async, non-blocking); resume interrupted deletions first (spec §3.6)
   void service!.resumeDeletions().then(() => service!.backfill())
