@@ -86,13 +86,32 @@ spawn 真实已装 CLI 的 `zcode app-server`：创建会话 → 订阅（deskto
 
 dev 板可以做**早期拒绝**（协议交互层），但发布验收必须装 **NSIS 安装包**（验证 ASAR 打包、资源、PATH 解析、结构化日志真的落 ndjson）。
 
+### 打包版隔离冒烟（交付前必跑——防"盲出"）
+
+用 `dist/win-unpacked/Orca.exe`（与安装包同一次构建的产物）起一个完全隔离的实例，**cwd 必须是 win-unpacked 目录本身**（模拟快捷方式从安装目录启动）。⚠️ 从仓库根启动会得到**假通过**——beta0.7/0.7.1 的 roadmap UI 全灭正是 `process.cwd()` 锚定的资源读取在安装目录下 ENOENT + console.warn 黑洞，而当时的冒烟恰好从仓库根启动，掩盖了它（2026-10-27 复盘）。
+
+```bash
+SMOKE=$TEMP/orca-smoke-release && mkdir -p $SMOKE/home $SMOKE/profile
+cd <repo>/dist/win-unpacked    # cwd=win-unpacked，模拟快捷方式
+USERPROFILE=$SMOKE/home HOME=$SMOKE/home \
+ORCA_E2E_USER_DATA_DIR=$SMOKE/profile ORCA_E2E_HOME_DIR=$SMOKE/home \
+./Orca.exe > $SMOKE/stdout.log 2>&1 &    # 记下 PID，收尾按 PID 杀（绝不按进程名）
+```
+
+四个环境变量缺一不可（homedir 边界检查会拒绝启动）。通过标准：
+
+1. `stdout.log` 无 `bootstrap failed`、无 ENOENT；
+2. `<profile>/logs/roadmap-bootstrap.log` 出现 `bootstrap start` + `service started`（a8904721 修复版起该日志随 079d40fc0e 落盘）；
+3. **本次发布的新功能 UI 人工目视确认**（新按钮/状态行/设置项——清单在每次发布计划里列明）。
+
 冒烟清单（一次会话内）：
 
 1. 纯消息回合，正常回复；
 2. 粘贴一张图，模型能描述内容；
 3. 触发权限卡并应答（`{decision}` 通道）；
 4. 触发问答卡并应答（`{action:'accept'}` 通道——与权限卡形状不同，别只测一个）；
-5. 回合结束不转圈（若转圈：`main.trace.ndjson` grep `"scope":"zcode-lane"` 抓诊断）。
+5. 回合结束不转圈（若转圈：`main.trace.ndjson` grep `"scope":"zcode-lane"` 抓诊断）；
+6. 本次发布新增的 UI 面在隔离冒烟里目视过（见上节第 3 条）。
 
 APK 也装一下，至少确认版本号和启动。
 
@@ -111,3 +130,4 @@ git push fork mobile-desktop-beta.N
 1. **CLI 别拖**：每次出包查一次 npm，落后就 升级+全套验证（协议漂移越拖越大）。
 2. **组合要可复现**：任何时点能答出"这个包装的时候配的是哪个 CLI 版本"。
 3. **最终验收只认安装包**：dev 板/单测过 ≠ 发布过。
+4. **打包验证环境必须等同真实启动**：cwd=安装目录、console 输出不可见——从仓库根启动的验证不算数；打包版诊断一律走落盘日志，不信 console。
