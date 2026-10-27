@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import type { StructuredAgentSessionEventSink } from '../native-chat/agent-session-wire/structured-agent-session-event-sink'
 import { ZcodeStructuredLane } from './zcode-structured-lane'
 
 /** A lane with no journal behind it: enough to drive the held-prompt paths. */
@@ -107,5 +108,57 @@ describe('ZcodeStructuredLane held prompts', () => {
     expect(subject.answerFor(pending, { kind: 'option', optionId: 'answer' })).toEqual({
       action: 'decline'
     })
+  })
+})
+
+describe('ZcodeStructuredLane interrupted turns', () => {
+  // A sink that accepts every write: the no-sink lane drops turn transitions,
+  // and the settle under test rides an admitted turn.end.
+  function acceptingEvents(): StructuredAgentSessionEventSink {
+    return {
+      tryAppendTransition: () => ({ accepted: true }),
+      journalItems: () => null,
+      setActivity: () => {}
+    } as never as StructuredAgentSessionEventSink
+  }
+
+  function armedLane(settled: string[]): ZcodeStructuredLane {
+    const l = new ZcodeStructuredLane((s) => settled.push(s.clientMessageId), {
+      events: acceptingEvents(),
+      sessionId: 'zcode_s1',
+      generation: 'g1',
+      providerSessionId: 'sess_provider_1'
+    })
+    l.inputAccepted('send-1', 1)
+    l.notification('session/event', { type: 'turn.started', turnId: 'turn-1', seq: 1, timestamp: 1 })
+    return l
+  }
+
+  it('settles the armed turn when the accepted stop arrives without a wire terminal', () => {
+    const settled: string[] = []
+    const l = armedLane(settled)
+    expect(l.armedTurnIdentity()).not.toBeNull()
+    l.interruptArmedTurn()
+    expect(settled).toEqual(['send-1'])
+    // The settled identity stays available for the send reply still in flight.
+    expect(l.armedTurnIdentity()).toEqual({
+      provider: 'orca',
+      clientMessageId: 'send-1'
+    })
+    // A second stop settles nothing further.
+    l.interruptArmedTurn()
+    expect(settled).toEqual(['send-1'])
+  })
+
+  it('is a no-op with nothing armed: an idle stop settles no dispatch', () => {
+    const settled: string[] = []
+    const l = new ZcodeStructuredLane((s) => settled.push(s.clientMessageId), {
+      events: undefined,
+      sessionId: 'zcode_s1',
+      generation: 'g1',
+      providerSessionId: 'sess_provider_1'
+    })
+    l.interruptArmedTurn()
+    expect(settled).toEqual([])
   })
 })

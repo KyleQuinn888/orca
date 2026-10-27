@@ -28,7 +28,9 @@ type LaneDiagnosticsLogger = Pick<StructuredAgentSessionLogger, 'warn'>
 /** An event sink with no journal behind it: the protocol still runs, the timeline drops. */
 const NO_TIMELINE_EVENT_SINK = {
   tryAppendTransition: () => ({ accepted: false, reason: 'no-sink' }),
-  journalItems: () => [],
+  // The decisions guard a null journal ('absent'); an array here would reach
+  // them truthy and crash on itemBody the first turn event.
+  journalItems: () => null,
   setActivity: () => {}
 } as never as StructuredAgentSessionEventSink
 
@@ -212,6 +214,18 @@ export class ZcodeStructuredLane extends ZcodeLaneInteractions {
       },
       { type: 'turn.end', turn: turnId, at: at + 1, state: 'completed', outcome: 'success' }
     ])
+  }
+
+  /** The person stopped the armed turn. The provider may leave it unterminated
+   *  on the wire — its session then also refuses the next prompt as already
+   *  running — so the accepted stop settles the turn here: the journal row must
+   *  not keep spinning and the armed dispatch must release the working state. */
+  interruptArmedTurn(): void {
+    const turn = this.armedTurn ?? this.settledTurn
+    if (this.armedSend === null || turn === null) {
+      return
+    }
+    this.applyAll([{ type: 'turn.end', turn, at: Date.now(), state: 'interrupted' }])
   }
 
   /** The child is gone: settle the timeline after everything it said lands. */

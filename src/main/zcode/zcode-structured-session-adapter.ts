@@ -158,11 +158,29 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
     // its stale connection would swallow server requests meant for the new one.
     this.sessions.delete(sessionId)
     let expectedExit = false
+    // Acquire deletes the session entry before the replacement child's snapshot
+    // and subscribe finish: anything arriving in that window dies silently in
+    // the notification closure unless named here — the one drop the lane can
+    // never see, so log each method once per acquisition.
+    const droppedBeforeRegister = new Set<string>()
     const connection = await openZcodeAppServerConnection(
       launch,
       {
-        onNotification: (method, params) =>
-          this.sessions.get(sessionId)?.lane.notification(method, params),
+        onNotification: (method, params) => {
+          const session = this.sessions.get(sessionId)
+          if (session === undefined) {
+            if (!droppedBeforeRegister.has(method)) {
+              droppedBeforeRegister.add(method)
+              this.deps.logger?.warn('notification dropped before session registered', {
+                scope: 'zcode-adapter',
+                sessionId,
+                method
+              })
+            }
+            return
+          }
+          session.lane.notification(method, params)
+        },
         onServerRequest: (request) => this.handleServerRequest(sessionId, request, connection),
         onExit: (error) => {
           const session = this.sessions.get(sessionId)
@@ -265,8 +283,14 @@ export class ZcodeStructuredSessionAdapter implements StructuredAgentSessionAdap
   compact: StructuredAgentSessionAdapter['compact'] = async (input) =>
     compactZcodeTurn(this.live(input.sessionId), this.deps.requestTimeoutMs ?? 30_000)
 
-  cancelTurn = (input: { sessionId: string; turnId?: string; fence: number }) =>
-    cancelZcodeTurn(this.live(input.sessionId))
+  cancelTurn = async (input: { sessionId: string; turnId?: string; fence: number }) => {
+    const session = this.live(input.sessionId)
+    const result = await cancelZcodeTurn(session)
+    // An accepted stop does not guarantee a wire terminal event for the armed
+    // turn; settle it locally or the row spins and the chat stays busy.
+    session.lane.interruptArmedTurn()
+    return result
+  }
 
   answerPrompt: StructuredAgentSessionAdapter['answerPrompt'] = async (input) => {
     const session = this.live(input.sessionId)
