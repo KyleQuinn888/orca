@@ -53,6 +53,10 @@ export type RoadmapService = {
   optInSession(sessionId: string): void
   optOutSession(sessionId: string): void
   backfill(): Promise<void>
+  /** Manual generate (spec §2): bypasses threshold, refused for terminal states. */
+  generateNow(sessionId: string): Promise<{ ok: boolean; error?: string }>
+  /** Badge state for the session title bar (S2). */
+  sessionInfo(sessionId: string): { policy: string; phase: 'idle' | 'generating'; turns: number; edits: number; fileCount: number }
 }
 
 // ─── Service implementation ─────────────────────────────────────────────
@@ -257,6 +261,37 @@ export function createRoadmapService(
     saveStateSafe(deps, state)
   }
 
+  function sessionInfo(sessionId: string): {
+    policy: string
+    phase: 'idle' | 'generating'
+    turns: number
+    edits: number
+    fileCount: number
+  } {
+    const m = metricsOf(state, sessionId)
+    return {
+      policy: state.policy[sessionId] ?? 'candidate',
+      phase: activeTasks.has(sessionId) ? 'generating' : 'idle',
+      turns: m.turns,
+      edits: m.edits,
+      fileCount: m.fileCount
+    }
+  }
+
+  async function generateNow(sessionId: string): Promise<{ ok: boolean; error?: string }> {
+    if (!deps.isLocalSession(sessionId)) {
+      return { ok: false, error: 'not a local session' }
+    }
+    // Terminal states are irreversible (spec §2): deleted refuses, excluded may un-exclude
+    if (state.policy[sessionId] === 'deleted') {
+      return { ok: false, error: 'session deleted' }
+    }
+    setPolicy(state, sessionId, 'eligible')
+    saveStateSafe(deps, state)
+    await processSession(sessionId, 'manual-generate')
+    return { ok: true }
+  }
+
   async function backfill(): Promise<void> {
     // Tombstone gate (spec §2 M7): only policy-eligible sessions; terminal
     // states are never revived by backfill.
@@ -293,5 +328,5 @@ export function createRoadmapService(
     }
   }
 
-  return { start, stop, optInSession, optOutSession, backfill }
+  return { start, stop, optInSession, optOutSession, backfill, generateNow, sessionInfo }
 }

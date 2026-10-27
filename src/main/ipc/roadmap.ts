@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { AggregateLock } from '../../../roadmap/aggregation/aggregate-lock'
 import { loadMarks, MarksStore } from '../../../roadmap/aggregation/marks-store'
 import { verbReview } from '../../../roadmap/aggregation/verbs'
+import { getRoadmapService } from '../roadmap/roadmap-bootstrap'
 
 export type RoadmapReviewRequest = {
   worktreePath: string
@@ -19,6 +20,28 @@ export type RoadmapReviewRequest = {
 export type RoadmapReviewResponse = { ok: true; message: string } | { ok: false; error: string }
 
 export function registerRoadmapIpcHandlers(): void {
+  ipcMain.handle('roadmap:sessionInfo', (_e, args: { sessionId: string }) => {
+    const service = getRoadmapService()
+    if (!service) {
+      return null
+    }
+    return service.sessionInfo(args.sessionId)
+  })
+  ipcMain.handle(
+    'roadmap:generateNow',
+    async (_e, args: { sessionId: string; expectedPolicy: string }): Promise<{ ok: boolean; error?: string }> => {
+      const service = getRoadmapService()
+      if (!service) {
+        return { ok: false, error: 'roadmap service unavailable' }
+      }
+      // Server-side revalidation (spec §1 L3): the renderer's view may be stale.
+      const info = service.sessionInfo(args.sessionId)
+      if (info.policy !== args.expectedPolicy) {
+        return { ok: false, error: `state moved: ${info.policy}` }
+      }
+      return service.generateNow(args.sessionId)
+    }
+  )
   ipcMain.handle('roadmap:reviewProposal', async (_event, args: RoadmapReviewRequest): Promise<RoadmapReviewResponse> => {
     try {
       if (!args?.worktreePath || !args?.proposalGroupId || !args.sessionId) {
