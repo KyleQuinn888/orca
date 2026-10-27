@@ -4,7 +4,17 @@
 
 import { join } from 'node:path'
 import { existsSync, readFileSync } from 'node:fs'
-import { getOrCreateSession, isOptedIn, optIn, optOut, type RoadmapState } from './roadmap-store'
+import {
+  getOrCreateSession,
+  isActive,
+  isTerminal,
+  metricsOf,
+  setPolicy,
+  type RoadmapStateV2
+} from './roadmap-store'
+import { parseRow } from './journal-row-parse'
+import { deleteSessionArtifacts } from './session-delete'
+import { crossesThreshold, foldRowsIntoMetrics } from './session-threshold'
 import {
   DEFAULT_SEGMENTATION_CONFIG,
   type OpenChapter,
@@ -31,6 +41,11 @@ export type RoadmapServiceDeps = {
   onTurnCompletion: (listener: (event: { sessionId: string }) => void) => () => void
   onIdle: (listener: (sessionId: string) => void) => () => void
   zcodeAvailable: () => boolean
+  /** L1 feature switch (spec §1): OFF rejects new generation per-trigger (no
+   * restart needed). TODO(next): wire to the persisted GlobalSettings store —
+   * today the boot-time settings.sessionRoadmap check is a phantom (comment only).
+   */
+  featureEnabled?: () => boolean
 }
 
 export type RoadmapService = {
@@ -39,13 +54,21 @@ export type RoadmapService = {
   optInSession(sessionId: string): void
   optOutSession(sessionId: string): void
   backfill(): Promise<void>
+  /** Manual generate (spec §2): bypasses threshold, refused for terminal states. */
+  generateNow(sessionId: string): Promise<{ ok: boolean; error?: string }>
+  /** Badge state for the session title bar (S2). */
+  sessionInfo(sessionId: string): { policy: string; phase: 'idle' | 'generating'; turns: number; edits: number; fileCount: number }
+  /** Delete one session's artifacts (spec §3); tombstones on success. */
+  deleteSession(sessionId: string, expectedPolicy: string): Promise<{ ok: boolean; error?: string }>
+  /** Startup reconciliation: resume interrupted deletions (spec §3.6). */
+  resumeDeletions(): Promise<void>
 }
 
 // ─── Service implementation ─────────────────────────────────────────────
 
 export function createRoadmapService(
   deps: RoadmapServiceDeps,
-  state: RoadmapState
+  state: RoadmapStateV2
 ): RoadmapService {
   const openChapters = new Map<string, OpenChapter | null>()
   const activeTasks = new Map<string, Promise<void>>()
@@ -94,7 +117,15 @@ export function createRoadmapService(
   }
 
   async function processSession(sessionId: string, trigger: string): Promise<void> {
-    if (!running || !deps.isLocalSession(sessionId) || !isOptedIn(state, sessionId)) {
+    // Terminal states (excluded/deleted) override every writer (spec §0)
+    if (!running || !deps.isLocalSession(sessionId) || isTerminal(state, sessionId)) {
+      return
+    }
+    // durable deleting intent blocks generation until deletion completes (spec §3.1)
+    if (state.ops?.[sessionId] === 'deleting') {
+      return
+    }
+    if (deps.featureEnabled && !deps.featureEnabled()) {
       return
     }
     if (!deps.zcodeAvailable()) {
@@ -130,6 +161,27 @@ export function createRoadmapService(
       return
     }
 
+    // Threshold auto-policy (spec §1 L2): candidates accumulate metrics from the
+    // same rows WITHOUT advancing the cursor, so nothing is lost while a session
+    // is still below threshold; crossing promotes to eligible and this same
+    // trigger then processes from the original cursor.
+    if (!isActive(state, sessionId)) {
+      const m = metricsOf(state, sessionId)
+      for (const row of rows) {
+        const parsed = parseRow(row.rowJson)
+        if (parsed) {
+          foldRowsIntoMetrics(m, [parsed])
+        }
+      }
+      if (crossesThreshold(m)) {
+        setPolicy(state, sessionId, 'eligible')
+        saveStateSafe(deps, state)
+      } else {
+        saveStateSafe(deps, state) // persist metrics incrementally
+        return
+      }
+    }
+
     // Segment
     const open = openChapters.get(sessionId) ?? null
     const chapterIndex = countExistingChapters(workspace, sessionId) + 1
@@ -148,6 +200,11 @@ export function createRoadmapService(
 
     // Process cuts (chapter closures)
     for (const cut of cuts) {
+      // Publish-point recheck: exclusion/deletion requested mid-flight discards
+      // this chapter without writing (spec §2 M4 ruling)
+      if (isTerminal(state, sessionId)) {
+        return
+      }
       await summarizeAndWrite(
         deps,
         state,
@@ -196,18 +253,107 @@ export function createRoadmapService(
   }
 
   function optInSession(sessionId: string): void {
-    optIn(state, sessionId)
+    // Manual generate/override: refused for deleted (irreversible), un-excludes
+    // excluded sessions (spec §2 M3)
+    if (state.policy[sessionId] === 'deleted') {
+      return
+    }
+    setPolicy(state, sessionId, 'eligible')
     saveStateSafe(deps, state)
   }
 
   function optOutSession(sessionId: string): void {
-    optOut(state, sessionId)
+    if (state.policy[sessionId] === 'deleted') {
+      return
+    }
+    setPolicy(state, sessionId, 'excluded')
     saveStateSafe(deps, state)
   }
 
+  function sessionInfo(sessionId: string): {
+    policy: string
+    phase: 'idle' | 'generating'
+    turns: number
+    edits: number
+    fileCount: number
+  } {
+    const m = metricsOf(state, sessionId)
+    return {
+      policy: state.policy[sessionId] ?? 'candidate',
+      phase: activeTasks.has(sessionId) ? 'generating' : 'idle',
+      turns: m.turns,
+      edits: m.edits,
+      fileCount: m.fileCount
+    }
+  }
+
+  async function generateNow(sessionId: string): Promise<{ ok: boolean; error?: string }> {
+    if (!deps.isLocalSession(sessionId)) {
+      return { ok: false, error: 'not a local session' }
+    }
+    // Terminal states are irreversible (spec §2): deleted refuses, excluded may un-exclude
+    if (state.policy[sessionId] === 'deleted') {
+      return { ok: false, error: 'session deleted' }
+    }
+    setPolicy(state, sessionId, 'eligible')
+    saveStateSafe(deps, state)
+    await processSession(sessionId, 'manual-generate')
+    return { ok: true }
+  }
+
+  async function deleteSession(sessionId: string, expectedPolicy: string): Promise<{ ok: boolean; error?: string }> {
+    // Server-side revalidation (spec §1 L3): stale renderer views must not delete.
+    const current = state.policy[sessionId] ?? 'candidate'
+    if (current !== expectedPolicy) {
+      return { ok: false, error: `state moved: ${current}` }
+    }
+    if (current === 'deleted') {
+      return { ok: false, error: 'already deleted' }
+    }
+    // 1. durable intent FIRST (spec §3.1): every writer is blocked from here on
+    state.ops = { ...state.ops, [sessionId]: 'deleting' }
+    setPolicy(state, sessionId, 'excluded') // non-terminal safety until finished
+    saveStateSafe(deps, state)
+    // 2. per-session serialization: wait out an in-flight generation
+    while (activeTasks.has(sessionId)) {
+      await activeTasks.get(sessionId)
+    }
+    // 3-5. cross-process lock + idempotent cleanup + projection rebuild
+    const result = await deleteSessionArtifacts(deps, sessionId)
+    if (!result.ok) {
+      // lock held / workspace missing / rebuild failed: intent STAYS pending;
+      // resumeDeletions() retries (startup + each bootstrap)
+      return result
+    }
+    // 6. tombstone
+    delete state.ops![sessionId]
+    state.ops = { ...state.ops }
+    setPolicy(state, sessionId, 'deleted')
+    saveStateSafe(deps, state)
+    return { ok: true }
+  }
+
+  async function resumeDeletions(): Promise<void> {
+    const pending = Object.entries(state.ops ?? {}).filter(([, op]) => op === 'deleting')
+    for (const [sessionId] of pending) {
+      const result = await deleteSessionArtifacts(deps, sessionId)
+      if (result.ok) {
+        delete state.ops![sessionId]
+        state.ops = { ...state.ops }
+        setPolicy(state, sessionId, 'deleted')
+        saveStateSafe(deps, state)
+      }
+    }
+  }
+
   async function backfill(): Promise<void> {
-    console.log('[roadmap] backfill: scanning opt-in sessions from last 7 days')
-    for (const sessionId of state.optedIn) {
+    // Tombstone gate (spec §2 M7): only policy-eligible sessions; terminal
+    // states are never revived by backfill.
+    const eligible = Object.entries(state.policy)
+      .filter(([, p]) => p === 'eligible')
+      .map(([sid]) => sid)
+    console.log(`[roadmap] backfill: scanning ${eligible.length} eligible sessions`)
+    for (const sessionId of eligible) {
       const workspace = deps.getWorkspacePath(sessionId)
       if (!workspace) {
         continue
@@ -236,5 +382,5 @@ export function createRoadmapService(
     }
   }
 
-  return { start, stop, optInSession, optOutSession, backfill }
+  return { start, stop, optInSession, optOutSession, backfill, generateNow, sessionInfo, deleteSession, resumeDeletions }
 }

@@ -2,6 +2,7 @@
 // unified Session>Milestone>Chapter tree + pits view (spec r2-ui.md v1.2 §1).
 // State lives in the shared roadmap-r2 store so the canvas tab links both ways.
 
+import { useState } from 'react'
 import { LoaderCircle } from 'lucide-react'
 import { useAppStore } from '@/store'
 import { resolveRuntimePath } from '../../../../shared/cross-platform-path'
@@ -140,9 +141,10 @@ export default function RoadmapPanel(): React.JSX.Element {
               const msOrder = [...snapshot.milestones].sort((a, b) => (a.firstTime < b.firstTime ? -1 : 1))
               return (
                 <div key={s.id} className={`border-l-2 px-3 py-1.5 ${sessSel ? 'border-[#4fc1ff] bg-[#4fc1ff1f]' : 'border-transparent hover:bg-[#2d2d30]'}`}>
-                  <div className="cursor-pointer text-[12.5px] text-[#e8e8e8]" onClick={() => toggleTree(s.id)}>
+                  <div className="flex cursor-pointer items-center gap-1 text-[12.5px] text-[#e8e8e8]" onClick={() => toggleTree(s.id)}>
                     <span className="mr-1.5 text-[9px] text-muted-foreground">{open ? '▾' : '▸'}</span>
-                    {s.title}
+                    <span className="min-w-0 flex-1 truncate">{s.title}</span>
+                    <SessionDeleteButton worktreePath={worktreePath} sessionId={s.id} sessionTitle={s.title} />
                     {ms.length > 0 && (
                       <span className="ml-1.5 text-[10px] text-muted-foreground">
                         · {ms.length} 里程碑 · {snapshot.chapters.filter((c) => c.session === s.id && !c.superseded).length} 章
@@ -250,6 +252,55 @@ function InboxActions({ worktreePath, group }: { worktreePath: string | null; gr
       }}
     >
       审查详情 ›
+    </button>
+  )
+}
+
+function SessionDeleteButton({
+  worktreePath,
+  sessionId,
+  sessionTitle
+}: {
+  worktreePath: string | null
+  sessionId: string
+  sessionTitle: string
+}): React.JSX.Element {
+  const [confirming, setConfirming] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+  return confirming ? (
+    <span className="flex items-center gap-1 text-[10px]" onClick={(e) => e.stopPropagation()}>
+      <span className="text-[#f0883e]">删产物并留聊天记录？</span>
+      <button
+        className="rounded border border-[#f0883e] px-1 text-[#f0883e]"
+        onClick={() => {
+          if (!worktreePath) {
+            return
+          }
+          void window.api.roadmap
+            .deleteSession({ sessionId, expectedPolicy: 'eligible' })
+            .then((r) => {
+              setConfirming(false)
+              setResult(r.ok ? '已删除' : (r.error ?? '失败'))
+            })
+        }}
+      >
+        确认
+      </button>
+      <button className="rounded border border-border px-1 text-muted-foreground" onClick={() => setConfirming(false)}>
+        取消
+      </button>
+      {result && <span className="text-muted-foreground">{result}</span>}
+    </span>
+  ) : (
+    <button
+      className="shrink-0 rounded border border-border px-1 text-[10px] text-muted-foreground hover:text-[#f0883e]"
+      title={'删除 ' + sessionTitle + ' 的传记产物（聊天记录保留，不可恢复）'}
+      onClick={(e) => {
+        e.stopPropagation()
+        setConfirming(true)
+      }}
+    >
+      删除产物
     </button>
   )
 }

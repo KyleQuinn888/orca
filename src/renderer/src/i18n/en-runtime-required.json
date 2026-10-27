@@ -1239,6 +1239,12 @@
           "fb82ea1d7a": "Automatically materialize configured files or folders into newly created worktrees.",
           "newWorktreeCardStyle": {
             "copy": "Preview updated worktree-card layout, metadata placement, card-display menu options, and status presentation."
+          },
+          "sessionRoadmap": {
+            "title": "Session Roadmap",
+            "description": "Generate per-session biography artifacts.",
+            "copy": "Sessions with substantive work get chapter/milestone biography cards. Turning this off stops new generation and keeps existing cards.",
+            "toggleLabel": "Toggle Session Roadmap"
           }
         },
         "GeneralRemoteServerUpdates": {
