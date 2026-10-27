@@ -1,8 +1,8 @@
 // E2E path test (gstack acceptance rule #1): from user action to artifact.
 // Real SQLite journal + real workspace; mock only the LLM summarizer.
 
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test'
-import { mkdtempSync, mkdirSync, rmSync, existsSync } from 'node:fs'
+import { describe, expect, it } from 'bun:test'
+import { mkdtempSync, mkdirSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createRoadmapService, type RoadmapServiceDeps } from './roadmap-service'
@@ -134,21 +134,9 @@ function makeDeps(): RoadmapServiceDeps {
   }
 }
 
-afterEach(() => {
-  for (const d of dirs) {
-    try {
-      rmSync(d, { recursive: true, force: true })
-    } catch {
-      /* Windows file lock */
-    }
-  }
-  dirs.length = 0
-})
-
 describe('E2E: user action → artifact', () => {
-  beforeEach(setup)
-
   it('gate ON + generate → pipeline runs (cursor advances, artifacts dir created)', async () => {
+    setup()
     featureOn = true
     const service = createRoadmapService(makeDeps(), state)
     service.start()
@@ -158,15 +146,16 @@ describe('E2E: user action → artifact', () => {
     // gates passed and rows were read). Artifact files additionally require
     // the LLM summarizer, verified separately in packaged smoke (rule #2).
     const sessionState = state.sessions['sess-e2e-1']
-    expect(sessionState).toBeDefined()
+    expect(sessionState !== undefined).toBe(true)
     const hadRows =
       sessionState !== undefined &&
       (Object.keys(sessionState.cursorsByJournal ?? {}).length > 0 ||
         sessionState.scanCursor.seq > 0)
     expect(hadRows).toBe(true)
-  }, 60000)
+  })
 
   it('gate OFF + generate → no artifacts', async () => {
+    setup()
     featureOn = false
     const service = createRoadmapService(makeDeps(), state)
     service.start()
@@ -175,6 +164,7 @@ describe('E2E: user action → artifact', () => {
   })
 
   it('stop → resume → pipeline re-triggers', async () => {
+    setup()
     featureOn = true
     const service = createRoadmapService(makeDeps(), state)
     service.start()

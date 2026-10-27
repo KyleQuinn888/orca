@@ -57,8 +57,8 @@ export function resolveJournalSessionsByNativeId(
         "SELECT rowid AS rid, session_id, record_json FROM agent_session_records WHERE record_json LIKE ? ESCAPE '\\'"
       )
       .all(`%${escaped}%`) as { rid: number; session_id: string; record_json: string }[]
-    const headMatches: Array<{ sessionId: string; recency: number; rid: number }> = []
-    const tailMatches: Array<{ sessionId: string; recency: number; rid: number }> = []
+    const headMatches: { sessionId: string; recency: number; rid: number }[] = []
+    const tailMatches: { sessionId: string; recency: number; rid: number }[] = []
     for (const row of rows) {
       let chain: ReturnType<typeof decodePersistedAgentSessionProviderHandleChain> = null
       try {
