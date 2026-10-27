@@ -13,6 +13,7 @@ import {
   type RoadmapStateV2
 } from './roadmap-store'
 import { parseRow } from './journal-row-parse'
+import { deleteSessionArtifacts } from './session-delete'
 import { crossesThreshold, foldRowsIntoMetrics } from './session-threshold'
 import {
   DEFAULT_SEGMENTATION_CONFIG,
@@ -57,6 +58,10 @@ export type RoadmapService = {
   generateNow(sessionId: string): Promise<{ ok: boolean; error?: string }>
   /** Badge state for the session title bar (S2). */
   sessionInfo(sessionId: string): { policy: string; phase: 'idle' | 'generating'; turns: number; edits: number; fileCount: number }
+  /** Delete one session's artifacts (spec §3); tombstones on success. */
+  deleteSession(sessionId: string, expectedPolicy: string): Promise<{ ok: boolean; error?: string }>
+  /** Startup reconciliation: resume interrupted deletions (spec §3.6). */
+  resumeDeletions(): Promise<void>
 }
 
 // ─── Service implementation ─────────────────────────────────────────────
@@ -114,6 +119,10 @@ export function createRoadmapService(
   async function processSession(sessionId: string, trigger: string): Promise<void> {
     // Terminal states (excluded/deleted) override every writer (spec §0)
     if (!running || !deps.isLocalSession(sessionId) || isTerminal(state, sessionId)) {
+      return
+    }
+    // durable deleting intent blocks generation until deletion completes (spec §3.1)
+    if (state.ops?.[sessionId] === 'deleting') {
       return
     }
     if (deps.featureEnabled && !deps.featureEnabled()) {
@@ -292,6 +301,51 @@ export function createRoadmapService(
     return { ok: true }
   }
 
+  async function deleteSession(sessionId: string, expectedPolicy: string): Promise<{ ok: boolean; error?: string }> {
+    // Server-side revalidation (spec §1 L3): stale renderer views must not delete.
+    const current = state.policy[sessionId] ?? 'candidate'
+    if (current !== expectedPolicy) {
+      return { ok: false, error: `state moved: ${current}` }
+    }
+    if (current === 'deleted') {
+      return { ok: false, error: 'already deleted' }
+    }
+    // 1. durable intent FIRST (spec §3.1): every writer is blocked from here on
+    state.ops = { ...state.ops, [sessionId]: 'deleting' }
+    setPolicy(state, sessionId, 'excluded') // non-terminal safety until finished
+    saveStateSafe(deps, state)
+    // 2. per-session serialization: wait out an in-flight generation
+    while (activeTasks.has(sessionId)) {
+      await activeTasks.get(sessionId)
+    }
+    // 3-5. cross-process lock + idempotent cleanup + projection rebuild
+    const result = await deleteSessionArtifacts(deps, sessionId)
+    if (!result.ok) {
+      // lock held / workspace missing / rebuild failed: intent STAYS pending;
+      // resumeDeletions() retries (startup + each bootstrap)
+      return result
+    }
+    // 6. tombstone
+    delete state.ops![sessionId]
+    state.ops = { ...state.ops }
+    setPolicy(state, sessionId, 'deleted')
+    saveStateSafe(deps, state)
+    return { ok: true }
+  }
+
+  async function resumeDeletions(): Promise<void> {
+    const pending = Object.entries(state.ops ?? {}).filter(([, op]) => op === 'deleting')
+    for (const [sessionId] of pending) {
+      const result = await deleteSessionArtifacts(deps, sessionId)
+      if (result.ok) {
+        delete state.ops![sessionId]
+        state.ops = { ...state.ops }
+        setPolicy(state, sessionId, 'deleted')
+        saveStateSafe(deps, state)
+      }
+    }
+  }
+
   async function backfill(): Promise<void> {
     // Tombstone gate (spec §2 M7): only policy-eligible sessions; terminal
     // states are never revived by backfill.
@@ -328,5 +382,5 @@ export function createRoadmapService(
     }
   }
 
-  return { start, stop, optInSession, optOutSession, backfill, generateNow, sessionInfo }
+  return { start, stop, optInSession, optOutSession, backfill, generateNow, sessionInfo, deleteSession, resumeDeletions }
 }

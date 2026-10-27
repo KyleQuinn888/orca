@@ -38,6 +38,8 @@ export type RoadmapStateV2 = {
   policy: Record<string, SessionPolicy>
   metrics: Record<string, SessionMetrics>
   sessions: Record<string, SessionState>
+  /** durable operation intents (spec §3): 'deleting' blocks all writers until finished */
+  ops?: Record<string, 'deleting'>
 }
 
 export type RoadmapState = RoadmapStateV2 | { version: 1; optedIn: string[]; sessions: Record<string, SessionState> }

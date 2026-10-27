@@ -28,6 +28,16 @@ export function registerRoadmapIpcHandlers(): void {
     return service.sessionInfo(args.sessionId)
   })
   ipcMain.handle(
+    'roadmap:deleteSession',
+    async (_e, args: { sessionId: string; expectedPolicy: string }): Promise<{ ok: boolean; error?: string }> => {
+      const service = getRoadmapService()
+      if (!service) {
+        return { ok: false, error: 'roadmap service unavailable' }
+      }
+      return service.deleteSession(args.sessionId, args.expectedPolicy)
+    }
+  )
+  ipcMain.handle(
     'roadmap:generateNow',
     async (_e, args: { sessionId: string; expectedPolicy: string }): Promise<{ ok: boolean; error?: string }> => {
       const service = getRoadmapService()

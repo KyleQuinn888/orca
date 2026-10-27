@@ -30,8 +30,8 @@ export function bootstrapRoadmap(deps: {
   // Start on bootstrap (settings check happens per-session via optedIn)
   service.start()
 
-  // Backfill on startup (async, non-blocking)
-  void service.backfill()
+  // Backfill on startup (async, non-blocking); resume interrupted deletions first (spec §3.6)
+  void service!.resumeDeletions().then(() => service!.backfill())
 
   // Clean shutdown
   deps.onQuit(() => {

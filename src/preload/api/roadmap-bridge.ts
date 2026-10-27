@@ -24,5 +24,7 @@ export const roadmapApi = {
     fileCount: number
   } | null> => ipcRenderer.invoke('roadmap:sessionInfo', args),
   generateNow: (args: { sessionId: string; expectedPolicy: string }): Promise<{ ok: boolean; error?: string }> =>
-    ipcRenderer.invoke('roadmap:generateNow', args)
+    ipcRenderer.invoke('roadmap:generateNow', args),
+  deleteSession: (args: { sessionId: string; expectedPolicy: string }): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('roadmap:deleteSession', args)
 }
