@@ -29,6 +29,10 @@ export const roadmapApi = {
     sessionId: string
     expectedPolicy: string
   }): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('roadmap:generateNow', args),
+  setPolicy: (args: {
+    sessionId: string
+    policy: 'eligible' | 'excluded'
+  }): Promise<{ ok: boolean; error?: string }> => ipcRenderer.invoke('roadmap:setPolicy', args),
   deleteSession: (args: {
     sessionId: string
     expectedPolicy?: string

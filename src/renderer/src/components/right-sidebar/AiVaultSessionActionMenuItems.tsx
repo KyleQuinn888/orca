@@ -13,10 +13,12 @@ import { ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-m
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
 import { AiVaultSessionSurfaceSwitchMenuItems } from './AiVaultSessionSurfaceSwitchMenuItems'
+import { RoadmapMenuItems } from './RoadmapMenuItems'
 import { isAiVaultFolderWorkspaceId } from './ai-vault-session-worktree-affordances'
 
 export function SessionActionMenuItems({
   menuKind = 'dropdown',
+  sessionId,
   resumeDisabled,
   resumeLabel,
   resumeHidden = false,
@@ -38,6 +40,7 @@ export function SessionActionMenuItems({
   onDelete
 }: {
   menuKind?: 'dropdown' | 'context'
+  sessionId: string
   resumeDisabled: boolean
   resumeLabel: string
   resumeHidden?: boolean
@@ -120,6 +123,7 @@ export function SessionActionMenuItems({
           {resumeLabel}
         </Item>
       ) : null}
+      <RoadmapMenuItems sessionId={sessionId} menuKind={menuKind} />
       <AiVaultSessionSurfaceSwitchMenuItems
         action="resume"
         menuKind={menuKind}

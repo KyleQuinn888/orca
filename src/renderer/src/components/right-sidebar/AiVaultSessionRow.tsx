@@ -13,7 +13,7 @@ import type { AiVaultScope, AiVaultSession } from '../../../../shared/ai-vault-t
 import type { AiVaultResumeStartup } from '@/lib/ai-vault-resume-command'
 import { translate } from '@/i18n/i18n'
 import { SessionInlineDetails } from './AiVaultSessionDetails'
-import { RoadmapSessionBadge } from './RoadmapSessionBadge'
+import { RoadmapSessionStatus } from './RoadmapSessionStatus'
 import { latestSessionConversationTurn } from './ai-vault-session-display'
 import { SessionActionMenuItems } from './AiVaultSessionActionMenuItems'
 import { SessionRowTrailingActions } from './SessionRowTrailingActions'
@@ -177,7 +177,6 @@ export function VaultSessionRow({
             // Why: only the title is the resume drag handle — expanded
             // details/preview need text selection and a normal pointer.
             draggable && 'cursor-grab active:cursor-grabbing',
-            'flex items-center gap-1.5',
             detailsExpanded ? 'line-clamp-2 [overflow-wrap:anywhere]' : 'line-clamp-1'
           )}
           draggable={draggable}
@@ -195,7 +194,6 @@ export function VaultSessionRow({
           }}
         >
           {title}
-          <RoadmapSessionBadge sessionId={session.sessionId} />
         </div>
         <SessionRowTrailingActions
           session={session}
@@ -251,6 +249,7 @@ export function VaultSessionRow({
         vaultScope={vaultScope}
         sourceHostLabel={sourceHostLabel}
       />
+      <RoadmapSessionStatus sessionId={session.sessionId} />
       {detailsExpanded ? (
         <SessionInlineDetails
           id={detailsId}
@@ -282,6 +281,7 @@ export function VaultSessionRow({
       <ContextMenuContent>
         <SessionActionMenuItems
           menuKind="context"
+          sessionId={session.sessionId}
           resumeDisabled={resumeDisabled}
           resumeHidden={resumeHidden}
           resumeLabel={resumeLabel}

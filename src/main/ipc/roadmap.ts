@@ -41,6 +41,24 @@ export function registerRoadmapIpcHandlers(): void {
     }
   )
   ipcMain.handle(
+    'roadmap:setPolicy',
+    (
+      _e,
+      args: { sessionId: string; policy: 'eligible' | 'excluded' }
+    ): { ok: boolean; error?: string } => {
+      const service = getRoadmapService()
+      if (!service) {
+        return { ok: false, error: 'roadmap service unavailable' }
+      }
+      if (args.policy === 'eligible') {
+        service.optInSession(args.sessionId)
+      } else {
+        service.optOutSession(args.sessionId)
+      }
+      return { ok: true }
+    }
+  )
+  ipcMain.handle(
     'roadmap:generateNow',
     async (
       _e,
