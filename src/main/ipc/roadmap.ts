@@ -29,7 +29,10 @@ export function registerRoadmapIpcHandlers(): void {
   })
   ipcMain.handle(
     'roadmap:deleteSession',
-    async (_e, args: { sessionId: string; expectedPolicy: string }): Promise<{ ok: boolean; error?: string }> => {
+    async (
+      _e,
+      args: { sessionId: string; expectedPolicy?: string }
+    ): Promise<{ ok: boolean; error?: string }> => {
       const service = getRoadmapService()
       if (!service) {
         return { ok: false, error: 'roadmap service unavailable' }
@@ -39,7 +42,10 @@ export function registerRoadmapIpcHandlers(): void {
   )
   ipcMain.handle(
     'roadmap:generateNow',
-    async (_e, args: { sessionId: string; expectedPolicy: string }): Promise<{ ok: boolean; error?: string }> => {
+    async (
+      _e,
+      args: { sessionId: string; expectedPolicy: string }
+    ): Promise<{ ok: boolean; error?: string }> => {
       const service = getRoadmapService()
       if (!service) {
         return { ok: false, error: 'roadmap service unavailable' }
@@ -52,34 +58,44 @@ export function registerRoadmapIpcHandlers(): void {
       return service.generateNow(args.sessionId)
     }
   )
-  ipcMain.handle('roadmap:reviewProposal', async (_event, args: RoadmapReviewRequest): Promise<RoadmapReviewResponse> => {
-    try {
-      if (!args?.worktreePath || !args?.proposalGroupId || !args.sessionId) {
-        return { ok: false, error: 'worktreePath, sessionId and proposalGroupId are required' }
-      }
-      if (args.decision !== 'approve' && args.decision !== 'reject') {
-        return { ok: false, error: 'decision must be approve or reject' }
-      }
-      const dir002 = join(args.worktreePath, '.roadmap', '002')
-      const lock = AggregateLock.acquire(dir002)
+  ipcMain.handle(
+    'roadmap:reviewProposal',
+    async (_event, args: RoadmapReviewRequest): Promise<RoadmapReviewResponse> => {
       try {
-        const loaded = loadMarks(dir002)
-        if (!loaded.ok) {
-          return { ok: false, error: `marks unavailable: ${loaded.error}` }
+        if (!args?.worktreePath || !args?.proposalGroupId || !args.sessionId) {
+          return { ok: false, error: 'worktreePath, sessionId and proposalGroupId are required' }
         }
-        const store = new MarksStore(dir002, lock, loaded.events)
-        const message = verbReview(store, [...loaded.events], args.sessionId, args.proposalGroupId, args.decision, args.reason ?? 'r2:inbox')
-        if (message.startsWith('REFUSED')) {
-          return { ok: false, error: message }
+        if (args.decision !== 'approve' && args.decision !== 'reject') {
+          return { ok: false, error: 'decision must be approve or reject' }
         }
-        return { ok: true, message }
-      } finally {
-        // Why mandatory: acquire() starts a heartbeat interval — in the main
-        // process a missing release holds the aggregate lock forever.
-        lock.release()
+        const dir002 = join(args.worktreePath, '.roadmap', '002')
+        const lock = AggregateLock.acquire(dir002)
+        try {
+          const loaded = loadMarks(dir002)
+          if (!loaded.ok) {
+            return { ok: false, error: `marks unavailable: ${loaded.error}` }
+          }
+          const store = new MarksStore(dir002, lock, loaded.events)
+          const message = verbReview(
+            store,
+            [...loaded.events],
+            args.sessionId,
+            args.proposalGroupId,
+            args.decision,
+            args.reason ?? 'r2:inbox'
+          )
+          if (message.startsWith('REFUSED')) {
+            return { ok: false, error: message }
+          }
+          return { ok: true, message }
+        } finally {
+          // Why mandatory: acquire() starts a heartbeat interval — in the main
+          // process a missing release holds the aggregate lock forever.
+          lock.release()
+        }
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) }
       }
-    } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) }
     }
-  })
+  )
 }

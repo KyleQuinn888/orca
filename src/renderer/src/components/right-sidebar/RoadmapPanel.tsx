@@ -41,7 +41,9 @@ export default function RoadmapPanel(): React.JSX.Element {
     select(sel)
     if (sel.level === 'chapter') {
       setExpandedSid(sel.sid)
-      const m = snapshot?.milestones.find((x) => x.session === sel.sid && x.chapterIndexes.includes(sel.chapter))
+      const m = snapshot?.milestones.find(
+        (x) => x.session === sel.sid && x.chapterIndexes.includes(sel.chapter)
+      )
       ensureTreeOpen(sel.sid, m?.id)
     }
   }
@@ -77,21 +79,36 @@ export default function RoadmapPanel(): React.JSX.Element {
         onClick={openCanvas}
         title={translate('auto.components.roadmap.canvasTabLabel', '项目画布')}
       >
-        <span><b className="text-foreground">{snapshot?.sessions.length ?? 0}</b> session</span>·
-        <span><b className="text-foreground">{chTotal}</b> 章</span>·
-        <span><b className="text-foreground">{snapshot?.milestones.length ?? 0}</b> 里程碑</span>
+        <span>
+          <b className="text-foreground">{snapshot?.sessions.length ?? 0}</b> session
+        </span>
+        ·
+        <span>
+          <b className="text-foreground">{chTotal}</b> 章
+        </span>
+        ·
+        <span>
+          <b className="text-foreground">{snapshot?.milestones.length ?? 0}</b> 里程碑
+        </span>
         <span className="ml-auto text-[#4fc1ff]">打开项目画布 ›</span>
       </div>
       {/* inbox */}
       <div className="border-b border-border bg-[#d299220d] pb-2">
         <div className="px-3 pt-1.5 pb-1 text-[11px] text-[#d29922]">◇ 待审 {inbox.length}</div>
         {inbox.slice(0, 3).map((g) => (
-          <div key={g.proposalGroupId} className="mx-2.5 rounded border border-dashed border-[#d29922] p-2 text-[11.5px]">
+          <div
+            key={g.proposalGroupId}
+            className="mx-2.5 rounded border border-dashed border-[#d29922] p-2 text-[11.5px]"
+          >
             <div className="mb-1 text-[10.5px] text-muted-foreground">
               LLM 提议 · {g.cuts.length} 切点 · {g.by} · {g.at.slice(0, 16).replace('T', ' ')}
             </div>
             {g.cuts.map((c) => (
-              <div key={c.chapter} className="line-clamp-2 break-words leading-snug" title={c.evidence}>
+              <div
+                key={c.chapter}
+                className="line-clamp-2 break-words leading-snug"
+                title={c.evidence}
+              >
                 <span className="font-semibold text-[#d29922]">Ch.{c.chapter} 前</span>
                 <span className="text-muted-foreground"> {c.evidence}</span>
               </div>
@@ -99,7 +116,9 @@ export default function RoadmapPanel(): React.JSX.Element {
             <InboxActions worktreePath={worktreePath} group={g} />
           </div>
         ))}
-        {inbox.length === 0 && <div className="px-3 text-[10.5px] text-muted-foreground">✓ 没有待审切点</div>}
+        {inbox.length === 0 && (
+          <div className="px-3 text-[10.5px] text-muted-foreground">✓ 没有待审切点</div>
+        )}
       </div>
       {/* tabs */}
       <div className="flex border-b border-border">
@@ -133,78 +152,130 @@ export default function RoadmapPanel(): React.JSX.Element {
             {[...snapshot.sessions]
               .sort((a, b) => (a.lastTime < b.lastTime ? 1 : -1))
               .map((s) => {
-              const open = treeOpen[s.id] ?? true
-              const sessSel = selection.level !== 'project' && selection.sid === s.id
-              const ms = snapshot.milestones
-                .filter((m) => m.session === s.id)
-                .sort((a, b) => (a.firstTime < b.firstTime ? -1 : 1))
-              const msOrder = [...snapshot.milestones].sort((a, b) => (a.firstTime < b.firstTime ? -1 : 1))
-              return (
-                <div key={s.id} className={`border-l-2 px-3 py-1.5 ${sessSel ? 'border-[#4fc1ff] bg-[#4fc1ff1f]' : 'border-transparent hover:bg-[#2d2d30]'}`}>
-                  <div className="flex cursor-pointer items-center gap-1 text-[12.5px] text-[#e8e8e8]" onClick={() => toggleTree(s.id)}>
-                    <span className="mr-1.5 text-[9px] text-muted-foreground">{open ? '▾' : '▸'}</span>
-                    <span className="min-w-0 flex-1 truncate">{s.title}</span>
-                    <SessionDeleteButton worktreePath={worktreePath} sessionId={s.id} sessionTitle={s.title} />
-                    {ms.length > 0 && (
-                      <span className="ml-1.5 text-[10px] text-muted-foreground">
-                        · {ms.length} 里程碑 · {snapshot.chapters.filter((c) => c.session === s.id && !c.superseded).length} 章
+                const open = treeOpen[s.id] ?? true
+                const sessSel = selection.level !== 'project' && selection.sid === s.id
+                const ms = snapshot.milestones
+                  .filter((m) => m.session === s.id)
+                  .sort((a, b) => (a.firstTime < b.firstTime ? -1 : 1))
+                const msOrder = [...snapshot.milestones].sort((a, b) =>
+                  a.firstTime < b.firstTime ? -1 : 1
+                )
+                return (
+                  <div
+                    key={s.id}
+                    className={`border-l-2 px-3 py-1.5 ${sessSel ? 'border-[#4fc1ff] bg-[#4fc1ff1f]' : 'border-transparent hover:bg-[#2d2d30]'}`}
+                  >
+                    <div
+                      className="flex cursor-pointer items-center gap-1 text-[12.5px] text-[#e8e8e8]"
+                      onClick={() => toggleTree(s.id)}
+                    >
+                      <span className="mr-1.5 text-[9px] text-muted-foreground">
+                        {open ? '▾' : '▸'}
                       </span>
+                      <span className="min-w-0 flex-1 truncate">{s.title}</span>
+                      <SessionDeleteButton
+                        worktreePath={worktreePath}
+                        sessionId={s.id}
+                        sessionTitle={s.title}
+                      />
+                      {ms.length > 0 && (
+                        <span className="ml-1.5 text-[10px] text-muted-foreground">
+                          · {ms.length} 里程碑 ·{' '}
+                          {
+                            snapshot.chapters.filter((c) => c.session === s.id && !c.superseded)
+                              .length
+                          }{' '}
+                          章
+                        </span>
+                      )}
+                    </div>
+                    {open && (
+                      <div className="ml-3.5 border-l border-border pl-1.5">
+                        {ms.map((m) => {
+                          const msKey = `${s.id}/${m.id}`
+                          // Owner ruling: milestone chapters default COLLAPSED; clicking the card expands (and selects).
+                          const mOpen = treeMsOpen[msKey] ?? false
+                          const mSel = selection.level === 'milestone' && selection.mid === m.id
+                          const colorIdx =
+                            msOrder.findIndex((x) => x.id === m.id) % MS_COLORS.length
+                          return (
+                            <div key={m.id} className="my-1">
+                              <div
+                                className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-1.5 py-1 ${mSel ? 'border-[#4fc1ff] bg-[#4fc1ff1f]' : 'border-border bg-[#2d2d30] hover:border-[#6b6b6b]'}`}
+                                onClick={() => {
+                                  toggleTreeMs(msKey)
+                                  onSelect({ level: 'milestone', sid: s.id, mid: m.id })
+                                }}
+                              >
+                                <span className="text-[9px] text-muted-foreground">
+                                  {mOpen ? '▾' : '▸'}
+                                </span>
+                                <span
+                                  className="h-2.5 w-2.5 flex-none rounded-[3px]"
+                                  style={{ background: MS_COLORS[colorIdx] }}
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="line-clamp-2 break-words text-[11.5px] leading-snug text-[#e8e8e8]">
+                                    {m.title}
+                                  </span>
+                                  <span className="block text-[9.5px] text-muted-foreground">
+                                    {milestoneLabel(snapshot, m.id)} · Ch.{m.chapterIndexes[0]}–
+                                    {m.chapterIndexes.at(-1)} · {m.chapterIndexes.length} 章
+                                  </span>
+                                </span>
+                              </div>
+                              {mOpen &&
+                                snapshot.chapters
+                                  .filter(
+                                    (c) =>
+                                      c.session === s.id &&
+                                      !c.superseded &&
+                                      m.chapterIndexes.includes(c.index)
+                                  )
+                                  .sort((a, b) => a.index - b.index)
+                                  .map((c) => {
+                                    const chSel =
+                                      selection.level === 'chapter' &&
+                                      selection.sid === s.id &&
+                                      selection.chapter === c.index
+                                    return (
+                                      <div
+                                        key={c.index}
+                                        className={`flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 pl-5 text-[11px] ${chSel ? 'bg-[#4fc1ff24]' : 'hover:bg-[#2d2d30]'}`}
+                                        onClick={() =>
+                                          onSelect({
+                                            level: 'chapter',
+                                            sid: s.id,
+                                            chapter: c.index
+                                          })
+                                        }
+                                        onDoubleClick={() => openChapterCard(c.file)}
+                                        title="Double-click to open the chapter card"
+                                      >
+                                        <span className="w-8 flex-none text-[10px] text-muted-foreground">
+                                          Ch.{c.index}
+                                        </span>
+                                        <span className="min-w-0 flex-1 truncate">{c.title}</span>
+                                        <span
+                                          className={`text-[9.5px] ${c.verified ? 'text-green-500' : 'text-muted-foreground'}`}
+                                        >
+                                          {c.verified ? '✓' : '○'}
+                                        </span>
+                                      </div>
+                                    )
+                                  })}
+                            </div>
+                          )
+                        })}
+                        {ms.length === 0 && (
+                          <div className="px-1.5 py-1 text-[11px] text-muted-foreground">
+                            （无里程碑）
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
-                  {open && (
-                    <div className="ml-3.5 border-l border-border pl-1.5">
-                      {ms.map((m) => {
-                        const msKey = `${s.id}/${m.id}`
-                        // Owner ruling: milestone chapters default COLLAPSED; clicking the card expands (and selects).
-                        const mOpen = treeMsOpen[msKey] ?? false
-                        const mSel = selection.level === 'milestone' && selection.mid === m.id
-                        const colorIdx = msOrder.findIndex((x) => x.id === m.id) % MS_COLORS.length
-                        return (
-                          <div key={m.id} className="my-1">
-                            <div
-                              className={`flex cursor-pointer items-center gap-1.5 rounded-md border px-1.5 py-1 ${mSel ? 'border-[#4fc1ff] bg-[#4fc1ff1f]' : 'border-border bg-[#2d2d30] hover:border-[#6b6b6b]'}`}
-                              onClick={() => {
-                                toggleTreeMs(msKey)
-                                onSelect({ level: 'milestone', sid: s.id, mid: m.id })
-                              }}
-                            >
-                              <span className="text-[9px] text-muted-foreground">{mOpen ? '▾' : '▸'}</span>
-                              <span className="h-2.5 w-2.5 flex-none rounded-[3px]" style={{ background: MS_COLORS[colorIdx] }} />
-                              <span className="min-w-0 flex-1">
-                                <span className="line-clamp-2 break-words text-[11.5px] leading-snug text-[#e8e8e8]">{m.title}</span>
-                                <span className="block text-[9.5px] text-muted-foreground">
-                                  {milestoneLabel(snapshot, m.id)} · Ch.{m.chapterIndexes[0]}–{m.chapterIndexes.at(-1)} · {m.chapterIndexes.length} 章
-                                </span>
-                              </span>
-                            </div>
-                            {mOpen &&
-                              snapshot.chapters
-                                .filter((c) => c.session === s.id && !c.superseded && m.chapterIndexes.includes(c.index))
-                                .sort((a, b) => a.index - b.index)
-                                .map((c) => {
-                                  const chSel = selection.level === 'chapter' && selection.sid === s.id && selection.chapter === c.index
-                                  return (
-                                    <div
-                                      key={c.index}
-                                      className={`flex cursor-pointer items-center gap-1.5 rounded px-1.5 py-0.5 pl-5 text-[11px] ${chSel ? 'bg-[#4fc1ff24]' : 'hover:bg-[#2d2d30]'}`}
-                                      onClick={() => onSelect({ level: 'chapter', sid: s.id, chapter: c.index })}
-                                      onDoubleClick={() => openChapterCard(c.file)}
-                                      title="Double-click to open the chapter card"
-                                    >
-                                      <span className="w-8 flex-none text-[10px] text-muted-foreground">Ch.{c.index}</span>
-                                      <span className="min-w-0 flex-1 truncate">{c.title}</span>
-                                      <span className={`text-[9.5px] ${c.verified ? 'text-green-500' : 'text-muted-foreground'}`}>{c.verified ? '✓' : '○'}</span>
-                                    </div>
-                                  )
-                                })}
-                          </div>
-                        )
-                      })}
-                      {ms.length === 0 && <div className="px-1.5 py-1 text-[11px] text-muted-foreground">（无里程碑）</div>}
-                    </div>
-                  )}
-                </div>
-              )
+                )
               })}
           </div>
         )}
@@ -224,8 +295,13 @@ export default function RoadmapPanel(): React.JSX.Element {
   )
 }
 
-
-function InboxActions({ worktreePath, group }: { worktreePath: string | null; group: { proposalGroupId: string; session: string } }): React.JSX.Element {
+function InboxActions({
+  worktreePath,
+  group
+}: {
+  worktreePath: string | null
+  group: { proposalGroupId: string; session: string }
+}): React.JSX.Element {
   const phase = useRoadmapR2((st) => st.inboxWrites[group.proposalGroupId])
   const errMsg = useRoadmapR2((st) => st.inboxWriteError[group.proposalGroupId])
   const setReviewOpen = useRoadmapR2((st) => st.setReviewOpen)
@@ -242,9 +318,9 @@ function InboxActions({ worktreePath, group }: { worktreePath: string | null; gr
         setReviewOpen(group.proposalGroupId)
         if (worktreePath) {
           // review surface lives in the canvas tab (timeline stays visible as context)
-          const wt = useAppStore.getState().getKnownWorktreeById(
-            useAppStore.getState().activeWorktreeId ?? ''
-          )
+          const wt = useAppStore
+            .getState()
+            .getKnownWorktreeById(useAppStore.getState().activeWorktreeId ?? '')
           if (wt) {
             useAppStore.getState().openRoadmapCanvas(wt.id)
           }
@@ -276,17 +352,18 @@ function SessionDeleteButton({
           if (!worktreePath) {
             return
           }
-          void window.api.roadmap
-            .deleteSession({ sessionId, expectedPolicy: 'eligible' })
-            .then((r) => {
-              setConfirming(false)
-              setResult(r.ok ? '已删除' : (r.error ?? '失败'))
-            })
+          void window.api.roadmap.deleteSession({ sessionId }).then((r) => {
+            setConfirming(false)
+            setResult(r.ok ? '已删除' : (r.error ?? '失败'))
+          })
         }}
       >
         确认
       </button>
-      <button className="rounded border border-border px-1 text-muted-foreground" onClick={() => setConfirming(false)}>
+      <button
+        className="rounded border border-border px-1 text-muted-foreground"
+        onClick={() => setConfirming(false)}
+      >
         取消
       </button>
       {result && <span className="text-muted-foreground">{result}</span>}
@@ -294,7 +371,7 @@ function SessionDeleteButton({
   ) : (
     <button
       className="shrink-0 rounded border border-border px-1 text-[10px] text-muted-foreground hover:text-[#f0883e]"
-      title={'删除 ' + sessionTitle + ' 的传记产物（聊天记录保留，不可恢复）'}
+      title={`删除 ${sessionTitle} 的传记产物（聊天记录保留，不可恢复）`}
       onClick={(e) => {
         e.stopPropagation()
         setConfirming(true)
