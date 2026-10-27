@@ -8,7 +8,10 @@ import {
   createAgentSessionRecordTablesSql,
   createJournalTablesSql
 } from '../native-chat/agent-session-journal/journal-database-schema'
-import { journalSessionIdsMentioningNativeId, resolveJournalSessionsByNativeId } from './journal-session-resolve'
+import {
+  journalSessionIdsMentioningNativeId,
+  resolveJournalSessionsByNativeId
+} from './journal-session-resolve'
 
 const dirs: string[] = []
 afterAll(() => {
@@ -19,8 +22,8 @@ afterAll(() => {
 
 function seed(
   name: string,
-  records: Array<{ sessionId: string; nativeIds: string[] }>,
-  sessions: Array<{ sessionId: string; workspaceId: string }>
+  records: { sessionId: string; nativeIds: string[] }[],
+  sessions: { sessionId: string; workspaceId: string }[]
 ): string {
   // The resolver joins the journal file name onto its dir, so each case seeds
   // its own dir with the canonical file name.
@@ -63,7 +66,8 @@ function seed(
 
 describe('resolveJournalSessionsByNativeId', () => {
   it('resolves a native id to the journal session whose record carries it', () => {
-    const dbPath = seed('simple',
+    const dbPath = seed(
+      'simple',
       [{ sessionId: 'zcode_live', nativeIds: ['sess_a'] }],
       [{ sessionId: 'zcode_live', workspaceId: 'ws-1::C:/work/one' }]
     )
@@ -75,7 +79,8 @@ describe('resolveJournalSessionsByNativeId', () => {
   })
 
   it('prefers the record whose chain HEAD carries the native id over superseded tails', () => {
-    const dbPath = seed('heads',
+    const dbPath = seed(
+      'heads',
       [
         // The old session seeded the conversation, then resumed past it: its
         // chain head names a later native id, so sess_a is a tail link there.
@@ -96,7 +101,8 @@ describe('resolveJournalSessionsByNativeId', () => {
   })
 
   it('returns null for an unknown id or a missing database, never a partial row', () => {
-    const dbPath = seed('simple',
+    const dbPath = seed(
+      'simple',
       [{ sessionId: 'zcode_live', nativeIds: ['sess_a'] }],
       [{ sessionId: 'zcode_live', workspaceId: 'ws-1::C:/work/one' }]
     )
@@ -108,7 +114,8 @@ describe('resolveJournalSessionsByNativeId', () => {
 
 describe('journalSessionIdsMentioningNativeId', () => {
   it('finds sessions whose rows embed the native id even with no record chain', () => {
-    const dbPath = seed('rowscan',
+    const dbPath = seed(
+      'rowscan',
       [{ sessionId: 'zcode_retired', nativeIds: ['sess_a'] }],
       [{ sessionId: 'zcode_retired', workspaceId: 'ws-1::C:/work/one' }]
     )
@@ -139,8 +146,8 @@ describe('journalSessionIdsMentioningNativeId', () => {
     expect(ids).toContain('zcode_retired')
     // The fast chain scan stays blind to the stray — that is the split this
     // exhaustive scan exists to close.
-    expect(
-      resolveJournalSessionsByNativeId(dbPath, 'sess_a')?.journalSessionIds
-    ).not.toContain('zcode_stray')
+    expect(resolveJournalSessionsByNativeId(dbPath, 'sess_a')?.journalSessionIds).not.toContain(
+      'zcode_stray'
+    )
   })
 })

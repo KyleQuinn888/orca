@@ -6,28 +6,17 @@ import { join } from 'node:path'
 import { existsSync, readFileSync } from 'node:fs'
 import {
   getOrCreateSession,
-  isActive,
   isTerminal,
   metricsOf,
   setPolicy,
   type RoadmapStateV2
 } from './roadmap-store'
-import { parseRow } from './journal-row-parse'
+import { scopeFor, scopeForGeneration, type SessionIdScope } from './session-id-bridge'
+import { flushSessionInner, processSessionInner, type ProcessCtx } from './session-process'
 import { deleteSessionOp } from './session-ops'
-import { crossesThreshold, foldRowsIntoMetrics } from './session-threshold'
-import {
-  DEFAULT_SEGMENTATION_CONFIG,
-  type OpenChapter,
-  flushOpenChapter,
-  segmentRows
-} from './journal-reader'
-import {
-  countExistingChapters,
-  type JournalDb,
-  readRowsAfterCursor,
-  readRowsInRange
-} from './journal-row-io'
-import { saveStateSafe, summarizeAndWrite } from './chapter-pipeline'
+import type { JournalDb } from './journal-row-io'
+import type { OpenChapter } from './journal-reader'
+import { saveStateSafe } from './chapter-pipeline'
 
 // ─── Types ──────────────────────────────────────────────────────────────
 
@@ -114,9 +103,13 @@ export function createRoadmapService(
     // Idle flush
     unsubscribers.push(
       deps.onIdle((sessionId) => {
-        void flushSession(sessionId)
+        void flushSessionInner(ctxFor(sessionId), sessionId)
       })
     )
+  }
+
+  function ctxFor(_sessionId: string): ProcessCtx {
+    return { deps, state, promptTemplate, openChapters }
   }
 
   function stop(): void {
@@ -128,13 +121,22 @@ export function createRoadmapService(
     // Active tasks will complete or fail; no new ones are spawned
   }
 
-  async function processSession(sessionId: string, trigger: string): Promise<void> {
+  async function processSession(
+    sessionId: string,
+    trigger: string,
+    preScope?: SessionIdScope
+  ): Promise<void> {
+    // Id bridge first: gates, state keys and serialization all live in the
+    // native-id domain (auto triggers arrive as journal ids).
+    const scope =
+      preScope ?? scopeFor(deps.getUserDataDir(), sessionId, deps.getWorkspacePath(sessionId))
+    const nativeId = scope.nativeId
     // Terminal states (excluded/deleted) override every writer (spec §0)
-    if (!running || !deps.isLocalSession(sessionId) || isTerminal(state, sessionId)) {
+    if (!running || !deps.isLocalSession(sessionId) || isTerminal(state, nativeId)) {
       return
     }
     // durable deleting intent blocks generation until deletion completes (spec §3.1)
-    if (state.ops?.[sessionId] === 'deleting') {
+    if (state.ops?.[nativeId] === 'deleting') {
       return
     }
     if (deps.featureEnabled && !deps.featureEnabled()) {
@@ -144,142 +146,17 @@ export function createRoadmapService(
       return
     }
 
-    // Per-session serialization: skip if already processing
-    if (activeTasks.has(sessionId)) {
+    // Per-session serialization on the native key
+    if (activeTasks.has(nativeId)) {
       return
     }
 
-    const task = processSessionInner(sessionId, trigger).finally(() => {
-      activeTasks.delete(sessionId)
+    const ctx: ProcessCtx = { deps, state, promptTemplate, openChapters }
+    const task = processSessionInner(ctx, sessionId, trigger, scope).finally(() => {
+      activeTasks.delete(nativeId)
     })
-    activeTasks.set(sessionId, task)
+    activeTasks.set(nativeId, task)
     await task
-  }
-
-  async function processSessionInner(sessionId: string, _trigger: string): Promise<void> {
-    const db = deps.getJournalDb(sessionId)
-    if (!db) {
-      return
-    }
-    const sessionState = getOrCreateSession(state, sessionId)
-    const workspace = deps.getWorkspacePath(sessionId)
-    if (!workspace) {
-      return
-    }
-
-    // Read new rows since scanCursor
-    const rows = readRowsAfterCursor(db, sessionId, sessionState.scanCursor)
-    if (rows.length === 0) {
-      return
-    }
-
-    // Threshold auto-policy (spec §1 L2): candidates accumulate metrics from the
-    // same rows WITHOUT advancing the cursor, so nothing is lost while a session
-    // is still below threshold; crossing promotes to eligible and this same
-    // trigger then processes from the original cursor.
-    if (!isActive(state, sessionId)) {
-      const m = metricsOf(state, sessionId)
-      for (const row of rows) {
-        const parsed = parseRow(row.rowJson)
-        if (parsed) {
-          foldRowsIntoMetrics(m, [parsed])
-        }
-      }
-      if (crossesThreshold(m)) {
-        setPolicy(state, sessionId, 'eligible')
-        saveStateSafe(deps, state)
-      } else {
-        saveStateSafe(deps, state) // persist metrics incrementally
-        return
-      }
-    }
-
-    // Segment
-    const open = openChapters.get(sessionId) ?? null
-    const chapterIndex = countExistingChapters(workspace, sessionId) + 1
-    const { cuts, open: newOpen } = segmentRows(
-      sessionId,
-      rows,
-      open,
-      DEFAULT_SEGMENTATION_CONFIG,
-      chapterIndex
-    )
-    openChapters.set(sessionId, newOpen)
-
-    // Update scanCursor to last row
-    const lastRow = rows.at(-1)!
-    sessionState.scanCursor = { epoch: lastRow.epoch, seq: lastRow.seq }
-
-    // Process cuts (chapter closures)
-    for (const cut of cuts) {
-      // Publish-point recheck: exclusion/deletion requested mid-flight discards
-      // this chapter without writing (spec §2 M4 ruling)
-      if (isTerminal(state, sessionId)) {
-        return
-      }
-      await summarizeAndWrite(
-        deps,
-        state,
-        promptTemplate,
-        sessionId,
-        workspace,
-        cut,
-        rows,
-        sessionState,
-        db
-      )
-    }
-  }
-
-  async function flushSession(sessionId: string): Promise<void> {
-    const open = openChapters.get(sessionId)
-    if (!open || open.terminalTurns === 0) {
-      return
-    }
-    const workspace = deps.getWorkspacePath(sessionId)
-    if (!workspace) {
-      return
-    }
-    const sessionState = getOrCreateSession(state, sessionId)
-    const db = deps.getJournalDb(sessionId)
-    if (!db) {
-      return
-    }
-    const chapterIndex = countExistingChapters(workspace, sessionId) + 1
-    const flushCut = flushOpenChapter(sessionId, open, chapterIndex)
-    if (flushCut) {
-      openChapters.set(sessionId, null)
-      const rows = readRowsInRange(db, sessionId, flushCut.epoch, flushCut.fromSeq, flushCut.toSeq)
-      await summarizeAndWrite(
-        deps,
-        state,
-        promptTemplate,
-        sessionId,
-        workspace,
-        flushCut,
-        rows,
-        sessionState,
-        db
-      )
-    }
-  }
-
-  function optInSession(sessionId: string): void {
-    // Manual generate/override: refused for deleted (irreversible), un-excludes
-    // excluded sessions (spec §2 M3)
-    if (state.policy[sessionId] === 'deleted') {
-      return
-    }
-    setPolicy(state, sessionId, 'eligible')
-    saveStateSafe(deps, state)
-  }
-
-  function optOutSession(sessionId: string): void {
-    if (state.policy[sessionId] === 'deleted') {
-      return
-    }
-    setPolicy(state, sessionId, 'excluded')
-    saveStateSafe(deps, state)
   }
 
   function sessionInfo(sessionId: string): {
@@ -309,7 +186,14 @@ export function createRoadmapService(
     }
     setPolicy(state, sessionId, 'eligible')
     saveStateSafe(deps, state)
-    await processSession(sessionId, 'manual-generate')
+    // Generation merges the fast chain scan with the exhaustive row scan
+    // (zcode handoff): retired-record strays are content too.
+    const scope = scopeForGeneration(
+      deps.getUserDataDir(),
+      sessionId,
+      deps.getWorkspacePath(sessionId)
+    )
+    await processSession(sessionId, 'manual-generate', scope)
     return { ok: true }
   }
 
@@ -388,6 +272,24 @@ export function createRoadmapService(
     } catch {
       return false
     }
+  }
+
+  function optInSession(sessionId: string): void {
+    // Manual generate/override: refused for deleted (irreversible), un-excludes
+    // excluded sessions (spec §2 M3)
+    if (state.policy[sessionId] === 'deleted') {
+      return
+    }
+    setPolicy(state, sessionId, 'eligible')
+    saveStateSafe(deps, state)
+  }
+
+  function optOutSession(sessionId: string): void {
+    if (state.policy[sessionId] === 'deleted') {
+      return
+    }
+    setPolicy(state, sessionId, 'excluded')
+    saveStateSafe(deps, state)
   }
 
   return {

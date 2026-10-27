@@ -5,6 +5,7 @@
 import type { RoadmapServiceDeps } from './roadmap-service'
 import { type RoadmapStateV2, setPolicy } from './roadmap-store'
 import { deleteSessionArtifacts } from './session-delete'
+import { scopeFor } from './session-id-bridge'
 
 export type DeleteOpCtx = {
   state: RoadmapStateV2
@@ -41,7 +42,14 @@ export async function deleteSessionOp(
   if (ctx.isBusy()) {
     await ctx.waitForIdle()
   }
-  const result = await deleteSessionArtifacts(deps, sessionId)
+  const result = await deleteSessionArtifacts(
+    {
+      ...deps,
+      resolveWorkspaceForNative: (nativeId) =>
+        scopeFor(deps.getUserDataDir(), nativeId, null).workspacePath
+    },
+    sessionId
+  )
   if (!result.ok) {
     return result
   }

@@ -18,6 +18,12 @@ export type SessionState = {
   summarizedCursor: Cursor
   counts: Record<string, number> // date (UTC YYYY-MM-DD) -> spawn count
   pending: PendingChapter[]
+  /**
+   * Scan cursors per journal session id (a native conversation spans several
+   * structured sessions; each has its own epoch/seq space). Falls back to the
+   * legacy single scanCursor for the session's original id.
+   */
+  cursorsByJournal?: Record<string, Cursor>
 }
 
 /** Spec session-enablement v1.3 §2: policy axis. candidate is derived (unset), never persisted. */
@@ -42,7 +48,9 @@ export type RoadmapStateV2 = {
   ops?: Record<string, 'deleting'>
 }
 
-export type RoadmapState = RoadmapStateV2 | { version: 1; optedIn: string[]; sessions: Record<string, SessionState> }
+export type RoadmapState =
+  | RoadmapStateV2
+  | { version: 1; optedIn: string[]; sessions: Record<string, SessionState> }
 
 export const DAILY_CAP = 20
 
@@ -101,6 +109,18 @@ export function getOrCreateSession(state: RoadmapState, sessionId: string): Sess
   return state.sessions[sessionId]!
 }
 
+/** Cursor for one journal carrier; legacy entries share the single scanCursor. */
+export function cursorFor(session: SessionState, journalId: string, nativeId: string): Cursor {
+  return (
+    session.cursorsByJournal?.[journalId] ??
+    (journalId === nativeId ? session.scanCursor : { epoch: '', seq: 0 })
+  )
+}
+
+export function setCursorFor(session: SessionState, journalId: string, cursor: Cursor): void {
+  session.cursorsByJournal = { ...session.cursorsByJournal, [journalId]: cursor }
+}
+
 /** Terminal states override every writer (spec §0); active means pipeline may run. */
 export function isActive(state: RoadmapStateV2, sessionId: string): boolean {
   return state.policy[sessionId] === 'eligible'
@@ -124,7 +144,10 @@ export function metricsOf(state: RoadmapStateV2, sessionId: string): SessionMetr
 
 const METRICS_FILE_CAP = 50
 
-export function recordMetrics(m: SessionMetrics, delta: { turn?: boolean; edit?: boolean; file?: string | null }): void {
+export function recordMetrics(
+  m: SessionMetrics,
+  delta: { turn?: boolean; edit?: boolean; file?: string | null }
+): void {
   if (delta.turn) {
     m.turns += 1
   }

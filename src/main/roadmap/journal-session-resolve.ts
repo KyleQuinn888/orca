@@ -56,15 +56,14 @@ export function resolveJournalSessionsByNativeId(
       .prepare(
         "SELECT session_id, record_json FROM agent_session_records WHERE record_json LIKE ? ESCAPE '\\'"
       )
-      .all(`%${escaped}%`) as Array<{ session_id: string; record_json: string }>
+      .all(`%${escaped}%`) as { session_id: string; record_json: string }[]
     const headMatches: string[] = []
     const tailMatches: string[] = []
     for (const row of rows) {
       let chain: ReturnType<typeof decodePersistedAgentSessionProviderHandleChain> = null
       try {
         chain = decodePersistedAgentSessionProviderHandleChain(
-          (JSON.parse(row.record_json) as { providerHandleChain?: unknown })
-            .providerHandleChain
+          (JSON.parse(row.record_json) as { providerHandleChain?: unknown }).providerHandleChain
         )
       } catch {
         continue
@@ -139,10 +138,8 @@ export function journalSessionIdsMentioningNativeId(
     db = new Database(dbPath, { readonly: true, fileMustExist: true })
     const escaped = nativeSessionId.replace(/[\\%_]/g, (ch) => `\\${ch}`)
     const rows = db
-      .prepare(
-        "SELECT DISTINCT session_id FROM journal_rows WHERE row_json LIKE ? ESCAPE '\\'"
-      )
-      .all(`%${escaped}%`) as Array<{ session_id: string }>
+      .prepare("SELECT DISTINCT session_id FROM journal_rows WHERE row_json LIKE ? ESCAPE '\\'")
+      .all(`%${escaped}%`) as { session_id: string }[]
     return rows.map((row) => row.session_id)
   } catch (error) {
     console.warn('[roadmap] journal session row scan failed:', error)

@@ -9,6 +9,8 @@ import { rebuildPitsIndex } from '../../../roadmap/core/pits-index'
 export type DeleteDeps = {
   getWorkspacePath: (sessionId: string) => string | null
   getUserDataDir: () => string
+  /** Optional bridge: native id -> workspace when the journal lookup misses. */
+  resolveWorkspaceForNative?: (nativeId: string) => string | null
 }
 
 export type DeleteOutcome = { ok: boolean; error?: string }
@@ -31,7 +33,12 @@ export async function deleteSessionArtifacts(
   if (!SID_RE.test(sessionId)) {
     return { ok: false, error: 'invalid session id' }
   }
-  const workspace = deps.getWorkspacePath(sessionId)
+  // Native-id callers (UI delete entry) resolve through the id bridge; journal
+  // ids keep the direct journal lookup (zcode handoff: fast chain only here).
+  let workspace = deps.getWorkspacePath(sessionId)
+  if (!workspace && deps.resolveWorkspaceForNative) {
+    workspace = deps.resolveWorkspaceForNative(sessionId)
+  }
   if (!workspace) {
     // spec §3.3: workspace unresolvable -> refuse, deletion stays pending
     return { ok: false, error: 'workspace unavailable' }
