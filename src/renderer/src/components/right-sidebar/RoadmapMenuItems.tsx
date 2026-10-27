@@ -66,12 +66,12 @@ export function RoadmapMenuItems({
   }
 
   const excluded = info.policy === 'excluded'
+  // Both candidate and excluded resume through generateNow: it sets eligible
+  // AND triggers the pipeline. setPolicy alone would only flip the flag and
+  // the user would see "recording" with nothing ever generated (the exact
+  // bug the owner hit on first soak).
   const start = (): void =>
-    run(() =>
-      excluded
-        ? window.api.roadmap.setPolicy({ sessionId, policy: 'eligible' })
-        : window.api.roadmap.generateNow({ sessionId, expectedPolicy: info.policy })
-    )
+    run(() => window.api.roadmap.generateNow({ sessionId, expectedPolicy: info.policy }))
   const label = excluded ? '恢复路线图记录' : '为此会话生成路线图'
 
   return menuKind === 'dropdown' ? (
