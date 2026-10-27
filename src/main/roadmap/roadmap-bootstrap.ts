@@ -20,11 +20,12 @@ export function bootstrapRoadmap(deps: {
   onTurnCompletion: RoadmapServiceDeps['onTurnCompletion']
   onIdle: RoadmapServiceDeps['onIdle']
   zcodeAvailable: RoadmapServiceDeps['zcodeAvailable']
+  featureEnabled?: RoadmapServiceDeps['featureEnabled']
   onQuit: (hook: () => void) => void
 }): void {
   const state = loadState(deps.getUserDataDir())
 
-  service = createRoadmapService(deps, state)
+  service = createRoadmapService(deps, state) // deps carry featureEnabled through (L1 gate)
 
   // Start on bootstrap (settings check happens per-session via optedIn)
   service.start()
