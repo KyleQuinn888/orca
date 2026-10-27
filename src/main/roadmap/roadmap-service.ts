@@ -258,7 +258,11 @@ export function createRoadmapService(
         (sessionState.scanCursor.seq === 0 && sessionState.summarizedCursor.seq === 0)
       ) {
         try {
-          await processSession(sessionId, 'backfill')
+          await processSession(
+            sessionId,
+            'backfill',
+            scopeForGeneration(deps.getUserDataDir(), sessionId, deps.getWorkspacePath(sessionId))
+          )
         } catch (e) {
           console.error(`[roadmap] backfill processSession threw:`, e)
         }

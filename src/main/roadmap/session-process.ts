@@ -20,6 +20,7 @@ import { parseRow } from './journal-row-parse'
 import { crossesThreshold, foldRowsIntoMetrics } from './session-threshold'
 import { saveStateSafe, summarizeAndWrite } from './chapter-pipeline'
 import { scopeFor, type SessionIdScope } from './session-id-bridge'
+import { dedupRowsAcrossCarriers } from './row-dedup'
 
 export type ProcessCtx = {
   deps: RoadmapServiceDeps
@@ -63,6 +64,12 @@ export async function processSessionInner(
   if (rows.length === 0) {
     return
   }
+
+  // Cross-carrier replay dedup (zcode handoff): a resumed conversation replays
+  // its full history under the new journal id; the same provider item arrives
+  // twice with different carrier prefixes. Dedup by provider key BEFORE any
+  // folding, segmentation or cursor math, or everything double-counts.
+  rows = dedupRowsAcrossCarriers(rows)
 
   // Threshold auto-policy (spec §1 L2): candidates accumulate metrics from the
   // same rows WITHOUT advancing the cursor; crossing promotes to eligible and
