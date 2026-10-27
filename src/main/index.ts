@@ -9,6 +9,8 @@ import {
 } from './startup/main-window-actions'
 import { openMainWindow as openMainWindowController } from './startup/main-window-controller'
 import { mainProcessState as state } from './startup/main-process-state'
+// Live binding: set after startup; the per-trigger gate reads it lazily.
+import { persistedStore } from './ipc/ssh/ssh-ipc-context'
 import { runMainProcessPreflight } from './startup/main-process-preflight'
 import { registerMainProcessIpcHandlers } from './startup/main-process-ipc-bootstrap'
 import { initializeMainProcessReady } from './startup/main-process-ready'
@@ -151,7 +153,11 @@ if (preflightReady) {
         onTurnCompletion: runtime.onTurnCompletion,
         onIdle: runtime.onIdle,
         zcodeAvailable: probeZcode,
-        onQuit: runtime.onQuit
+        onQuit: runtime.onQuit,
+        // L1 switch (spec session-enablement §1): live-read per trigger so
+        // toggling takes effect without a restart. Late-bound because the
+        // persisted store is registered after this module-level bootstrap.
+        featureEnabled: () => persistedStore?.getSettings?.().sessionRoadmap === true
       })
     })
     .catch((e) => console.warn('[roadmap] bootstrap failed:', e))

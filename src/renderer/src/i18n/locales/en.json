@@ -7714,6 +7714,12 @@
           "terminalHostRecovery": "If a terminal cannot read protected files, save its work and close it in Terminal → Manage Sessions. Restart the daemon if new terminals are also affected; restarting closes its current terminals."
         },
         "ExperimentalPane": {
+        "sessionRoadmap": {
+          "title": "Session Roadmap",
+          "description": "Generate per-session biography artifacts.",
+          "copy": "Sessions with substantive work get chapter/milestone biography cards. Turning this off stops new generation and keeps existing cards.",
+          "toggleLabel": "Toggle Session Roadmap"
+        },
           "9762364929": "Uses APFS clone-copy on macOS when possible, otherwise symlinks configured folders or files into created worktrees.",
           "24416f42cd": "Shared paths on worktrees",
           "fb82ea1d7a": "Automatically materialize configured files or folders into newly created worktrees.",

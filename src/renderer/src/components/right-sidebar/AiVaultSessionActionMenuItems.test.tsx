@@ -24,6 +24,7 @@ function renderMenuOrder(
         <DropdownMenuTrigger>Open</DropdownMenuTrigger>
         <DropdownMenuContent>
           <SessionActionMenuItems
+            sessionId="s1"
             resumeDisabled={false}
             resumeLabel="Resume in New Tab"
             onResume={vi.fn()}

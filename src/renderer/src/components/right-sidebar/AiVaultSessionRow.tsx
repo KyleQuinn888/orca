@@ -13,6 +13,7 @@ import type { AiVaultScope, AiVaultSession } from '../../../../shared/ai-vault-t
 import type { AiVaultResumeStartup } from '@/lib/ai-vault-resume-command'
 import { translate } from '@/i18n/i18n'
 import { SessionInlineDetails } from './AiVaultSessionDetails'
+import { RoadmapSessionStatus } from './RoadmapSessionStatus'
 import { latestSessionConversationTurn } from './ai-vault-session-display'
 import { SessionActionMenuItems } from './AiVaultSessionActionMenuItems'
 import { SessionRowTrailingActions } from './SessionRowTrailingActions'
@@ -248,6 +249,7 @@ export function VaultSessionRow({
         vaultScope={vaultScope}
         sourceHostLabel={sourceHostLabel}
       />
+      <RoadmapSessionStatus sessionId={session.sessionId} />
       {detailsExpanded ? (
         <SessionInlineDetails
           id={detailsId}
@@ -279,6 +281,7 @@ export function VaultSessionRow({
       <ContextMenuContent>
         <SessionActionMenuItems
           menuKind="context"
+          sessionId={session.sessionId}
           resumeDisabled={resumeDisabled}
           resumeHidden={resumeHidden}
           resumeLabel={resumeLabel}

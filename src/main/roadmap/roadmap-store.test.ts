@@ -6,23 +6,28 @@ import {
   emptyState,
   enqueuePending,
   getOrCreateSession,
-  isOptedIn,
-  optIn,
-  optOut,
+  isActive,
+  migrateState,
   recordSpawn,
+  setPolicy,
   utcDateKey
 } from './roadmap-store'
 
 describe('roadmap-store', () => {
-  it('optIn/optOut manages the session list', () => {
+  it('policy axis: eligible/excluded/deleted with terminal override', () => {
     const state = emptyState()
-    expect(isOptedIn(state, 's1')).toBe(false)
-    optIn(state, 's1')
-    expect(isOptedIn(state, 's1')).toBe(true)
-    optIn(state, 's1') // idempotent
-    expect(state.optedIn).toHaveLength(1)
-    optOut(state, 's1')
-    expect(isOptedIn(state, 's1')).toBe(false)
+    expect(isActive(state, 's1')).toBe(false)
+    setPolicy(state, 's1', 'eligible')
+    expect(isActive(state, 's1')).toBe(true)
+    setPolicy(state, 's1', 'excluded')
+    expect(isActive(state, 's1')).toBe(false)
+  })
+
+  it('v1 migration maps optedIn to eligible', () => {
+    const migrated = migrateState({ version: 1, optedIn: ['a'], sessions: {} })
+    expect(migrated.version).toBe(2)
+    expect(isActive(migrated, 'a')).toBe(true)
+    expect(isActive(migrated, 'b')).toBe(false)
   })
 
   it('daily cap counts and reports remaining', () => {
