@@ -57,6 +57,10 @@ cd ~/dev/zcode-app && git pull            # 参考仓同步（补充证据；已
 
 grep 是快速绊线不是契约证明——已知盲区：字段改名、required 变化、方法名/路由变化。**最终防线是 Step 6 探针 + Step 7 冒烟**。
 
+## 发布门禁（硬规则）
+
+**不经用户文字批准，不构建任何新版本**——版本号 bump、CI dispatch、本地 electron-builder 出包、交付安装包四类动作都必须先征得同意。修代码/测试/推分支不受此限。
+
 ## Step 5 — bump 版本 + 出包
 
 ```bash
