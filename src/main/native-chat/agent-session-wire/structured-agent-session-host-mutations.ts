@@ -1,13 +1,7 @@
-// Everything a client can ask a session to do: send a turn, cancel one, answer a prompt, change an
-// option, read the options back.
-//
-// They share one shape — admit the envelope against the lease, run a plan, publish the journal — so
-// they share one path here rather than five copies in the host. The host keeps attach and teardown.
-// Each opens the conversation first. A send, a Stop and an option pick are conversation writes,
-// admitted without the writer lease; the delivery loop starts the provider child a send needs, and
-// an operation only the provider can perform starts it before admission.
+// Share mutation admission/planning/publication. Conversation writes need no child lease;
+// provider-only effects start their child before admission, sends start through delivery.
 
-import { latestNativeChatUsageLimitCut } from '../../../shared/native-chat-usage-limit-cut'
+import { latestNativeChatUsageLimitCut } from '../../../shared/native-chat/native-chat-usage-limit-cut'
 import { refuse } from '../../../shared/agent-session-wire'
 import { contextStructuredAgentSessionCurrentWork } from './structured-agent-session-current-work'
 import { shouldQueueStructuredAgentSessionSend } from './structured-agent-session-queued-messages'
@@ -58,11 +52,11 @@ import type { StructuredAgentSessionCaller } from './structured-agent-session-ho
 import {
   readStructuredAgentSessionOptions,
   IN_PROCESS_OPTIONS_READER,
-  recordStructuredAgentSessionOptionIntent,
   type StructuredAgentSessionOptionsReader
 } from './structured-agent-session-options-read'
+import { writeStructuredAgentSessionOption } from './structured-agent-session-message-options'
+import { AGENT_CHAT_PERMISSION_MODE_OPTION_ID } from '../../../shared/agent-chat-permission-mode'
 import { settleStructuredAgentSessionLateDispatch } from './structured-agent-session-late-dispatch'
-import { releaseStructuredAgentSessionUnansweredDispatches } from './structured-agent-session-unanswered-dispatch-release'
 
 export function sendStructuredAgentSessionTurn(
   context: StructuredAgentSessionMutationContext,
@@ -72,18 +66,12 @@ export function sendStructuredAgentSessionTurn(
     body: AgentJournalMessageItem
     retryUnknown?: true
     delivery?: 'queue-if-active'
-    /** Host-local: whether the sending client can manage an image card. */
     queuedImageCards?: boolean
     options?: Readonly<Record<string, string>>
     usageLimitContinuationOfTurnItemId?: string
-    /** Host-local, set only by the client-facing `agentSession.send` RPC (the
-     *  renderer's launch prompt included): recorded as the submission's `client`
-     *  origin, so a restart or a close keeps it as a card if it never reached the
-     *  agent. Orchestration mail, a restart continuation and `agent.launch`'s host-sent
-     *  prompt never set it. */
+    /** Client send RPCs set origin=client for recovery; host mail/continuations/launch sends omit it. */
     userSend?: true
-    /** Host-local, never on the wire: a person's message the host sends for them, such as a
-     *  launch's first prompt. `userSend` is always one; another agent's message carries `from`. */
+    /** Host-origin personal text, including launch prompts; other agents carry from instead. */
     personsMessage?: true
     beforeRun?: () => void
   },
@@ -158,7 +146,7 @@ export function cancelStructuredAgentSessionTurn(
             sessionId,
             targets.map((target) => target.providerId)
           ),
-        // Untargeted, with work no record lists: the idle sweep's stop ends it with the agent.
+        // At rest, Stop all can end unlisted work with its agent.
         ...(params.taskId === undefined
           ? {
               unlisted: {
@@ -176,10 +164,15 @@ export function cancelStructuredAgentSessionTurn(
   const stoppedPrePrompt =
     !prompt && params.turnId === undefined
       ? abortProviderWaitForStop(context, caller, params.envelope, plan)
-      : false
-  // A card's Cancel stops whatever the chat has in flight, as the Stop button does; it reaches the
-  // Stop only for a card the live turn raised (`cancelStructuredAgentSessionPrompt`).
-  const stopped = prompt ? { envelope: params.envelope } : { ...params, stoppedPrePrompt }
+      : null
+  // Only live-turn prompt Cancel reaches chat Stop; it shares the untargeted Stop path.
+  const stopped = prompt
+    ? { envelope: params.envelope }
+    : {
+        ...params,
+        stoppedPrePrompt: stoppedPrePrompt?.reached === true,
+        stoppedSend: stoppedPrePrompt?.handedOver === true
+      }
   return mutateWithChatStop(context, caller, stopped, plan, (ctx, stop) =>
     prompt
       ? cancelStructuredAgentSessionPrompt(
@@ -191,16 +184,13 @@ export function cancelStructuredAgentSessionTurn(
   )
 }
 
-/** A Stop must not wait behind a start the provider may never answer: the start the session's
- *  queue is waiting on stops now, as a close's does, and the Stop's own step then finds no child.
- *  Only a Stop admission would run now; one naming a turn is about a child already gone, so it
- *  leaves a newer start alone. */
+/** Abort unnamed Stop’s startup waits immediately; named stale turns must leave newer starts alone. */
 function abortProviderWaitForStop(
   context: StructuredAgentSessionMutationContext,
   caller: StructuredAgentSessionCaller,
   envelope: AgentSessionMutationEnvelope,
   plan: MutationPlan<AgentSessionCancelResult>
-): boolean {
+): { reached: boolean; handedOver: boolean } | null {
   const { store } = context.deps
   if (
     !agentSessionMutationAdmitsNow({
@@ -211,7 +201,7 @@ function abortProviderWaitForStop(
       now: context.now
     })
   ) {
-    return false
+    return null
   }
   return context.acquireAborts.abort(envelope.sessionId, 'stopped while starting')
 }
@@ -235,17 +225,42 @@ export async function setStructuredAgentSessionOption(
   caller: StructuredAgentSessionCaller,
   params: { envelope: AgentSessionMutationEnvelope; key: string; value: string }
 ): Promise<AgentSessionMutationResult<AgentSessionOptionResult>> {
+  const recordOnly =
+    params.key === AGENT_CHAT_PERMISSION_MODE_OPTION_ID &&
+    !context.deps.agents.capabilities(
+      context.deps.store.getRecord(params.envelope.sessionId)?.provider ?? ''
+    )?.livePermissionMode
   const plan = setOptionPlan(params)
-  return mutateStructuredAgentSession(
+  const atRest = () => {
+    const child = context.sessions.get(params.envelope.sessionId)?.child
+    return recordOnly || !child || child.phase === 'starting' || child.close !== undefined
+  }
+  return runWithReadyStructuredAgentSessionOperation(
     context,
-    caller,
+    caller.callerKey,
     params.envelope,
+    plan,
+    (selection) =>
+      runStructuredAgentSessionMutation(
+        context,
+        caller,
+        params.envelope,
+        {
+          ...plan,
+          get conversationWrite() {
+            return atRest() ? (true as const) : undefined
+          },
+          run: (ctx) => writeStructuredAgentSessionOption(context, ctx, params)
+        },
+        (ledger) =>
+          atRest()
+            ? openForWrite(context, params.envelope)()
+            : openWithReadyStructuredAgentSessionChild(context, params.envelope, selection)(ledger)
+      ),
     {
-      ...plan,
-      conversationWrite: true,
-      run: (ctx) => recordStructuredAgentSessionOptionIntent(context.deps, ctx, params)
-    },
-    openForWrite(context, params.envelope)
+      needsAgent: () =>
+        !recordOnly && Boolean(context.sessions.get(params.envelope.sessionId)?.child?.close === undefined && context.sessions.get(params.envelope.sessionId)?.child)
+    }
   )
 }
 
@@ -276,8 +291,7 @@ export async function changeStructuredAgentSessionThreadGoal(
   )
 }
 
-/** The host's thin mutation surface. Each call re-reads the context, so a session
- *  map or fence that moves between calls is never captured by a stale closure. */
+/** Resolve context per call so moved maps/fences cannot become stale closures. */
 export function structuredAgentSessionMutationDelegates(
   context: () => StructuredAgentSessionMutationContext
 ) {
@@ -298,15 +312,12 @@ export function structuredAgentSessionMutationDelegates(
       caller: StructuredAgentSessionCaller,
       params: Parameters<typeof changeStructuredAgentSessionThreadGoal>[2]
     ) => changeStructuredAgentSessionThreadGoal(context(), caller, params),
-    // The RPC handler always names its client's reader; only in-process callers omit it.
+    // Only in-process readers omit client identity.
     readOptions: (
       sessionId: string,
       reader: StructuredAgentSessionOptionsReader = IN_PROCESS_OPTIONS_READER
     ) => readStructuredAgentSessionOptions(context(), sessionId, reader),
     settleLateDispatch: (input: Parameters<typeof settleStructuredAgentSessionLateDispatch>[1]) =>
-      settleStructuredAgentSessionLateDispatch(context(), input),
-    releaseUnansweredDispatches: (
-      input: Parameters<typeof releaseStructuredAgentSessionUnansweredDispatches>[1]
-    ) => releaseStructuredAgentSessionUnansweredDispatches(context(), input)
+      settleStructuredAgentSessionLateDispatch(context(), input)
   }
 }

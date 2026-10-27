@@ -1,4 +1,3 @@
-/** User-facing words for managed-server states; every string goes through the catalog. */
 import type {
   OrcadManagedPendingMigrationRow,
   OrcadManagedRuntimeStatus
@@ -54,6 +53,14 @@ export function terminalCensusLabel(terminals: OrcadManagedRuntimeStatus['termin
     'auto.components.settings.managedServers.terminals.count',
     'Running terminals: {{count}}',
     { count: terminals.liveSessions }
+  )
+}
+
+/** Copy for Update anyway; it states only what the forced update was verified to keep. */
+export function forceUpdateMessage(): string {
+  return translate(
+    'auto.components.settings.managedServers.row.forceUpdate',
+    'Terminals are running on this host. They keep running through the update, and their panes reconnect when Orca’s server restarts.'
   )
 }
 
@@ -134,7 +141,6 @@ const MIGRATION_CODES = new Set([
   'orcad_rollback_crosses_migration'
 ])
 
-/** The one localized line for a managed-server action that did not go through. */
 export function managedServerOutcomeLabel(result: {
   outcome: string
   code?: string
@@ -143,8 +149,8 @@ export function managedServerOutcomeLabel(result: {
   const code = result.code ?? ''
   if (code === 'orcad_stop_active_environment') {
     return translate(
-      'auto.components.settings.managedServers.outcome.activeServer',
-      'Not done: this server is the default host for new projects. Choose another one in Advanced before stopping it.'
+      'auto.components.settings.managedServers.outcome.defaultServer',
+      'Not done: this server is the default host for new projects. Choose another one under New projects open on before stopping it.'
     )
   }
   if (result.verdict === 'live' || LIVE_TERMINAL_CODES.has(code)) {

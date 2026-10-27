@@ -1,5 +1,4 @@
-// Why: the invariant every transition must keep: a tab that is not dirty holds no draft of the disk
-// text, so no stale draft can later be restored into a shared model.
+// Clean tabs must not retain disk-text drafts that could later overwrite a shared model.
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { attachEditorAutosaveController } from './editor-autosave-controller'
 import { requestEditorFileSave } from './editor-autosave'
@@ -7,7 +6,7 @@ import { __clearSelfWriteRegistryForTests } from './editor-self-write-registry'
 import { createEditorStore } from './editor-autosave-controller-test-fixture'
 import { reloadTabContentFromDisk } from './ExternalFileChangeBanner'
 import { mayPushTabTextIntoModel } from './editor-stale-mount-guard'
-import { rollBackFailedMobileSave } from '@/runtime/mobile-markdown-save-rollback'
+import { stampCleanTabDiskBaseline } from './editor-clean-tab-disk-baseline'
 import { getDiskBaselineSignature } from '../../../../shared/disk-baseline-signature'
 import { GUARDED_PATH, stubGuardedDisk } from './editor-save-guarded-disk-fixture'
 
@@ -19,14 +18,14 @@ vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { error: vi.fn() }) }))
 vi.mock('@/lib/connection-context', () => ({ getConnectionIdForFile: () => undefined }))
 vi.mock('@/store', () => ({ useAppStore: { getState: () => storeRef.current?.getState() } }))
 
-function openCleanTab(disk: string) {
+function openCleanTab(disk: string, language = 'typescript') {
   const store = createEditorStore()
   storeRef.current = store
   store.getState().openFile({
     filePath: GUARDED_PATH,
     relativePath: 'file.ts',
     worktreeId: 'wt-1',
-    language: 'typescript',
+    language,
     mode: 'edit'
   })
   const id = store.getState().openFiles[0].id
@@ -90,25 +89,29 @@ it('reload leaves no draft', () => {
   expectNoCleanDraft(store)
 })
 
-it('a refused mobile save restoring a clean tab leaves no draft of the disk text', () => {
+it("lets a clean record's draft reach its model, since every view shares that draft", () => {
   const { store, id } = openCleanTab('disk')
-  store.getState().setEditorDraft(id, 'phone')
-  store.getState().markFileDirty(id, true)
-  rollBackFailedMobileSave(new Error('save_timeout'), {
-    fileId: id,
-    injectedContent: 'phone',
-    previousDraft: 'disk',
-    previousDirty: false,
-    stampedBaseline: null
-  })
-  expectNoCleanDraft(store)
-})
-
-it("never restores a clean tab's leftover draft into the model", () => {
-  const { store, id } = openCleanTab('disk')
-  // A Markdown-whitespace draft may stay on a clean tab; it still never enters the model.
+  // A Markdown-whitespace draft may stay on a clean tab; it is the record's text, so views show it.
   store.setState({ editorDrafts: { ...store.getState().editorDrafts, [id]: 'disk ' } })
-  expect(mayPushTabTextIntoModel(id)).toBe(false)
+  expect(mayPushTabTextIntoModel(id)).toBe(true)
   store.getState().markFileDirty(id, true)
   expect(mayPushTabTextIntoModel(id)).toBe(true)
+})
+
+it("a reload keeps a clean Markdown tab's trailing-whitespace draft, but not one over older text", () => {
+  const { store, id } = openCleanTab('# notes', 'markdown')
+  store.getState().setEditorDraft(id, '# notes\n\n')
+  stampCleanTabDiskBaseline(id, { content: '# notes', isBinary: false })
+  expect(store.getState().editorDrafts[id]).toBe('# notes\n\n')
+
+  stampCleanTabDiskBaseline(id, { content: '# newer notes', isBinary: false })
+  expect(store.getState().editorDrafts[id]).toBeUndefined()
+})
+
+it('a reload drops a whitespace-only Markdown draft when disk moved, even by whitespace alone', () => {
+  const { store, id } = openCleanTab('# notes', 'markdown')
+  store.getState().setEditorDraft(id, '# notes\n\n')
+  // An outside write added a trailing newline; keeping the draft would undo it.
+  stampCleanTabDiskBaseline(id, { content: '# notes\n', isBinary: false })
+  expect(store.getState().editorDrafts[id]).toBeUndefined()
 })

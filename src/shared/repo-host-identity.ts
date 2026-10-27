@@ -1,3 +1,8 @@
+import {
+  getRepoExecutionHostId,
+  toSshExecutionHostId,
+  type ExecutionHostId
+} from './execution-host'
 import type { Repo } from './repo-types'
 
 declare const hostScopedRepoKeyBrand: unique symbol
@@ -13,4 +18,27 @@ export function getRepoHostIdentityForParts(repoId: string, hostId: string): Hos
   // key collision-free without escaping user/provider-owned strings.
   // oxlint-disable-next-line typescript/consistent-type-assertions -- SAFETY: this is the only constructor of the brand; the bytes are the unbranded composite, frozen by golden tests (D25).
   return `${hostId}\0${repoId}` as HostScopedRepoKey
+}
+
+/** One host's registration of a repo; the same repo id may be registered on several hosts. */
+export function getRepoHostIdentity(repo: RepoHostTarget): HostScopedRepoKey {
+  return getRepoHostIdentityForParts(repo.id, getRepoExecutionHostId(repo))
+}
+
+/** The hosts registering `repoId`; two or more means same-id twins on different hosts. */
+export function getRepoRegistrationHostIds(
+  repos: readonly RepoHostTarget[],
+  repoId: string
+): Set<ExecutionHostId> {
+  return new Set(repos.filter((repo) => repo.id === repoId).map(getRepoExecutionHostId))
+}
+
+export function getRepoSetupOwnerScope(
+  setup: Pick<Repo, 'connectionId' | 'executionHostId'> & { hostId?: string }
+): string {
+  const host = setup.hostId ?? 'local'
+  const execution = setup.connectionId
+    ? toSshExecutionHostId(setup.connectionId)
+    : getRepoExecutionHostId(setup)
+  return execution.startsWith('ssh:') && execution !== host ? `${host}\0${execution}` : host
 }

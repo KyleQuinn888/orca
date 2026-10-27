@@ -13,10 +13,12 @@ import { ContextMenuItem, ContextMenuSeparator } from '@/components/ui/context-m
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { translate } from '@/i18n/i18n'
 import { AiVaultSessionSurfaceSwitchMenuItems } from './AiVaultSessionSurfaceSwitchMenuItems'
+import { RoadmapMenuItems } from './RoadmapMenuItems'
 import { isAiVaultFolderWorkspaceId } from './ai-vault-session-worktree-affordances'
 
 export function SessionActionMenuItems({
   menuKind = 'dropdown',
+  sessionId,
   resumeDisabled,
   resumeLabel,
   resumeHidden = false,
@@ -38,6 +40,7 @@ export function SessionActionMenuItems({
   onDelete
 }: {
   menuKind?: 'dropdown' | 'context'
+  sessionId: string
   resumeDisabled: boolean
   resumeLabel: string
   resumeHidden?: boolean
@@ -50,8 +53,7 @@ export function SessionActionMenuItems({
   showJumpToWorktree: boolean
   jumpWorkspaceId?: string | null
   onJumpToWorktree?: () => void
-  // Absent for zero-turn sessions: copying a resume command that lands in an
-  // empty conversation would contradict the "not saved" state.
+  // Hide resume-command copy for zero-turn sessions; it would reopen an empty conversation despite not-saved status.
   onCopyResume?: () => void
   onCopyId: () => void
   onCopyPath?: () => void
@@ -80,8 +82,7 @@ export function SessionActionMenuItems({
       variant="destructive"
       disabled={Boolean(deleteBlockedReason)}
       onSelect={deleteBlockedReason ? undefined : onDelete}
-      // Also on aria-label, so a screen-reader user hears why Delete is
-      // disabled rather than only that it is.
+      // Expose Delete’s blocked reason to screen readers as well as tooltip users.
       aria-label={deleteBlockedReason ? `${deleteLabel}. ${deleteBlockedReason}` : undefined}
     >
       <Trash2 className="size-3.5" />
@@ -120,6 +121,7 @@ export function SessionActionMenuItems({
           {resumeLabel}
         </Item>
       ) : null}
+      <RoadmapMenuItems sessionId={sessionId} menuKind={menuKind} />
       <AiVaultSessionSurfaceSwitchMenuItems
         action="resume"
         menuKind={menuKind}
@@ -195,8 +197,7 @@ export function SessionActionMenuItems({
           {deleteBlockedReason ? (
             <Tooltip>
               <TooltipTrigger asChild>
-                {/* A disabled item is pointer-events:none, so the trigger needs this
-               wrapper to receive hover (as WorktreeContextMenu does). */}
+                {/* Disabled items ignore pointer events; wrap for tooltip hover as WorktreeContextMenu does. */}
                 <div>{deleteItem}</div>
               </TooltipTrigger>
               <TooltipContent

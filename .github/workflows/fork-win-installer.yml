@@ -54,7 +54,13 @@ jobs:
         uses: ./.github/actions/install-mobile-dependencies
 
       - name: Build Windows installer
-        run: pnpm run build:win
+        # build:win's chain, spelled out so --publish never reaches
+        # electron-builder itself: the fork ships this workflow's artifact,
+        # not a GitHub release.
+        run: >-
+          pnpm run build:desktop &&
+          pnpm run ensure:electron-runtime &&
+          pnpm exec electron-builder --config config/electron-builder.config.cjs --win --publish never
 
       - name: Upload installer
         uses: actions/upload-artifact@v4

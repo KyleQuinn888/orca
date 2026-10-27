@@ -6,7 +6,12 @@
     "../src/renderer/src/**/*.tsx",
     "../src/preload/api-types.ts",
     "../src/preload/api/**/*",
-    "../src/shared/**/*"
+    "../src/shared/**/*",
+    "../roadmap/core/r2-snapshot.ts",
+    "../roadmap/core/r2-chains.ts",
+    "../roadmap/core/r2-layout.ts",
+    "../roadmap/core/r2-selection.ts",
+    "../roadmap/core/r2-review.ts"
   ],
   "compilerOptions": {
     "composite": true,

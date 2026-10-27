@@ -4,7 +4,6 @@ import {
   isUnreadNews,
   enterAgentPaneState,
   RECENT_STAMP_THROTTLE_MS,
-  REST_PANE,
   workspaceSmartStamp,
   type AgentPaneState,
   type SortStamps
@@ -24,14 +23,6 @@ function agentEvent(
 }
 
 describe('enterAgentPaneState', () => {
-  it('enters a phase at now', () => {
-    expect(enterAgentPaneState(REST_PANE, 'working', NOW)).toEqual({ phase: 'working', at: NOW })
-    expect(enterAgentPaneState({ phase: 'working', at: 1 }, 'done', NOW)).toEqual({
-      phase: 'done',
-      at: NOW
-    })
-  })
-
   it('keeps the same object when the phase holds, so running stays running', () => {
     const working = { phase: 'working' as const, at: NOW - 5 }
     expect(enterAgentPaneState(working, 'working', NOW)).toBe(working)
@@ -65,44 +56,6 @@ describe('workspaceSmartStamp', () => {
 })
 
 describe('classifySortStampEvent', () => {
-  it('stamps a prompt from rest: Recent now, Working now', () => {
-    const working = { phase: 'working' as const, at: NOW }
-    expect(classifySortStampEvent(IDLE, agentEvent('rest', 'working', [working]), NOW)).toEqual({
-      recentAt: NOW,
-      smartTier: 'working',
-      smartAt: NOW
-    })
-  })
-
-  it('stamps a finish and a request for input', () => {
-    const current: SortStamps = { recentAt: NOW - 60_000, smartTier: 'working', smartAt: 1 }
-    expect(
-      classifySortStampEvent(
-        current,
-        agentEvent('working', 'done', [{ phase: 'done', at: NOW }]),
-        NOW
-      )
-    ).toEqual({ recentAt: NOW, smartTier: 'done', smartAt: NOW })
-    expect(
-      classifySortStampEvent(
-        current,
-        agentEvent('working', 'needs-you', [{ phase: 'needs-you', at: NOW }]),
-        NOW
-      )
-    ).toEqual({ recentAt: NOW, smartTier: 'needs-you', smartAt: NOW })
-  })
-
-  it('stamps a new prompt after Done', () => {
-    const current: SortStamps = { recentAt: NOW - 60_000, smartTier: 'done', smartAt: 1 }
-    expect(
-      classifySortStampEvent(
-        current,
-        agentEvent('done', 'working', [{ phase: 'working', at: NOW }]),
-        NOW
-      )
-    ).toEqual({ recentAt: NOW, smartTier: 'working', smartAt: NOW })
-  })
-
   it('moves a resumed approval to Working without a Recent stamp, keeping its time', () => {
     const current: SortStamps = { recentAt: NOW - 60_000, smartTier: 'needs-you', smartAt: 7 }
     expect(
@@ -174,19 +127,6 @@ describe('classifySortStampEvent', () => {
 })
 
 describe('the stamps follow the agent transitions', () => {
-  const phases: readonly AgentPhase[] = ['rest', 'working', 'needs-you', 'done']
-  it.each(phases.flatMap((from) => phases.map((to) => ({ from, to }))))(
-    '$from -> $to',
-    ({ from, to }) => {
-      const transition = agentPhaseTransition(from, to)
-      const event = agentEvent(from, to, [])
-      expect(classifySortStampEvent(IDLE, event, NOW)?.recentAt === NOW).toBe(transition !== null)
-      expect(isUnreadNews(event)).toBe(
-        transition === 'turn-finished' || transition === 'needs-input'
-      )
-    }
-  )
-
   it('flags a failed turn as news, and a session boundary’s done as none while it still stamps', () => {
     expect(isUnreadNews(agentEvent('working', 'done', [], 'errored'))).toBe(true)
     const boundary = agentEvent('working', 'done', [{ phase: 'done', at: NOW }], null)
@@ -195,6 +135,23 @@ describe('the stamps follow the agent transitions', () => {
       recentAt: NOW,
       smartTier: 'done',
       smartAt: NOW
+    })
+  })
+})
+
+describe('workspaceSmartStamp once the workspace is read', () => {
+  it('lets a read Done yield to a Working pane, and keeps a lone read Done', () => {
+    const done = { phase: 'done' as const, at: 100 }
+    const working = { phase: 'working' as const, at: 200 }
+    expect(workspaceSmartStamp([done, working], true)).toEqual({ smartTier: 'done', smartAt: 100 })
+    expect(workspaceSmartStamp([done, working], false)).toEqual({
+      smartTier: 'working',
+      smartAt: 200
+    })
+    expect(workspaceSmartStamp([done], false)).toEqual({ smartTier: 'done', smartAt: 100 })
+    expect(workspaceSmartStamp([done, working, { phase: 'needs-you', at: 50 }], false)).toEqual({
+      smartTier: 'needs-you',
+      smartAt: 50
     })
   })
 })

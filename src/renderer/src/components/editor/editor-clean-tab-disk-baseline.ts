@@ -1,5 +1,7 @@
-import { useAppStore } from '@/store'
-import { getDiskBaselineSignature } from './diff-content-signature'
+import { useAppStore, type AppState } from '@/store'
+import type { OpenFile } from '@/store/slices/editor'
+import { isEditorContentUnchanged } from './editor-content-dirty-state'
+import { getDiskBaselineSignature } from '../../../../shared/disk-baseline-signature'
 import type { FileContent } from './editor-panel-content-types'
 import {
   editorModelSiblingTabs,
@@ -9,10 +11,23 @@ import {
 import { setModelExternalMutation } from './editor-save-rebaseline'
 import { notifyEditorFileCacheStale } from './editor-autosave'
 
-// Why: a clean load re-baselines what this tab's future edits are based on; a
-// dirty tab keeps its baseline (its draft still derives from the older content
-// the signature was taken over). Best-effort metadata — a failure here must
-// not convert an already-delivered load into an error view, hence the guard.
+/** `tab` is the pre-load snapshot, so its baseline is the version the draft was typed over. */
+function clearDraftUnlessWhitespaceOnly(state: AppState, tab: OpenFile, diskContent: string): void {
+  const draft = state.editorDrafts[tab.id]
+  if (
+    draft !== undefined &&
+    draft !== diskContent &&
+    // Any disk change, even whitespace, outranks a preserved draft based on older bytes.
+    tab.lastKnownDiskSignature === getDiskBaselineSignature(diskContent) &&
+    tab.language === 'markdown' &&
+    isEditorContentUnchanged(draft, diskContent, true)
+  ) {
+    return
+  }
+  state.clearEditorDraft(tab.id)
+}
+
+// Clean loads advance baselines; dirty models keep their draft’s original base. Metadata failures must not turn a delivered load into an error.
 export function stampCleanTabDiskBaseline(id: string, result: FileContent): void {
   if (result.isBinary || result.loadError || result.csvPreview) {
     return
@@ -21,8 +36,7 @@ export function stampCleanTabDiskBaseline(id: string, result: FileContent): void
     const state = useAppStore.getState()
     const loadedFile = state.openFiles.find((file) => file.id === id)
     if (loadedFile && isEditorModelDirty(state, loadedFile)) {
-      // Why: while any tab of the model holds unsaved text, that text's base stays the baseline;
-      // a tab joining the model takes it, and a disk read that differs is a real external change.
+      // Unsaved model text keeps its original baseline across joining views; differing disk reads indicate external changes.
       const modelBaseline = editorModelSiblingTabs(state, loadedFile).find(
         (tab) => tab.lastKnownDiskSignature !== undefined
       )?.lastKnownDiskSignature
@@ -36,10 +50,10 @@ export function stampCleanTabDiskBaseline(id: string, result: FileContent): void
     }
     if (loadedFile) {
       const moved = setEditorDiskBaseline(state, id, getDiskBaselineSignature(result.content))
-      // Why: the model is clean, so any draft left on its tabs is stale text from an older version.
-      state.clearEditorDraft(id)
+      // Clean-model drafts are stale except Markdown trailing-whitespace differences against this exact disk version.
+      clearDraftUnlessWhitespaceOnly(state, loadedFile, result.content)
       for (const tab of moved) {
-        state.clearEditorDraft(tab.id)
+        clearDraftUnlessWhitespaceOnly(state, tab, result.content)
         notifyEditorFileCacheStale(tab.id)
       }
     }

@@ -1,9 +1,23 @@
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { agentSessionAccountHome } from '../../shared/agent-session-account-home'
+import { isNativeLocalLocation } from '../../shared/execution-host'
+import { resolveStructuredAgentCommand } from '../native-chat/structured-agent-command-resolution'
+import {
+  ZCODE_SESSION_HISTORY,
+  ZCODE_TRANSCRIPT_IMPORT
+} from '../native-chat/zcode-cli-conversations'
 import { applyStructuredCodexWorkspaceTrust } from '../agent-workspace-trust-spawn'
 import { ACP_LAUNCH_SPECS, type AcpLaunchSpec } from '../acp/acp-launch-specs'
 import { acpStructuredAgentDefinition } from '../acp/acp-structured-agent-definitions'
 import { resolveAcpLaunchCommand } from '../acp/acp-structured-launch-resolution'
 import { CODEX_STRUCTURED_AGENT } from '../codex/codex-structured-agent-definition'
+import { ZCODE_STRUCTURED_AGENT } from '../zcode/zcode-structured-agent-definition'
+import {
+  resolveZcodeStructuredInvocation,
+  ZCODE_MINIMUM_VERSIONS
+} from '../zcode/zcode-structured-launch-resolution'
+import { createZcodeModelCatalogProbe } from '../zcode/zcode-model-catalog-probe'
 import { CLAUDE_STRUCTURED_AGENT } from '../claude/claude-structured-agent-definition'
 import { CLAUDE_CLI_CONVERSATIONS } from '../claude/claude-cli-conversations'
 import { CODEX_CLI_CONVERSATIONS } from '../codex/codex-cli-conversations'
@@ -20,22 +34,49 @@ import {
   claudeModelCatalogDiscovery,
   codexModelCatalogDiscovery
 } from './structured-agent-model-catalog-discovery'
+import { getProfileUserDataPath } from '../orca-profiles/profile-storage-paths'
 import type {
   StructuredAgentAccountHomeRequest,
+  StructuredAgentChatProgram,
   StructuredAgentAccountHomeServices,
   StructuredAgentRuntimeMetadata
 } from './structured-agent-runtime-registration-types'
 
 export type StructuredAgentRuntimeCatalogEntry =
-  | { kind: 'pi' | 'codex' | 'claude'; metadata: StructuredAgentRuntimeMetadata }
+  | { kind: 'pi' | 'codex' | 'claude' | 'zcode'; metadata: StructuredAgentRuntimeMetadata }
   | { kind: 'acp'; metadata: StructuredAgentRuntimeMetadata; spec: AcpLaunchSpec }
 
+// Why the host's data folder: a start runs Orca's installed release before PATH.
+function acpChatProgram(spec: AcpLaunchSpec): StructuredAgentChatProgram {
+  const { managedRuntime } = spec
+  return {
+    resolve: (shellEnv, commandSettings) => {
+      const env = { ...shellEnv, ...spec.env }
+      const options = { commandSettings, dataDirectory: getProfileUserDataPath() }
+      return { command: resolveAcpLaunchCommand(spec, env, options), env }
+    },
+    ...(managedRuntime ? { installable: () => managedRuntime.pin() !== null } : {})
+  }
+}
+
+function cliChatProgram(agent: 'claude' | 'codex'): StructuredAgentChatProgram {
+  return {
+    resolve: (env, commandSettings) => {
+      const homePath = env.HOME ?? env.USERPROFILE
+      const pathEnv = env.PATH ?? env.Path ?? null
+      const options = { pathEnv, ...(homePath ? { homePath } : {}) }
+      return { command: resolveStructuredAgentCommand(agent, commandSettings, options), env }
+    }
+  }
+}
+
 function acpMetadata(spec: AcpLaunchSpec): StructuredAgentRuntimeMetadata {
-  const { supportsVersion } = spec
+  const { minimumVersions } = spec
   return {
     definition: acpStructuredAgentDefinition(spec),
+    chatProgram: acpChatProgram(spec),
     supportsLocation: (location) => supportsAcpStructuredLocation(spec, location),
-    ...(supportsVersion
+    ...(minimumVersions
       ? {
           launchCheck: {
             resolveLaunch: (shellEnv, commandSettings) => {
@@ -46,7 +87,7 @@ function acpMetadata(spec: AcpLaunchSpec): StructuredAgentRuntimeMetadata {
               })
               return { command, env }
             },
-            supportsVersion
+            minimumVersions
           }
         }
       : {}),
@@ -63,18 +104,20 @@ async function resolveCodexAccountHomePath(
   services: StructuredAgentAccountHomeServices
 ): Promise<string> {
   const { launchEnv, purpose, workspacePath } = request
-  if (purpose === 'launch' && workspacePath) {
-    await applyStructuredCodexWorkspaceTrust({
-      workspacePath: await workspacePath(),
-      launchEnv,
-      settings: services.workspaceTrustSettings()
-    })
-  }
-  return resolveStructuredCodexAccountHomePath({
+  const codexHome = await resolveStructuredCodexAccountHomePath({
     launchEnv,
     resolveLaunchHome:
       purpose === 'launch' ? services.prepareCodexLaunchHome : services.readCodexLaunchHome
   })
+  if (purpose === 'launch' && workspacePath) {
+    await applyStructuredCodexWorkspaceTrust({
+      workspacePath: await workspacePath(),
+      launchEnv,
+      codexHome,
+      settings: services.workspaceTrustSettings()
+    })
+  }
+  return codexHome
 }
 
 // One roster supplies both metadata readers and the host's synchronous adapter factories.
@@ -84,6 +127,7 @@ export const STRUCTURED_AGENT_RUNTIME_CATALOG: readonly StructuredAgentRuntimeCa
     kind: 'codex',
     metadata: {
       definition: CODEX_STRUCTURED_AGENT,
+      chatProgram: cliChatProgram('codex'),
       modelCatalog: codexModelCatalogDiscovery,
       ...CODEX_CLI_CONVERSATIONS,
       supportsLocation: (location) => supportsCodexStructuredLocation(location),
@@ -98,6 +142,7 @@ export const STRUCTURED_AGENT_RUNTIME_CATALOG: readonly StructuredAgentRuntimeCa
     kind: 'claude',
     metadata: {
       definition: CLAUDE_STRUCTURED_AGENT,
+      chatProgram: cliChatProgram('claude'),
       modelCatalog: claudeModelCatalogDiscovery,
       ...CLAUDE_CLI_CONVERSATIONS,
       supportsLocation: supportsClaudeStructuredLocation,
@@ -109,6 +154,51 @@ export const STRUCTURED_AGENT_RUNTIME_CATALOG: readonly StructuredAgentRuntimeCa
             wslDistro: location?.wslDistro ?? null,
             getClaudeConfigDirectory: services.getClaudeConfigDirectory
           })
+        )
+    }
+  },
+  {
+    kind: 'zcode',
+    metadata: {
+      definition: ZCODE_STRUCTURED_AGENT,
+      // v1 adopts no CLI-recorded conversations; Session History rows still resolve by agent id.
+      transcriptImport: ZCODE_TRANSCRIPT_IMPORT,
+      sessionHistory: ZCODE_SESSION_HISTORY,
+      // A one-shot app-server probe lists the account's models; without a listing
+      // the picker's catalog gate also blocks the live options read.
+      modelCatalog: () => ({
+        kind: 'probe',
+        probe: createZcodeModelCatalogProbe({
+          resolveLaunch: async () => {
+            const { command, environment } = await resolveZcodeStructuredInvocation({
+              resolveEnvironment: async () => process.env
+            })
+            const env: Record<string, string> = {}
+            for (const [key, value] of Object.entries(environment ?? {})) {
+              if (value !== undefined) {
+                env[key] = value
+              }
+            }
+            return { command, env }
+          }
+        }),
+        // The probe reads the running account's own listing, which names its default.
+        listingNamesConfiguredModel: true
+      }),
+      supportsLocation: (location) => isNativeLocalLocation(location),
+      launchCheck: {
+        resolveLaunch: (shellEnv, commandSettings) => ({
+          command: resolveStructuredAgentCommand('zcode', commandSettings, {
+            pathEnv: shellEnv.PATH ?? shellEnv.Path ?? null
+          }),
+          env: shellEnv
+        }),
+        minimumVersions: ZCODE_MINIMUM_VERSIONS
+      },
+      resolveAccountHome: async ({ launchEnv }) =>
+        agentSessionAccountHome(
+          ZCODE_STRUCTURED_AGENT,
+          launchEnv.ZCODE_STORAGE_DIR?.trim() || join(homedir(), '.zcode')
         )
     }
   },

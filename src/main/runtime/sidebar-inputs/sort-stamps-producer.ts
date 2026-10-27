@@ -20,6 +20,7 @@ import {
 import {
   listTieredWorkspaces,
   readSortStamps,
+  readWorkspaceRecord,
   writeSortStamps,
   writeUnreadFlag,
   type SortStampsStore
@@ -57,13 +58,7 @@ type TrackedPane = AgentPaneWorkspace & { state: AgentPaneState }
 /** A tier reconciled without a pane moving. */
 const SETTLED = { from: 'rest', to: 'rest', transition: null } as const
 
-/**
- * Writes the sort stamps of every workspace this host owns, at the source: the transition
- * detector's agent panes (terminal agents, structured chats, hookless agents' titles), bells, and
- * terminals a CLI starts. Creation stamps itself where the record is made. Rest panes are not
- * kept. The detector's news raises the workspace's unread flag unless a client is looking at it;
- * clients clear it.
- */
+/** Stamp host-owned workspace activity from agent transitions, bells and CLI terminal starts; creation stamps itself. Retain no Rest panes; raise unread for unseen news and let clients clear it. */
 export class SortStampsProducer {
   private readonly panes = new Map<string, TrackedPane>()
 
@@ -89,11 +84,23 @@ export class SortStampsProducer {
     this.stamp({ worktreeId, sshHostId }, { kind: 'terminal-started' })
   }
 
-  /**
-   * Clears a tier this machine stored that nothing backs after a restart: no hook row, and every
-   * terminal it held proven gone by its provider. Runs once hook rows and PTYs have settled. Another
-   * host's tiers stay: a host not reached yet is not one whose agents died.
-   */
+  /** A record write may have moved an unread flag; a Done beside a Working pane re-tiers on it. */
+  noteRecordsWritten(): void {
+    const phasesByWorkspace = new Map<string, { workspace: TrackedPane; phases: Set<AgentPhase> }>()
+    for (const pane of this.panes.values()) {
+      const key = `${pane.sshHostId ?? ''}|${pane.worktreeId}`
+      const entry = phasesByWorkspace.get(key) ?? { workspace: pane, phases: new Set() }
+      entry.phases.add(pane.state.phase)
+      phasesByWorkspace.set(key, entry)
+    }
+    for (const { workspace, phases } of phasesByWorkspace.values()) {
+      if (phases.has('done') && phases.has('working')) {
+        this.writeAgentChange(workspace, SETTLED, this.sources.now())
+      }
+    }
+  }
+
+  /** After hooks/PTYs settle, clear only this host's tiers with no hook rows and all recorded terminals proven gone; unreachable hosts prove no exits. */
   async reconcileStoredTiers(evidence: StoredTierEvidence): Promise<void> {
     const probes = new Map<string, Promise<boolean>>()
     const isProvenAbsent = (ptyId: string): Promise<boolean> => {
@@ -115,8 +122,7 @@ export class SortStampsProducer {
       candidates.map(async (worktreeId) => {
         const ptyIds = evidence.terminalPtyIds(worktreeId)
         const absent = await Promise.all(ptyIds.map(isProvenAbsent))
-        // No terminal on record proves nothing (a chat republishes later, a client owns the
-        // layout); a pane can also report while the probes are in flight.
+        // No recorded terminals provide no exit proof; chats may republish later, clients may own layout, and panes may report during probes.
         if (ptyIds.length > 0 && absent.every(Boolean) && !this.isBacked(worktreeId)) {
           this.writeAgentChange({ worktreeId, sshHostId: null }, SETTLED, this.sources.now())
         }
@@ -161,10 +167,7 @@ export class SortStampsProducer {
     }
   }
 
-  /**
-   * Takes the observed phase as it is and reconciles the tier, without a Recent stamp. A phase the
-   * record already holds keeps its time, so a restart rewrites nothing.
-   */
+  /** Reconcile observed phase without a Recent stamp; unchanged phases retain their time across restart. */
   private seed(
     paneKey: string,
     workspace: AgentPaneWorkspace,
@@ -229,16 +232,18 @@ export class SortStampsProducer {
     if (!workspace.sshHostId && this.sources.isWriteFenced(workspace.worktreeId)) {
       return
     }
-    const current = readSortStamps(this.sources.store(), workspace)
-    const next = current && classifySortStampEvent(current, event, now)
-    if (next) {
-      writeSortStamps(this.sources.store(), workspace, next)
-    }
     // Filters never gate this shared dot (clients' Filters differ); banners, sounds and pushes mute per surface.
     const raised =
       isUnreadNews(event) &&
       !this.sources.isViewing(workspace.worktreeId, paneKey) &&
       writeUnreadFlag(this.sources.store(), workspace, true)
+    // After the raise: whether Done outranks Working depends on the flag this event leaves.
+    const isUnread = readWorkspaceRecord(this.sources.store(), workspace)?.isUnread === true
+    const current = readSortStamps(this.sources.store(), workspace)
+    const next = current && classifySortStampEvent(current, event, now, isUnread)
+    if (next) {
+      writeSortStamps(this.sources.store(), workspace, next)
+    }
     if (next || raised) {
       this.sources.onStampsWritten(workspace.worktreeId)
     }

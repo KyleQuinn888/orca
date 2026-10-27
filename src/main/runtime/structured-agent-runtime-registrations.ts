@@ -3,8 +3,22 @@ import { codexStructuredLaunchPart } from '../codex/codex-structured-launch-reso
 import { claudeStructuredLaunchPart } from '../claude/claude-structured-launch-resolution'
 import { createClaudeCommandCatalogProbe } from '../claude/claude-command-catalog-probe'
 import { CodexStructuredSessionAdapter } from '../codex/codex-structured-session-adapter'
+import { ZcodeStructuredSessionAdapter } from '../zcode/zcode-structured-session-adapter'
+import { createHash } from 'node:crypto'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
+import { ZcodeAutomationStore } from '../zcode/zcode-automation-store'
+import { readZcodeAutomations, writeZcodeAutomations } from '../zcode/zcode-automation-persistence'
+import { ZcodeBrowserBackend } from '../zcode/zcode-browser-backend'
+import { computeAgentSessionPayloadFingerprint } from '../../shared/agent-session-mutation-envelope'
+import {
+  withSupportedZcodeCli,
+  zcodeStructuredLaunchPart
+} from '../zcode/zcode-structured-launch-resolution'
+import { createCodexAtRestSkillCatalog } from '../codex/codex-at-rest-skills-probe'
 import { CODEX_STRUCTURED_AGENT } from '../codex/codex-structured-agent-definition'
 import { CLAUDE_STRUCTURED_AGENT } from '../claude/claude-structured-agent-definition'
+import { ZCODE_STRUCTURED_AGENT } from '../zcode/zcode-structured-agent-definition'
 import { agentModelCatalogStore } from '../native-chat/agent-model-catalog/agent-model-catalog-store'
 import { agentSessionAttachmentStoreRoot } from '../native-chat/agent-session-attachments/agent-session-attachment-references'
 import { replayJournal } from '../native-chat/agent-session-journal/journal-open'
@@ -48,6 +62,16 @@ function createCodexAdapter(context: StructuredAgentAdapterContext): StructuredA
   const { deps, followUps, host } = context
   return new CodexStructuredSessionAdapter({
     resolveAccountKind: deps.resolveCodexAccountKind,
+    atRestCommands: createCodexAtRestSkillCatalog({
+      resolveLaunchArgs: () => deps.resolveLaunchArgs('codex'),
+      resolveWorkspacePath: deps.resolveWorkspacePath,
+      resolveEnvironment: () => context.environment.resolveAgentEnvironment('codex'),
+      refreshEnvironmentAfterMiss: context.environment.refreshAfterMissingProgram,
+      ...(deps.prepareCodexCatalogProbeHome
+        ? { prepareHome: deps.prepareCodexCatalogProbeHome }
+        : {}),
+      ...(deps.resolveCodexCommand ? { resolveCommand: deps.resolveCodexCommand } : {})
+    }),
     resolveLaunch: withSupportedCodexCli(
       composeStructuredLaunch(
         CODEX_STRUCTURED_AGENT,
@@ -62,6 +86,14 @@ function createCodexAdapter(context: StructuredAgentAdapterContext): StructuredA
     ...(deps.openCodexConnection ? { openConnection: deps.openCodexConnection } : {}),
     ...(deps.readProcessStartTime ? { readProcessStartTime: deps.readProcessStartTime } : {}),
     modelCatalog: agentModelCatalogStore,
+    readModelCatalog: (sessionId, verifiedOnly) =>
+      host()?.deps.modelCatalog?.peek(sessionId, verifiedOnly) ?? null,
+    demandModelCatalog: async (sessionId, legacy) =>
+      host()?.deps.modelCatalog?.read({
+        agent: 'codex',
+        sessionId,
+        ...(legacy ? { legacy: true } : {})
+      }),
     onChildWorkEvidence: (sessionId, evidence, producer) =>
       host()?.publishChildWorkEvidence(sessionId, evidence, producer),
     onDispatchSettledLate: followUps.onDispatchSettledLate,
@@ -71,7 +103,7 @@ function createCodexAdapter(context: StructuredAgentAdapterContext): StructuredA
     logger: deps.logger,
     onEvent: (event) => {
       // Every exit, expected or not: the host ends that child's record.
-      if (event.type === 'ended' && 'cause' in event) {
+      if (event.type === 'options-reported' || (event.type === 'ended' && 'cause' in event)) {
         context.deliverLifecycle(event)
       }
     }
@@ -107,9 +139,86 @@ function createClaudeAdapter(
     onChildWorkEvidence: (sessionId, evidence, producer) =>
       host()?.publishChildWorkEvidence(sessionId, evidence, producer),
     onDispatchSettledLate: followUps.onDispatchSettledLate,
-    onSessionIdle: followUps.releaseUnansweredDispatches,
     ...(deps.openClaudeConnection ? { openClaudeConnection: deps.openClaudeConnection } : {}),
     ...(deps.readProcessStartTime ? { readProcessStartTime: deps.readProcessStartTime } : {})
+  })
+}
+
+function createZcodeAdapter(context: StructuredAgentAdapterContext): StructuredAgentRuntimeAdapter {
+  const { deps, followUps, host } = context
+  // The account home the zcode runtime already pins: automations survive
+  // restarts beside it, and a missed run within grace still fires once.
+  const automationPath = join(homedir(), '.zcode', 'orca-automations.json')
+  const automation = new ZcodeAutomationStore({
+    persistence: {
+      read: () => readZcodeAutomations(automationPath),
+      write: (records) => writeZcodeAutomations(automationPath, records)
+    },
+    fire: (record) => {
+      const live = host()
+      const sessionId = record.orcaSessionId
+      if (!live || sessionId === undefined) {
+        return
+      }
+      const body = {
+        kind: 'message' as const,
+        role: 'user' as const,
+        blocks: [{ type: 'text' as const, text: record.prompt }]
+      }
+      const fields = { body }
+      void live
+        .send(
+          { callerKey: 'zcode-automation' },
+          {
+            envelope: {
+              sessionId,
+              clientOperationId: `${record.lastRunAt}-${createHash('sha256').update(`${record.automationId}:${record.runCount}`).digest('hex').slice(0, 32)}`,
+              expectedRuntimeFence: context.store.getRecord(sessionId)?.lease.runtimeFence ?? 1,
+              payloadFingerprint: computeAgentSessionPayloadFingerprint({
+                method: 'agentSession.send',
+                sessionId,
+                fields
+              })
+            },
+            body,
+            personsMessage: true
+          }
+        )
+        .catch(() => {
+          // A fire that cannot reach its session fails the automation honestly.
+          record.lifecycleStatus = 'failed'
+        })
+    }
+  })
+  return new ZcodeStructuredSessionAdapter({
+    automation,
+    // Orca's own browser pages back the zcode agent's browser-use commands; a
+    // host that lends no surface keeps discovery empty (honest degradation).
+    browser: new ZcodeBrowserBackend(deps.zcodeBrowserSurface ?? (() => null)),
+    // Lane diagnostics (dropped turn completions) must reach the trace file.
+    logger: deps.logger,
+    resolveLaunch: withSupportedZcodeCli(
+      composeStructuredLaunch(
+        ZCODE_STRUCTURED_AGENT,
+        structuredAgentLaunchSources(context),
+        zcodeStructuredLaunchPart({
+          resolveLaunchArgs: () => deps.resolveLaunchArgs('zcode')
+        })
+      )
+    ),
+    ...(deps.readProcessStartTime ? { readProcessStartTime: deps.readProcessStartTime } : {}),
+    onDispatchSettledLate: (settlement) => {
+      console.info(`[zcode-factory] settle session=${settlement.sessionId} host=${host() !== null}`)
+      followUps.onDispatchSettledLate(settlement)
+    },
+    // What the live child holds changed with no row: every reader re-derives current work.
+    onWorkChanged: (sessionId) => queueMicrotask(() => host()?.publishWorkChanged(sessionId)),
+    onEvent: (event) => {
+      // Every exit, expected or not: the host ends that child's record.
+      if (event.type === 'ended') {
+        context.deliverLifecycle(event)
+      }
+    }
   })
 }
 
@@ -129,7 +238,6 @@ function createAcpAdapter(
     })
     return new AcpStructuredSessionAdapter({
       spec,
-      readJournal,
       resolveLaunch: composeStructuredLaunch(definition, sources, part),
       readLaunch: composeStructuredLaunchRead(definition, sources, part),
       dataDirectory: deps.stateDirectory,
@@ -156,6 +264,8 @@ function registrationWithAdapter(
       return Object.assign(entry.metadata, { createAdapter: createCodexAdapter })
     case 'claude':
       return Object.assign(entry.metadata, { createAdapter: createClaudeAdapter })
+    case 'zcode':
+      return Object.assign(entry.metadata, { createAdapter: createZcodeAdapter })
     case 'acp':
       return Object.assign(entry.metadata, { createAdapter: createAcpAdapter(entry.spec) })
   }

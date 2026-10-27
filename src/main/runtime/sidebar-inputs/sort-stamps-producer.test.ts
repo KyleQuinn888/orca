@@ -16,6 +16,7 @@ import {
   type AgentTransitionStep
 } from '../../../shared/agent-transitions.test-fixture'
 import { AgentTransitionDetector } from '../../agent-hooks/agent-transition-detector'
+import { compareSmartStamps } from '../../../shared/sidebar-list/stamp-order'
 import {
   SortStampsProducer,
   type SortStampsStore,
@@ -669,5 +670,61 @@ describe('SortStampsProducer: unread flag', () => {
 
     hook(h.server, 'done', 'repo-1::/tmp/gone')
     expect(h.writes).not.toContain('repo-1::/tmp/gone')
+  })
+})
+
+describe('SortStampsProducer: a read Done beside a Working pane', () => {
+  const OTHER_PANE = 'tab-b:44444444-4444-4444-8444-444444444444'
+  function otherPane(server: AgentHookServer, state: 'working' | 'done'): void {
+    server.ingestTerminalStatus({
+      paneKey: OTHER_PANE,
+      tabId: 'tab-b',
+      worktreeId: WT,
+      payload: { state, prompt: 'task', agentType: 'codex' }
+    })
+  }
+
+  it('stamps Working when the finish lands where someone is looking', () => {
+    const h = createHarness()
+    h.attach(h.server)
+    hook(h.server, 'working')
+    const workingAt = advance(20_000)
+    otherPane(h.server, 'working')
+    advance(20_000)
+    hook(h.server, 'done')
+    expect(h.meta.get(WT)).toMatchObject({ smartTier: 'working', smartAt: workingAt })
+  })
+
+  it('holds Done while unread, and stamps Working once the flag is cleared', () => {
+    const h = createHarness()
+    h.viewing.isViewing = () => false
+    h.attach(h.server)
+    otherPane(h.server, 'working')
+    const workingAt = Date.now()
+    advance(20_000)
+    hook(h.server, 'working')
+    const doneAt = advance(20_000)
+    hook(h.server, 'done')
+    expect(h.meta.get(WT)).toMatchObject({ isUnread: true, smartTier: 'done', smartAt: doneAt })
+
+    // A client opened the workspace: its write clears the flag on the record.
+    h.meta.set(WT, { ...h.meta.get(WT)!, isUnread: false })
+    h.notified.length = 0
+    h.producer.noteRecordsWritten()
+    expect(h.meta.get(WT)).toMatchObject({ smartTier: 'working', smartAt: workingAt })
+    expect(h.notified).toEqual([WT])
+    // So Smart sorts it with the Working workspaces, ahead of an older one and of idle ones.
+    const rows = new Map([
+      ['a', h.meta.get(WT)!],
+      ['older-working', { lastActivityAt: 0, smartTier: 'working' as const, smartAt: 1 }],
+      ['idle', { lastActivityAt: doneAt + 1 }]
+    ])
+    expect(
+      ['older-working', 'idle', 'a'].sort((x, y) => compareSmartStamps(rows.get(x)!, rows.get(y)!))
+    ).toEqual(['a', 'older-working', 'idle'])
+    // Nothing more to change: a later write rewrites nothing.
+    const writes = h.writes.length
+    h.producer.noteRecordsWritten()
+    expect(h.writes).toHaveLength(writes)
   })
 })

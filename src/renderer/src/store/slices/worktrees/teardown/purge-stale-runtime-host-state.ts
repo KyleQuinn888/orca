@@ -19,6 +19,7 @@ import {
 import { buildFullWorktreePurgeState } from './worktree-purge-state'
 import { removeWorktreeVisitEntriesForTargets } from '@/lib/worktree-visit-recency'
 import { settleAttentionRemovedBy } from '../../workspace-attention/attention-removal-follow-up'
+import { flushRetiredHostEdits } from './removed-workspace-unsaved-files'
 
 export function createPurgeStaleRuntimeHostState(
   set: WorktreeSliceSet,
@@ -29,6 +30,8 @@ export function createPurgeStaleRuntimeHostState(
     if (removed.size === 0) {
       return
     }
+    // Why before the purge: delayed views must commit text it may offer back.
+    flushRetiredHostEdits(get(), removed)
     // Why no flag settle: the purged host's rows are dropped here, and a surviving same-id row on
     // another host must keep its own flag (a marker-less Mark as unread included).
     settleAttentionRemovedBy(
@@ -53,7 +56,7 @@ export function createPurgeStaleRuntimeHostState(
 
           // Why: a repoId-less setup on the removed host can still split a surviving project group, so drop every setup it owns.
           const survivingSetups: ProjectHostSetup[] = []
-          for (const setup of s.projectHostSetups) {
+          for (const setup of s.endpointProjectHostSetups) {
             if (isRemovedRuntimeHostId(setup.hostId, removed)) {
               if (setup.repoId) {
                 repoIdsWithRemovedOwners.add(setup.repoId)
@@ -65,7 +68,7 @@ export function createPurgeStaleRuntimeHostState(
               }
             }
           }
-          const setupsChanged = survivingSetups.length !== s.projectHostSetups.length
+          const setupsChanged = survivingSetups.length !== s.endpointProjectHostSetups.length
           const projectGroups = dropRuntimeHostedCatalogRows(s.projectGroups, removed)
           const folderWorkspaces = dropRuntimeHostedCatalogRows(s.folderWorkspaces, removed)
           const groupsChanged =
@@ -140,9 +143,7 @@ export function createPurgeStaleRuntimeHostState(
             repoIdsWithoutSurvivingOwners.delete(repoId)
           }
 
-          // Preserve host ownership for recency teardown. The other bulk maps are
-          // keyed by raw worktree id, but a host-qualified visit must not be
-          // removed when an id twin survives on another host.
+          // Preserve host-qualified visit recency for surviving twins even though other bulk maps use bare IDs.
           const addRemovedWorktreeTarget = (
             worktreeId: string,
             hostId: ExecutionHostId | undefined
@@ -277,7 +278,7 @@ export function createPurgeStaleRuntimeHostState(
           return {
             ...purgeState,
             ...(reposChanged ? { repos: survivingRepos } : {}),
-            ...(setupsChanged ? { projectHostSetups: survivingSetups } : {}),
+            ...(setupsChanged ? { endpointProjectHostSetups: survivingSetups } : {}),
             ...(groupsChanged ? { projectGroups, folderWorkspaces } : {}),
             ...(worktreesChanged ? { worktreesByRepo: worktreeDrop.rowsByRepo } : {}),
             ...(detectedChanged ? { detectedWorktreesByRepo } : {}),

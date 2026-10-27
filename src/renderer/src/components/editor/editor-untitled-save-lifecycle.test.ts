@@ -12,7 +12,7 @@ import {
 } from './editor-autosave-controller-test-fixture'
 import { discardEditorFileChangesAndClose } from './discard-editor-file-changes'
 import { __clearSelfWriteRegistryForTests } from './editor-self-write-registry'
-import { getDiskBaselineSignature } from './diff-content-signature'
+import { getDiskBaselineSignature } from '../../../../shared/disk-baseline-signature'
 
 const storeHolder = vi.hoisted((): { store: StoreApi<AppState> | null } => ({ store: null }))
 
@@ -33,7 +33,6 @@ function typeInto(store: StoreApi<AppState>, content: string): void {
   store.getState().markFileDirty(FILE_ID, true)
 }
 
-/** What the editor panel records after a clean (re)load of the tab shows `content` from disk. */
 function loadFromDisk(store: StoreApi<AppState>, content: string): void {
   store.getState().setLastKnownDiskSignature(FILE_ID, getDiskBaselineSignature(content))
 }
