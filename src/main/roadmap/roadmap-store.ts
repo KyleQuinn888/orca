@@ -20,29 +20,57 @@ export type SessionState = {
   pending: PendingChapter[]
 }
 
-export type RoadmapState = {
-  version: 1
-  optedIn: string[]
+/** Spec session-enablement v1.3 §2: policy axis. candidate is derived (unset), never persisted. */
+export type SessionPolicy = 'eligible' | 'excluded' | 'deleted'
+
+/** Threshold metrics (spec §1 L2): user turns, successful file edits, distinct files touched. */
+export type SessionMetrics = {
+  turns: number
+  edits: number
+  /** distinct file paths, bounded (count keeps growing, list capped) */
+  files: string[]
+  fileCount: number
+}
+
+export type RoadmapStateV2 = {
+  version: 2
+  /** terminal/active policy per session; absent = candidate */
+  policy: Record<string, SessionPolicy>
+  metrics: Record<string, SessionMetrics>
   sessions: Record<string, SessionState>
 }
 
+export type RoadmapState = RoadmapStateV2 | { version: 1; optedIn: string[]; sessions: Record<string, SessionState> }
+
 export const DAILY_CAP = 20
 
-export function emptyState(): RoadmapState {
-  return { version: 1, optedIn: [], sessions: {} }
+export function emptyState(): RoadmapStateV2 {
+  return { version: 2, policy: {}, metrics: {}, sessions: {} }
+}
+
+/** v1 -> v2: optedIn entries become eligible; everything else starts candidate. */
+export function migrateState(state: RoadmapState): RoadmapStateV2 {
+  if (state.version === 2) {
+    return state
+  }
+  const policy: Record<string, SessionPolicy> = {}
+  for (const sid of state.optedIn) {
+    policy[sid] = 'eligible'
+  }
+  return { version: 2, policy, metrics: {}, sessions: state.sessions }
 }
 
 export function stateFilePath(userDataDir: string): string {
   return join(userDataDir, 'roadmap-state.json')
 }
 
-export function loadState(userDataDir: string): RoadmapState {
+export function loadState(userDataDir: string): RoadmapStateV2 {
   const path = stateFilePath(userDataDir)
   if (!existsSync(path)) {
     return emptyState()
   }
   try {
-    return JSON.parse(readFileSync(path, 'utf8')) as RoadmapState
+    return migrateState(JSON.parse(readFileSync(path, 'utf8')) as RoadmapState)
   } catch {
     console.warn('[roadmap] state file unparseable, starting fresh')
     return emptyState()
@@ -71,18 +99,42 @@ export function getOrCreateSession(state: RoadmapState, sessionId: string): Sess
   return state.sessions[sessionId]!
 }
 
-export function isOptedIn(state: RoadmapState, sessionId: string): boolean {
-  return state.optedIn.includes(sessionId)
+/** Terminal states override every writer (spec §0); active means pipeline may run. */
+export function isActive(state: RoadmapStateV2, sessionId: string): boolean {
+  return state.policy[sessionId] === 'eligible'
 }
 
-export function optIn(state: RoadmapState, sessionId: string): void {
-  if (!isOptedIn(state, sessionId)) {
-    state.optedIn.push(sessionId)
+export function isTerminal(state: RoadmapStateV2, sessionId: string): boolean {
+  const p = state.policy[sessionId]
+  return p === 'excluded' || p === 'deleted'
+}
+
+export function setPolicy(state: RoadmapStateV2, sessionId: string, p: SessionPolicy): void {
+  state.policy[sessionId] = p
+}
+
+export function metricsOf(state: RoadmapStateV2, sessionId: string): SessionMetrics {
+  if (!state.metrics[sessionId]) {
+    state.metrics[sessionId] = { turns: 0, edits: 0, files: [], fileCount: 0 }
   }
+  return state.metrics[sessionId]!
 }
 
-export function optOut(state: RoadmapState, sessionId: string): void {
-  state.optedIn = state.optedIn.filter((id) => id !== sessionId)
+const METRICS_FILE_CAP = 50
+
+export function recordMetrics(m: SessionMetrics, delta: { turn?: boolean; edit?: boolean; file?: string | null }): void {
+  if (delta.turn) {
+    m.turns += 1
+  }
+  if (delta.edit) {
+    m.edits += 1
+  }
+  if (delta.file) {
+    m.fileCount += 1
+    if (!m.files.includes(delta.file) && m.files.length < METRICS_FILE_CAP) {
+      m.files.push(delta.file)
+    }
+  }
 }
 
 // ─── Daily cap ──────────────────────────────────────────────────────────
