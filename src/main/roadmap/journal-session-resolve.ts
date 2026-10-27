@@ -1,0 +1,115 @@
+// Resolve the session id a history surface names to the journal session id the
+// structured host keys rows under. History UIs pass the provider-NATIVE id
+// (zcode's sess_*, Claude's session id, Codex's thread id); the journal keys
+// rows by the structured session id, and the only persisted join is each
+// record's provider handle chain (agent_session_records.record_json).
+
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
+import Database from '../sqlite/sync-database'
+import { decodePersistedAgentSessionProviderHandleChain } from '../../shared/agent-session-provider-handle'
+
+export type JournalSessionResolution = {
+  /** The live continuation: its record's chain HEAD carries the native id. */
+  journalSessionId: string
+  /**
+   * Every journal session whose record chain mentions the native id, the live
+   * continuation first. A fork keeps the seeded id in its chain, and a record
+   * that resumed an older conversation spans ids — metrics that want the whole
+   * conversation read the list, single-session views read the head field.
+   */
+  journalSessionIds: string[]
+  workspacePath: string | null
+}
+
+/**
+ * One provider-native session id → the journal sessions that carried it.
+ * Provider-neutral: any agent whose native id differs from its journal id
+ * (zcode today) resolves through the same chain field. Returns null when no
+ * record mentions the id — callers treat that as "awaiting session mapping",
+ * never as an empty journal.
+ *
+ * Lifecycle semantics: the journal id is stable while one structured session
+ * runs, and a NEW structured session that resumes the same provider
+ * conversation gets a NEW journal id (its record chain links back to the
+ * native id). The list therefore has one entry per record that ever carried
+ * the conversation; the head field always names the live one.
+ */
+export function resolveJournalSessionsByNativeId(
+  userDataDir: string,
+  nativeSessionId: string
+): JournalSessionResolution | null {
+  if (typeof nativeSessionId !== 'string' || nativeSessionId.length === 0) {
+    return null
+  }
+  const dbPath = join(userDataDir, 'agent-session-journal.db')
+  if (!existsSync(dbPath)) {
+    return null
+  }
+  let db: Database | null = null
+  try {
+    db = new Database(dbPath, { readonly: true, fileMustExist: true })
+    // The LIKE only prefilters; the decoded chain decides. Escape LIKE
+    // metacharacters so an id containing % or _ cannot widen the scan.
+    const escaped = nativeSessionId.replace(/[\\%_]/g, (ch) => `\\${ch}`)
+    const rows = db
+      .prepare(
+        "SELECT session_id, record_json FROM agent_session_records WHERE record_json LIKE ? ESCAPE '\\'"
+      )
+      .all(`%${escaped}%`) as Array<{ session_id: string; record_json: string }>
+    const headMatches: string[] = []
+    const tailMatches: string[] = []
+    for (const row of rows) {
+      let chain: ReturnType<typeof decodePersistedAgentSessionProviderHandleChain> = null
+      try {
+        chain = decodePersistedAgentSessionProviderHandleChain(
+          (JSON.parse(row.record_json) as { providerHandleChain?: unknown })
+            .providerHandleChain
+        )
+      } catch {
+        continue
+      }
+      if (chain === null) {
+        continue
+      }
+      const hit = chain.some((link) => link.handle.nativeId === nativeSessionId)
+      if (!hit) {
+        continue
+      }
+      // A resume appends a link per process restart, so the head is the live
+      // continuation; older links belong to superseded sessions.
+      if (chain.at(-1)?.handle.nativeId === nativeSessionId) {
+        headMatches.push(row.session_id)
+      } else {
+        tailMatches.push(row.session_id)
+      }
+    }
+    if (headMatches.length === 0 && tailMatches.length === 0) {
+      return null
+    }
+    const journalSessionIds = [...headMatches, ...tailMatches]
+    const journalSessionId = journalSessionIds[0] as string
+    const session = db
+      .prepare('SELECT workspace_id FROM journal_sessions WHERE session_id = ?')
+      .get(journalSessionId) as { workspace_id: string } | undefined
+    return {
+      journalSessionId,
+      journalSessionIds,
+      workspacePath: workspacePathOf(session?.workspace_id)
+    }
+  } catch (error) {
+    console.warn('[roadmap] journal session resolve failed:', error)
+    return null
+  } finally {
+    db?.close()
+  }
+}
+
+/** journal_sessions.workspace_id is `<workspace uuid>::<path>`. */
+function workspacePathOf(workspaceId: string | undefined): string | null {
+  if (typeof workspaceId !== 'string') {
+    return null
+  }
+  const parts = workspaceId.split('::')
+  return parts.length > 1 ? (parts[1] ?? null) : null
+}
