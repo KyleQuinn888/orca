@@ -11,8 +11,7 @@ import {
 } from './startup/main-window-actions'
 import { openMainWindow as openMainWindowController } from './startup/main-window-controller'
 import { mainProcessState as state } from './startup/main-process-state'
-// Live binding: set after startup; the per-trigger gate reads it lazily.
-import { persistedStore } from './ipc/ssh/ssh-ipc-context'
+// Live binding: set after startup; the per-trigger gate reads it lazily via state.store.
 import { runMainProcessPreflight } from './startup/main-process-preflight'
 import { runWslHolderUninstallPreflight } from './startup/wsl-holder-uninstall-preflight'
 import { registerMainProcessIpcHandlers } from './startup/main-process-ipc-bootstrap'
@@ -157,8 +156,11 @@ if (preflightReady) {
             // A first run boots before the logger creates logs/; create it so the
             // milestones (and any failure stack below) survive fresh installs.
             mkdirSync(dirname(bootLog), { recursive: true })
-            appendFileSync(bootLog, `${new Date().toISOString()} ${note}
-`)
+            appendFileSync(
+              bootLog,
+              `${new Date().toISOString()} ${note}
+`
+            )
           } catch {}
         },
         getJournalDb: openRoadmapJournalDb,
@@ -174,9 +176,11 @@ if (preflightReady) {
         promptTemplatePath: join(app.getAppPath(), 'roadmap', 'prompts', 'task-node.md'),
         onQuit: runtime.onQuit,
         // L1 switch (spec session-enablement §1): live-read per trigger so
-        // toggling takes effect without a restart. Late-bound because the
-        // persisted store is registered after this module-level bootstrap.
-        featureEnabled: () => persistedStore?.getSettings?.().sessionRoadmap === true
+        // toggling takes effect without a restart. Uses mainProcessState.store
+        // (set when the runtime launches, same store registerSettingsHandlers
+        // uses) — NOT the SSH persistedStore, which is headless-serve-only and
+        // stays null in windowed mode (root cause of soak day-1 silent gate).
+        featureEnabled: () => state.store?.getSettings?.().sessionRoadmap === true
       })
     })
     .catch((e) => {
