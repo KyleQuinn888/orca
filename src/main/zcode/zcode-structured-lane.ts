@@ -247,6 +247,19 @@ export class ZcodeStructuredLane extends ZcodeLaneInteractions {
         continue
       }
       this.retryRounds = 0
+      // An admitted event can still be dropped by the decision layer (no plan, no
+      // write) — e.g. a turn.end with 'no-turn'/'turn-unknown' settles the dispatch
+      // below while the turn row stays running forever. That silent path is what
+      // the spinner looked like for weeks: report it by rule name.
+      if (
+        (event.type === 'turn.end' || event.type === 'turn.open') &&
+        applied.dropped !== undefined
+      ) {
+        this.diagnose(`${event.type} dropped by decision rule '${applied.dropped}'`, {
+          turn: event.turn ?? null,
+          open: this.armedTurn ?? null
+        })
+      }
       // The dispatch the armed send opened settles with its turn's end: the
       // journal row alone never releases the chat's working state.
       if (
