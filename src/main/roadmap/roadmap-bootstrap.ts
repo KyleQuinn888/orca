@@ -20,6 +20,7 @@ export function bootstrapRoadmap(deps: {
   onTurnCompletion: RoadmapServiceDeps['onTurnCompletion']
   onIdle: RoadmapServiceDeps['onIdle']
   zcodeAvailable: RoadmapServiceDeps['zcodeAvailable']
+  promptTemplatePath?: RoadmapServiceDeps['promptTemplatePath']
   featureEnabled?: RoadmapServiceDeps['featureEnabled']
   onQuit: (hook: () => void) => void
   /** Packaged diagnostics: bootstrap milestones land in a file console cannot lose. */

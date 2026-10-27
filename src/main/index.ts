@@ -168,6 +168,9 @@ if (preflightReady) {
         onTurnCompletion: runtime.onTurnCompletion,
         onIdle: runtime.onIdle,
         zcodeAvailable: probeZcode,
+        // The template ships inside app.asar; packaged launches start from the
+        // install dir, not the repo, so cwd-anchored reads ENOENT at bootstrap.
+        promptTemplatePath: join(app.getAppPath(), 'roadmap', 'prompts', 'task-node.md'),
         onQuit: runtime.onQuit,
         // L1 switch (spec session-enablement §1): live-read per trigger so
         // toggling takes effect without a restart. Late-bound because the

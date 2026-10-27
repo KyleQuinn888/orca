@@ -41,6 +41,9 @@ export type RoadmapServiceDeps = {
   onTurnCompletion: (listener: (event: { sessionId: string }) => void) => () => void
   onIdle: (listener: (sessionId: string) => void) => () => void
   zcodeAvailable: () => boolean
+  /** Prompt template location; packaged launches run from any cwd, so the
+   * bootstrap anchors this inside app.asar instead of the repo checkout. */
+  promptTemplatePath?: string
   /** L1 feature switch (spec §1): OFF rejects new generation per-trigger (no
    * restart needed). TODO(next): wire to the persisted GlobalSettings store —
    * today the boot-time settings.sessionRoadmap check is a phantom (comment only).
@@ -84,7 +87,7 @@ export function createRoadmapService(
   const unsubscribers: (() => void)[] = []
   let running = false
   const promptTemplate = readFileSync(
-    join(process.cwd(), 'roadmap', 'prompts', 'task-node.md'),
+    deps.promptTemplatePath ?? join(process.cwd(), 'roadmap', 'prompts', 'task-node.md'),
     'utf8'
   )
 
