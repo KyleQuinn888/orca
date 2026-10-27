@@ -54,11 +54,11 @@ export function resolveJournalSessionsByNativeId(
     const escaped = nativeSessionId.replace(/[\\%_]/g, (ch) => `\\${ch}`)
     const rows = db
       .prepare(
-        "SELECT session_id, record_json FROM agent_session_records WHERE record_json LIKE ? ESCAPE '\\'"
+        "SELECT rowid AS rid, session_id, record_json FROM agent_session_records WHERE record_json LIKE ? ESCAPE '\\'"
       )
-      .all(`%${escaped}%`) as { session_id: string; record_json: string }[]
-    const headMatches: string[] = []
-    const tailMatches: string[] = []
+      .all(`%${escaped}%`) as { rid: number; session_id: string; record_json: string }[]
+    const headMatches: Array<{ sessionId: string; recency: number; rid: number }> = []
+    const tailMatches: Array<{ sessionId: string; recency: number; rid: number }> = []
     for (const row of rows) {
       let chain: ReturnType<typeof decodePersistedAgentSessionProviderHandleChain> = null
       try {
@@ -71,22 +71,34 @@ export function resolveJournalSessionsByNativeId(
       if (chain === null) {
         continue
       }
-      const hit = chain.some((link) => link.handle.nativeId === nativeSessionId)
-      if (!hit) {
+      // The matching links' latest observation ranks carriers by recency; the
+      // rowid breaks ties identical chains cannot (a newest record is the live
+      // continuation — resumes append, they do not reorder).
+      const matching = chain.filter((link) => link.handle.nativeId === nativeSessionId)
+      if (matching.length === 0) {
         continue
       }
+      const recency = Math.max(...matching.map((link) => link.observedAt))
+      const entry = { sessionId: row.session_id, recency, rid: row.rid }
       // A resume appends a link per process restart, so the head is the live
       // continuation; older links belong to superseded sessions.
       if (chain.at(-1)?.handle.nativeId === nativeSessionId) {
-        headMatches.push(row.session_id)
+        headMatches.push(entry)
       } else {
-        tailMatches.push(row.session_id)
+        tailMatches.push(entry)
       }
     }
     if (headMatches.length === 0 && tailMatches.length === 0) {
       return null
     }
-    const journalSessionIds = [...headMatches, ...tailMatches]
+    const byNewest = (
+      a: { recency: number; rid: number },
+      b: { recency: number; rid: number }
+    ): number => b.recency - a.recency || b.rid - a.rid
+    const journalSessionIds = [
+      ...headMatches.sort(byNewest).map((entry) => entry.sessionId),
+      ...tailMatches.sort(byNewest).map((entry) => entry.sessionId)
+    ]
     const journalSessionId = journalSessionIds[0] as string
     const session = db
       .prepare('SELECT workspace_id FROM journal_sessions WHERE session_id = ?')
