@@ -113,3 +113,41 @@ function workspacePathOf(workspaceId: string | undefined): string | null {
   const parts = workspaceId.split('::')
   return parts.length > 1 ? (parts[1] ?? null) : null
 }
+
+/**
+ * Every journal session whose ROWS mention the native id — the exhaustive
+ * counterpart to the chain scan. Rows embed the provider session id in their
+ * payloads (60,630 of 60,646 rows in a production conversation), so this also
+ * finds sessions whose record retired or whose chain never proved the id
+ * (content-bearing strays the fast path cannot reach). Costs one full-table
+ * LIKE: ~1.2s on a 105k-row production journal, so call it on generation
+ * paths, not per keystroke; interactive surfaces use the chain resolver.
+ */
+export function journalSessionIdsMentioningNativeId(
+  userDataDir: string,
+  nativeSessionId: string
+): string[] {
+  if (typeof nativeSessionId !== 'string' || nativeSessionId.length === 0) {
+    return []
+  }
+  const dbPath = join(userDataDir, 'agent-session-journal.db')
+  if (!existsSync(dbPath)) {
+    return []
+  }
+  let db: Database | null = null
+  try {
+    db = new Database(dbPath, { readonly: true, fileMustExist: true })
+    const escaped = nativeSessionId.replace(/[\\%_]/g, (ch) => `\\${ch}`)
+    const rows = db
+      .prepare(
+        "SELECT DISTINCT session_id FROM journal_rows WHERE row_json LIKE ? ESCAPE '\\'"
+      )
+      .all(`%${escaped}%`) as Array<{ session_id: string }>
+    return rows.map((row) => row.session_id)
+  } catch (error) {
+    console.warn('[roadmap] journal session row scan failed:', error)
+    return []
+  } finally {
+    db?.close()
+  }
+}

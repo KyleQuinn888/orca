@@ -8,7 +8,7 @@ import {
   createAgentSessionRecordTablesSql,
   createJournalTablesSql
 } from '../native-chat/agent-session-journal/journal-database-schema'
-import { resolveJournalSessionsByNativeId } from './journal-session-resolve'
+import { journalSessionIdsMentioningNativeId, resolveJournalSessionsByNativeId } from './journal-session-resolve'
 
 const dirs: string[] = []
 afterAll(() => {
@@ -103,5 +103,44 @@ describe('resolveJournalSessionsByNativeId', () => {
     expect(resolveJournalSessionsByNativeId(dbPath, 'sess_unknown')).toBeNull()
     expect(resolveJournalSessionsByNativeId(join(dbPath, 'missing'), 'sess_a')).toBeNull()
     expect(resolveJournalSessionsByNativeId(dbPath, '')).toBeNull()
+  })
+})
+
+describe('journalSessionIdsMentioningNativeId', () => {
+  it('finds sessions whose rows embed the native id even with no record chain', () => {
+    const dbPath = seed('rowscan',
+      [{ sessionId: 'zcode_retired', nativeIds: ['sess_a'] }],
+      [{ sessionId: 'zcode_retired', workspaceId: 'ws-1::C:/work/one' }]
+    )
+    // A stray that DROVE the conversation but whose record never proved the
+    // id (empty chain): rows alone must still associate it.
+    const db = new Database(join(dbPath, 'agent-session-journal.db'))
+    db.prepare('INSERT INTO agent_session_records VALUES (?, ?)').run(
+      'zcode_stray',
+      JSON.stringify({ providerHandleChain: [] })
+    )
+    db.prepare('INSERT INTO journal_rows VALUES (?, ?, ?, ?, ?)').run(
+      'zcode_stray',
+      'e1',
+      1,
+      1,
+      JSON.stringify({ kind: 'turn', payload: { sessionId: 'sess_a' } })
+    )
+    db.prepare('INSERT INTO journal_rows VALUES (?, ?, ?, ?, ?)').run(
+      'zcode_retired',
+      'e1',
+      1,
+      1,
+      JSON.stringify({ kind: 'turn', payload: { sessionId: 'sess_a' } })
+    )
+    db.close()
+    const ids = journalSessionIdsMentioningNativeId(dbPath, 'sess_a')
+    expect(ids).toContain('zcode_stray')
+    expect(ids).toContain('zcode_retired')
+    // The fast chain scan stays blind to the stray — that is the split this
+    // exhaustive scan exists to close.
+    expect(
+      resolveJournalSessionsByNativeId(dbPath, 'sess_a')?.journalSessionIds
+    ).not.toContain('zcode_stray')
   })
 })
