@@ -44,7 +44,9 @@ export async function processSessionInner(
   if (!db) {
     return
   }
-  const workspace = workspacePath ?? deps.getWorkspacePath(journalIds[0] ?? sessionId)
+  const firstJournalCarrier =
+    journalIds.find((jid) => jid !== nativeId) ?? journalIds[0] ?? sessionId
+  const workspace = workspacePath ?? deps.getWorkspacePath(firstJournalCarrier)
   if (!workspace) {
     return
   }
@@ -66,8 +68,19 @@ export async function processSessionInner(
   // same rows WITHOUT advancing the cursor; crossing promotes to eligible and
   // this same trigger then processes from the original cursor.
   if (!isActive(state, nativeId)) {
+    // Fold each row at most once: candidates never advance cursors, so a
+    // foldedUpTo stamp per carrier prevents re-counting the same range on
+    // every trigger (Codex review #7)
     const m = metricsOf(state, nativeId)
+    const stamp = sessionState.cursorsByJournal ?? {}
+    const folded = new Set(
+      Object.keys(stamp).map((k) => `${k}:${stamp[k]!.epoch}:${stamp[k]!.seq}`)
+    )
     for (const row of rows) {
+      const key = `${row.sessionId}:${row.epoch}:${row.seq}`
+      if (folded.has(key)) {
+        continue
+      }
       const parsed = parseRow(row.rowJson)
       if (parsed) {
         foldRowsIntoMetrics(m, [parsed])
@@ -101,7 +114,13 @@ export async function processSessionInner(
   // Advance each carrier's cursor to its own last row; single legacy carriers
   // also update the shared cursor
   for (const jid of journalIds) {
-    const jLast = rows.findLast((r) => r.sessionId === jid)
+    // cursor order within a carrier is (epoch, seq); ts is display-only
+    const jRows = rows.filter((r) => r.sessionId === jid)
+    const jLast = jRows.reduce(
+      (acc, r) =>
+        !acc || r.epoch > acc.epoch || (r.epoch === acc.epoch && r.seq > acc.seq) ? r : acc,
+      null as JournalRowRef | null
+    )
     if (jLast) {
       setCursorFor(sessionState, jid, { epoch: jLast.epoch, seq: jLast.seq })
     }

@@ -132,7 +132,7 @@ export function createRoadmapService(
       preScope ?? scopeFor(deps.getUserDataDir(), sessionId, deps.getWorkspacePath(sessionId))
     const nativeId = scope.nativeId
     // Terminal states (excluded/deleted) override every writer (spec §0)
-    if (!running || !deps.isLocalSession(sessionId) || isTerminal(state, nativeId)) {
+    if (!running || !deps.isLocalSession(nativeId) || isTerminal(state, nativeId)) {
       return
     }
     // durable deleting intent blocks generation until deletion completes (spec §3.1)
@@ -177,23 +177,23 @@ export function createRoadmapService(
   }
 
   async function generateNow(sessionId: string): Promise<{ ok: boolean; error?: string }> {
-    if (!deps.isLocalSession(sessionId)) {
-      return { ok: false, error: 'not a local session' }
-    }
-    // Terminal states are irreversible (spec §2): deleted refuses, excluded may un-exclude
-    if (state.policy[sessionId] === 'deleted') {
-      return { ok: false, error: 'session deleted' }
-    }
-    setPolicy(state, sessionId, 'eligible')
-    saveStateSafe(deps, state)
-    // Generation merges the fast chain scan with the exhaustive row scan
-    // (zcode handoff): retired-record strays are content too.
+    // Resolve the native scope FIRST: policy keys live in the native domain
     const scope = scopeForGeneration(
       deps.getUserDataDir(),
       sessionId,
       deps.getWorkspacePath(sessionId)
     )
-    await processSession(sessionId, 'manual-generate', scope)
+    const nativeId = scope.nativeId
+    if (!deps.isLocalSession(nativeId)) {
+      return { ok: false, error: 'not a local session' }
+    }
+    // Terminal states are irreversible (spec §2): deleted refuses, excluded may un-exclude
+    if (state.policy[nativeId] === 'deleted') {
+      return { ok: false, error: 'session deleted' }
+    }
+    setPolicy(state, nativeId, 'eligible')
+    saveStateSafe(deps, state)
+    await processSession(nativeId, 'manual-generate', scope)
     return { ok: true }
   }
 
