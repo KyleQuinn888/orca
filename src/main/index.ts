@@ -1,5 +1,5 @@
-import { appendFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { appendFileSync, mkdirSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { app, clipboard, dialog, type BrowserWindow } from 'electron'
 import { parseSkillShareId } from '../shared/skill-share-link'
 import { createMacAppActivationHandler } from './window/macos-app-activation'
@@ -153,11 +153,12 @@ if (preflightReady) {
         // ran at all when the session rows show no roadmap status line.
         onBoot: (note: string) => {
           try {
-            appendFileSync(
-              join(app.getPath('userData'), 'logs', 'roadmap-bootstrap.log'),
-              `${new Date().toISOString()} ${note}
-`
-            )
+            const bootLog = join(app.getPath('userData'), 'logs', 'roadmap-bootstrap.log')
+            // A first run boots before the logger creates logs/; create it so the
+            // milestones (and any failure stack below) survive fresh installs.
+            mkdirSync(dirname(bootLog), { recursive: true })
+            appendFileSync(bootLog, `${new Date().toISOString()} ${note}
+`)
           } catch {}
         },
         getJournalDb: openRoadmapJournalDb,
@@ -181,8 +182,10 @@ if (preflightReady) {
     .catch((e) => {
       console.warn('[roadmap] bootstrap failed:', e)
       try {
+        const bootLog = join(app.getPath('userData'), 'logs', 'roadmap-bootstrap.log')
+        mkdirSync(dirname(bootLog), { recursive: true })
         appendFileSync(
-          join(app.getPath('userData'), 'logs', 'roadmap-bootstrap.log'),
+          bootLog,
           `${new Date().toISOString()} bootstrap failed: ${e instanceof Error ? (e.stack ?? e.message) : String(e)}
 `
         )
