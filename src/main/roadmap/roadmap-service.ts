@@ -166,6 +166,7 @@ export function createRoadmapService(
     turns: number
     edits: number
     fileCount: number
+    backfillProgress?: { done: number; total: number }
   } {
     const m = metricsOf(state, sessionId)
     return {
@@ -173,7 +174,8 @@ export function createRoadmapService(
       phase: activeTasks.has(sessionId) ? 'generating' : 'idle',
       turns: m.turns,
       edits: m.edits,
-      fileCount: m.fileCount
+      fileCount: m.fileCount,
+      backfillProgress: state.backfillProgress?.[sessionId] ?? undefined
     }
   }
 

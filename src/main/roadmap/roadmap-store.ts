@@ -46,6 +46,8 @@ export type RoadmapStateV2 = {
   sessions: Record<string, SessionState>
   /** durable operation intents (spec §3): 'deleting' blocks all writers until finished */
   ops?: Record<string, 'deleting'>
+  /** backfill progress per session for the status line (nonblocking-backfill spec §4) */
+  backfillProgress?: Record<string, { done: number; total: number }>
 }
 
 export type RoadmapState =

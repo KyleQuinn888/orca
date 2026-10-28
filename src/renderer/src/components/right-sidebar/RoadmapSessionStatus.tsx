@@ -48,16 +48,20 @@ export function RoadmapSessionStatus({
   }
 
   const generating = info.phase === 'generating'
+  const bfProgress = (info as { backfillProgress?: { done: number; total: number } })
+    .backfillProgress
   const label =
     info.policy === 'deleted'
       ? '路线图已删除'
       : info.policy === 'excluded'
         ? '路线图已停止'
-        : generating
-          ? '路线图生成中…'
-          : info.policy === 'eligible'
-            ? '路线图记录中'
-            : `未记录 · 轮 ${info.turns}/文件 ${info.fileCount}`
+        : generating && bfProgress
+          ? `回填中 ${bfProgress.done}/${bfProgress.total} 章`
+          : generating
+            ? '路线图处理中…'
+            : info.policy === 'eligible'
+              ? '路线图记录中'
+              : `未记录 · 轮 ${info.turns}/文件 ${info.fileCount}`
 
   const dot = generating
     ? 'animate-pulse bg-[#4fc1ff]'

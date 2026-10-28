@@ -42,35 +42,57 @@ export async function processSessionInner(
   const scope =
     preScope ?? scopeFor(deps.getUserDataDir(), sessionId, deps.getWorkspacePath(sessionId))
   const { nativeId, journalIds, workspacePath } = scope
+  console.warn(
+    `[roadmap-diag] native=${nativeId.slice(0, 20)} carriers=${journalIds.length} ws=${workspacePath?.slice(-30) ?? 'null'}`
+  )
   const db = deps.getJournalDb(sessionId)
   if (!db) {
+    console.warn('[roadmap-diag] RETURN: no db')
     return
   }
   const firstJournalCarrier =
     journalIds.find((jid) => jid !== nativeId) ?? journalIds[0] ?? sessionId
   const workspace = workspacePath ?? deps.getWorkspacePath(firstJournalCarrier)
   if (!workspace) {
+    console.warn(`[roadmap-diag] RETURN: no ws (carrier=${firstJournalCarrier.slice(0, 20)})`)
     return
   }
   const sessionState = getOrCreateSession(state, nativeId)
 
-  // Read new rows since each carrier's own cursor
+  // Read new rows since each carrier's own cursor, yielding between carriers
+  // so long backfills don't freeze the UI (spec nonblocking-backfill §1)
   let rows: JournalRowRef[] = []
   for (const jid of journalIds) {
     const jRows = readRowsAfterCursor(db, jid, cursorFor(sessionState, jid, nativeId))
     if (jRows.length > 0) {
       rows = rows.concat(jRows)
     }
+    if (rows.length > 2000) {
+      await new Promise<void>((resolve) => setImmediate(resolve))
+    }
   }
   if (rows.length === 0) {
+    console.warn('[roadmap-diag] RETURN: 0 rows')
     return
   }
+  console.warn(`[roadmap-diag] ${rows.length} rows read, deduping...`)
 
-  // Cross-carrier replay dedup (zcode handoff): a resumed conversation replays
-  // its full history under the new journal id; the same provider item arrives
-  // twice with different carrier prefixes. Dedup by provider key BEFORE any
-  // folding, segmentation or cursor math, or everything double-counts.
-  rows = dedupRowsAcrossCarriers(rows)
+  // Cross-carrier replay dedup, chunked with yields for large row sets
+  // (spec nonblocking-backfill §2). The chunk size balances UI responsiveness
+  // against the overhead of yielding (setImmediate is cheap but not free).
+  if (rows.length > 2000) {
+    const deduped: JournalRowRef[] = []
+    for (let i = 0; i < rows.length; i += 2000) {
+      const chunk = rows.slice(i, i + 2000)
+      deduped.push(...dedupRowsAcrossCarriers(chunk))
+      await new Promise<void>((resolve) => setImmediate(resolve))
+    }
+    // final pass to dedup across chunk boundaries
+    rows = dedupRowsAcrossCarriers(deduped)
+  } else {
+    rows = dedupRowsAcrossCarriers(rows)
+  }
+  console.warn(`[roadmap-diag] ${rows.length} after dedup, segmenting...`)
 
   // Threshold auto-policy (spec §1 L2): candidates accumulate metrics from the
   // same rows WITHOUT advancing the cursor; crossing promotes to eligible and
@@ -160,6 +182,15 @@ export async function processSessionInner(
       db,
       backfill
     )
+    if (backfill) {
+      const prog = state.backfillProgress?.[nativeId]
+      if (prog) {
+        state.backfillProgress = {
+          ...state.backfillProgress,
+          [nativeId]: { done: prog.done + 1, total: prog.total }
+        }
+      }
+    }
   }
 }
 
