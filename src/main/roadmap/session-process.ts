@@ -15,7 +15,7 @@ import {
 } from './roadmap-store'
 import type { JournalRowRef, OpenChapter } from './journal-reader'
 import { DEFAULT_SEGMENTATION_CONFIG, flushOpenChapter, segmentRows } from './journal-reader'
-import { countExistingChapters, readRowsAfterCursor, readRowsInRange } from './journal-row-io'
+import { countExistingChapters, readRowsInRange } from './journal-row-io'
 import { parseRow } from './journal-row-parse'
 import { crossesThreshold, foldRowsIntoMetrics } from './session-threshold'
 import { saveStateSafe, summarizeAndWrite } from './chapter-pipeline'
@@ -47,35 +47,53 @@ export async function processSessionInner(
   )
   const db = deps.getJournalDb(sessionId)
   if (!db) {
-    console.warn('[roadmap-diag] RETURN: no db')
     return
   }
   const firstJournalCarrier =
     journalIds.find((jid) => jid !== nativeId) ?? journalIds[0] ?? sessionId
   const workspace = workspacePath ?? deps.getWorkspacePath(firstJournalCarrier)
   if (!workspace) {
-    console.warn(`[roadmap-diag] RETURN: no ws (carrier=${firstJournalCarrier.slice(0, 20)})`)
     return
   }
   const sessionState = getOrCreateSession(state, nativeId)
 
-  // Read new rows since each carrier's own cursor, yielding between carriers
-  // so long backfills don't freeze the UI (spec nonblocking-backfill §1)
+  // Read new rows in paginated batches (spec nonblocking-backfill §1 + Codex #2):
+  // LIMIT-page each carrier, yield between pages so the UI stays responsive
+  // even for a 64k-row carrier
   let rows: JournalRowRef[] = []
+  const PAGE = 2000
   for (const jid of journalIds) {
-    const jRows = readRowsAfterCursor(db, jid, cursorFor(sessionState, jid, nativeId))
-    if (jRows.length > 0) {
-      rows = rows.concat(jRows)
+    const startCursor = cursorFor(sessionState, jid, nativeId)
+    const hasCursor = startCursor.epoch !== '' && startCursor.seq > 0
+    let epoch = startCursor.epoch
+    if (!hasCursor) {
+      const epochRow = db
+        .query('SELECT epoch FROM journal_sessions WHERE session_id = ?')
+        .get(jid) as { epoch: string } | null
+      if (!epochRow) {
+        continue
+      }
+      epoch = epochRow.epoch
     }
-    if (rows.length > 2000) {
+    let fromSeq = hasCursor ? startCursor.seq + 1 : 0
+    let page: JournalRowRef[] = []
+    do {
+      page = readRowsInRange(db, jid, epoch, fromSeq, Number.MAX_SAFE_INTEGER, PAGE)
+      if (page.length > 0) {
+        rows.push(...page)
+        fromSeq = page.at(-1)!.seq + 1
+      }
       await new Promise<void>((resolve) => setImmediate(resolve))
-    }
+      // Reentrancy guard (Codex #6): another trigger may have excluded/deleted
+      // this session while we yielded — abort stale processing immediately
+      if (isTerminal(state, nativeId)) {
+        return
+      }
+    } while (page.length === PAGE)
   }
   if (rows.length === 0) {
-    console.warn('[roadmap-diag] RETURN: 0 rows')
     return
   }
-  console.warn(`[roadmap-diag] ${rows.length} rows read, deduping...`)
 
   // Cross-carrier replay dedup, chunked with yields for large row sets
   // (spec nonblocking-backfill §2). The chunk size balances UI responsiveness
@@ -86,13 +104,15 @@ export async function processSessionInner(
       const chunk = rows.slice(i, i + 2000)
       deduped.push(...dedupRowsAcrossCarriers(chunk))
       await new Promise<void>((resolve) => setImmediate(resolve))
+      if (isTerminal(state, nativeId)) {
+        return
+      }
     }
     // final pass to dedup across chunk boundaries
     rows = dedupRowsAcrossCarriers(deduped)
   } else {
     rows = dedupRowsAcrossCarriers(rows)
   }
-  console.warn(`[roadmap-diag] ${rows.length} after dedup, segmenting...`)
 
   // Threshold auto-policy (spec §1 L2): candidates accumulate metrics from the
   // same rows WITHOUT advancing the cursor; crossing promotes to eligible and
@@ -140,6 +160,12 @@ export async function processSessionInner(
     chapterIndex
   )
   openChapters.set(nativeId, newOpen)
+  if (backfill && cuts.length > 0) {
+    state.backfillProgress = {
+      ...state.backfillProgress,
+      [nativeId]: { done: 0, total: cuts.length }
+    }
+  }
 
   // Cursor advance: in backfill mode, advance only past chapters that were
   // actually processed; in incremental mode advance past all rows read
@@ -191,6 +217,12 @@ export async function processSessionInner(
         }
       }
     }
+  }
+  // Clean up progress when backfill completes or aborts (Codex review #4)
+  if (backfill && state.backfillProgress?.[nativeId]) {
+    const { ...rest } = state.backfillProgress
+    delete rest[nativeId]
+    state.backfillProgress = rest
   }
 }
 

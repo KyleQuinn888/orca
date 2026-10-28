@@ -19,7 +19,8 @@ export type JournalDb = {
 export function readRowsAfterCursor(
   db: JournalDb,
   sessionId: string,
-  cursor: Cursor
+  cursor: Cursor,
+  limit = Number.MAX_SAFE_INTEGER
 ): JournalRowRef[] {
   if (cursor.epoch === '' || cursor.seq === 0) {
     // Read from beginning
@@ -29,9 +30,16 @@ export function readRowsAfterCursor(
     if (!epochRow) {
       return []
     }
-    return readRowsInRange(db, sessionId, epochRow.epoch, 0, Number.MAX_SAFE_INTEGER)
+    return readRowsInRange(db, sessionId, epochRow.epoch, 0, Number.MAX_SAFE_INTEGER, limit)
   }
-  return readRowsInRange(db, sessionId, cursor.epoch, cursor.seq + 1, Number.MAX_SAFE_INTEGER)
+  return readRowsInRange(
+    db,
+    sessionId,
+    cursor.epoch,
+    cursor.seq + 1,
+    Number.MAX_SAFE_INTEGER,
+    limit
+  )
 }
 
 export function readRowsInRange(
@@ -39,13 +47,14 @@ export function readRowsInRange(
   sessionId: string,
   epoch: string,
   fromSeq: number,
-  toSeq: number
+  toSeq: number,
+  limit = Number.MAX_SAFE_INTEGER
 ): JournalRowRef[] {
   const rawRows = db
     .query(
-      'SELECT seq, ts, row_json FROM journal_rows WHERE session_id = ? AND epoch = ? AND seq >= ? AND seq <= ? ORDER BY seq'
+      'SELECT seq, ts, row_json FROM journal_rows WHERE session_id = ? AND epoch = ? AND seq >= ? AND seq <= ? ORDER BY seq LIMIT ?'
     )
-    .all(sessionId, epoch, fromSeq, toSeq) as { seq: number; ts: number; row_json: string }[]
+    .all(sessionId, epoch, fromSeq, toSeq, limit) as { seq: number; ts: number; row_json: string }[]
   return rawRows.map((r) => ({
     sessionId,
     epoch,
