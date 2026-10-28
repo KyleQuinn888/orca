@@ -42,7 +42,8 @@ export async function summarizeAndWrite(
   cut: ChapterCut,
   allRows: JournalRowRef[],
   sessionState: SessionState,
-  db: JournalDb
+  db: JournalDb,
+  backfill = false
 ): Promise<void> {
   const chapterRows = allRows.filter((r) => r.seq >= cut.fromSeq && r.seq <= cut.toSeq)
   if (chapterRows.length === 0) {
@@ -52,9 +53,11 @@ export async function summarizeAndWrite(
   const sessionTitle = deps.getSessionTitle(sessionId)
   const outDir = join(workspace, '.roadmap', '001', sessionId)
 
-  // Check cap before spawning
+  // Check cap before spawning — backfill mode (manual generate of a long
+  // conversation, the PRIMARY use case from testZone) has no daily cap; the
+  // cap exists only for incremental auto-triggers to spread LLM cost
   const dateKey = utcDateKey()
-  const remaining = capRemaining(sessionState, dateKey)
+  const remaining = backfill ? Infinity : capRemaining(sessionState, dateKey)
   if (remaining <= 0) {
     // Cut but don't summarize — enqueue pending
     enqueuePending(sessionState, cut.epoch, cut.fromSeq, { epoch: cut.epoch, seq: cut.toSeq })

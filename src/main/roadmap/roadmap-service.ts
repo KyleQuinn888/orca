@@ -152,7 +152,8 @@ export function createRoadmapService(
     }
 
     const ctx: ProcessCtx = { deps, state, promptTemplate, openChapters }
-    const task = processSessionInner(ctx, sessionId, trigger, scope).finally(() => {
+    const isBackfill = trigger === 'manual-generate' || trigger === 'backfill'
+    const task = processSessionInner(ctx, sessionId, trigger, scope, isBackfill).finally(() => {
       activeTasks.delete(nativeId)
     })
     activeTasks.set(nativeId, task)

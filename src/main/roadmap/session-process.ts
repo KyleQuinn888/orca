@@ -118,11 +118,12 @@ export async function processSessionInner(
   )
   openChapters.set(nativeId, newOpen)
 
-  // Advance each carrier's cursor to its own last row; single legacy carriers
-  // also update the shared cursor
+  // Cursor advance: in backfill mode, advance only past chapters that were
+  // actually processed; in incremental mode advance past all rows read
+  const lastProcessedSeq =
+    backfill && cuts.length > 0 ? Math.max(...cuts.map((c) => c.toSeq)) : Infinity
   for (const jid of journalIds) {
-    // cursor order within a carrier is (epoch, seq); ts is display-only
-    const jRows = rows.filter((r) => r.sessionId === jid)
+    const jRows = rows.filter((r) => r.sessionId === jid && r.seq <= lastProcessedSeq)
     const jLast = jRows.reduce(
       (acc, r) =>
         !acc || r.epoch > acc.epoch || (r.epoch === acc.epoch && r.seq > acc.seq) ? r : acc,
@@ -133,7 +134,7 @@ export async function processSessionInner(
     }
   }
   if (journalIds.length === 1 && journalIds[0] === nativeId) {
-    const lastRow = rows.at(-1)!
+    const lastRow = rows.findLast((r) => r.seq <= lastProcessedSeq)
     sessionState.scanCursor = { epoch: lastRow.epoch, seq: lastRow.seq }
   }
 
