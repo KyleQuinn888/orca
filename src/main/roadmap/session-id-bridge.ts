@@ -60,6 +60,9 @@ export function scopeFor(
 /**
  * Generation paths (generateNow/backfill): fast chain + exhaustive row scan
  * merged, so content strays whose records retired are not lost.
+ * Exhaustive hits are FILTERED BY WORKSPACE: transcript mentions of a session
+ * id in OTHER conversations (code snippets, diagnostics) must not pull in
+ * 60k+ rows of unrelated content (Codex wiring review #2, confirmed in soak).
  */
 export function scopeForGeneration(
   userDataDir: string,
@@ -68,13 +71,44 @@ export function scopeForGeneration(
 ): SessionIdScope {
   const base = scopeFor(userDataDir, sessionId, fallbackWorkspace)
   const exhaustive = journalSessionIdsMentioningNativeId(userDataDir, base.nativeId)
+  // Only merge exhaustive hits that share the workspace with the chain-resolved
+  // carriers — a session id mentioned in another conversation's transcript is
+  // content ABOUT the id, not content OF the session
+  const trustedWorkspace = workspaceOfJournalSession(userDataDir, base.journalIds[0] ?? '')
   const merged = [...base.journalIds]
   for (const jid of exhaustive) {
-    if (!merged.includes(jid)) {
+    if (merged.includes(jid)) {
+      continue
+    }
+    const jidWorkspace = workspaceOfJournalSession(userDataDir, jid)
+    if (trustedWorkspace && jidWorkspace && jidWorkspace === trustedWorkspace) {
       merged.push(jid)
     }
   }
   return { ...base, journalIds: merged }
+}
+
+function workspaceOfJournalSession(userDataDir: string, journalSessionId: string): string | null {
+  if (!journalSessionId) {
+    return null
+  }
+  const dbPath = join(userDataDir, 'agent-session-journal.db')
+  if (!existsSync(dbPath)) {
+    return null
+  }
+  let db: Database | null = null
+  try {
+    db = new Database(dbPath, { readonly: true, fileMustExist: true })
+    const row = db
+      .prepare('SELECT workspace_id FROM journal_sessions WHERE session_id = ?')
+      .get(journalSessionId) as { workspace_id: string } | undefined
+    const parts = row?.workspace_id?.split('::')
+    return parts && parts.length > 1 ? (parts[1] ?? null) : null
+  } catch {
+    return null
+  } finally {
+    db?.close()
+  }
 }
 
 function orderHeadFirst(ids: string[], head: string): string[] {

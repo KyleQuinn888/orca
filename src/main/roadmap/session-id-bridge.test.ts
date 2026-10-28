@@ -75,10 +75,10 @@ describe('session-id-bridge', () => {
     expect(scope.workspacePath).toBe('C:/ws/alpha')
   })
 
-  it('generation scope merges the exhaustive row scan (records retired strays)', () => {
+  it('generation scope filters exhaustive hits by workspace (transcript mentions excluded)', () => {
     const dir = seed()
     const scope = scopeForGeneration(dir, NATIVE, null)
-    expect(scope.journalIds).toContain(J_STRAY)
+    expect(scope.journalIds).not.toContain(J_STRAY)
     expect(scope.nativeId).toBe(NATIVE)
   })
 
