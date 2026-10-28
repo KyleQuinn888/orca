@@ -136,7 +136,9 @@ export async function processSessionInner(
   }
   if (journalIds.length === 1 && journalIds[0] === nativeId) {
     const lastRow = rows.findLast((r) => r.seq <= lastProcessedSeq)
-    sessionState.scanCursor = { epoch: lastRow.epoch, seq: lastRow.seq }
+    if (lastRow) {
+      sessionState.scanCursor = { epoch: lastRow.epoch, seq: lastRow.seq }
+    }
   }
 
   // Process cuts (chapter closures)
