@@ -33,7 +33,8 @@ export async function processSessionInner(
   ctx: ProcessCtx,
   sessionId: string,
   _trigger: string,
-  preScope?: SessionIdScope
+  preScope?: SessionIdScope,
+  backfill = false
 ): Promise<void> {
   const { deps, state, promptTemplate, openChapters } = ctx
   // Id bridge: state/artifacts key by the provider-native id; rows live under
@@ -154,7 +155,8 @@ export async function processSessionInner(
       cut,
       rows,
       sessionState,
-      db
+      db,
+      backfill
     )
   }
 }
