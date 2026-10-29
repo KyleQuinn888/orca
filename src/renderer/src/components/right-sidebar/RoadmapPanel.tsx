@@ -317,10 +317,10 @@ export default function RoadmapPanel(): React.JSX.Element {
         {sidebarView === 'pits' && (
           <RoadmapPitsView
             sections={pitsData.pitSections}
-            onOpenSource={(href) => {
-              // href is a relative path like ../001/<sid>/<chapter>.md — open
-              // the source chapter card as a preview tab
-              const rel = href.replace(/^\.\.\//, '.roadmap/')
+            onOpenSource={(href, pitId) => {
+              // v2 rows carry a pitId — open DETAILS.md (full pit text)
+              // v1 rows carry a href to the source chapter card
+              const rel = pitId ? '.roadmap/pits/DETAILS.md' : href.replace(/^\.\.\//, '.roadmap/')
               if (worktreePath && worktreeId) {
                 useAppStore.getState().openFile(
                   {

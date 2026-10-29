@@ -36,6 +36,8 @@ export type RoadmapPitRow = {
   /** Trailing text after the link, e.g. "seq 42". */
   sourceDetail: string
   verified: boolean
+  /** v2 pit-id (pit-xxxxxx), used to locate the full entry in DETAILS.md */
+  pitId: string | null
 }
 
 export type RoadmapPitSection = {
@@ -165,16 +167,31 @@ export function parsePitsKeywords(content: string): RoadmapPitSection[] {
     if (!cells || cells.length < 4 || isTableSeparatorRow(cells)) {
       continue
     }
-    const source = parsePitSource(cells[2])
-    current.rows.push({
-      keywords: cells[0],
-      resolution: cells[1],
-      sourceLabel: source.label,
-      sourceHref: source.href,
-      sourceDetail: source.detail,
-      // The generator writes '✓' for verified rows and '未验' otherwise.
-      verified: cells[3] === '✓'
-    })
+    // v2 format: | pit-id | keywords | symptom | reproduction |
+    // v1 format: | keywords | resolution | source | verified |
+    const isV2 = /^pit-[0-9a-f]{6,}$/.test(cells[0])
+    if (isV2) {
+      current.rows.push({
+        keywords: cells[1],
+        resolution: cells[2],
+        sourceLabel: cells[0],
+        sourceHref: null,
+        sourceDetail: cells[3],
+        verified: false,
+        pitId: cells[0]
+      })
+    } else {
+      const source = parsePitSource(cells[2])
+      current.rows.push({
+        keywords: cells[0],
+        resolution: cells[1],
+        sourceLabel: source.label,
+        sourceHref: source.href,
+        sourceDetail: source.detail,
+        verified: cells[3] === '✓',
+        pitId: null
+      })
+    }
   }
   return sections.filter((section) => section.rows.length > 0)
 }

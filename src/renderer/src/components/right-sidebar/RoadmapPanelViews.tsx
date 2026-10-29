@@ -197,7 +197,7 @@ export function RoadmapPitsView({
   onOpenSource
 }: {
   sections: readonly RoadmapPitSection[]
-  onOpenSource: (href: string) => void
+  onOpenSource: (href: string, pitId?: string) => void
 }): React.JSX.Element {
   if (sections.length === 0) {
     return (
@@ -232,7 +232,7 @@ function RoadmapPitRowView({
   onOpenSource
 }: {
   row: RoadmapPitRow
-  onOpenSource: (href: string) => void
+  onOpenSource: (href: string, pitId?: string) => void
 }): React.JSX.Element {
   return (
     <div className="flex items-start gap-2 px-3 py-1.5">
@@ -264,7 +264,7 @@ function RoadmapPitRowView({
           <button
             type="button"
             className="mt-0.5 max-w-full truncate font-mono text-2xs text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => onOpenSource(row.sourceHref ?? '')}
+            onClick={() => onOpenSource(row.sourceHref ?? '', row.pitId ?? undefined)}
           >
             {row.sourceLabel}
             {row.sourceDetail ? ` ${row.sourceDetail}` : ''}
