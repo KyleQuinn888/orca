@@ -137,6 +137,19 @@ export function aggregateAfterBackfill(workspace: string, nativeSessionId: strin
   } catch {
     // pits rebuild failure doesn't block milestone display
   }
+
+  // 7. Update session title in 000-index.md from the first chapter (the
+  // runtime's getSessionTitle returns the raw session ID for zcode sessions
+  // because agent_session_records is keyed by journal id, not native id)
+  const idxPath = join(dir001, '000-index.md')
+  if (existsSync(idxPath) && chapters.length > 0) {
+    const idxRaw = readFileSync(idxPath, 'utf-8')
+    const firstChapterTitle = chapters[0]!.title
+    const updated = idxRaw.replace(/^title:\s*.*$/m, `title: ${firstChapterTitle.slice(0, 40)}`)
+    if (updated !== idxRaw) {
+      writeFileSync(idxPath, updated, 'utf-8')
+    }
+  }
 }
 
 function rebuildIndexForAll(roadmapDir: string): void {

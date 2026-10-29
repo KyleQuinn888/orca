@@ -152,6 +152,12 @@ export function parsePitsKeywords(content: string): RoadmapPitSection[] {
       sections.push(current)
       continue
     }
+    // v2 pits-index has no ## session headings — the table sits directly
+    // under the # title. Fall back to a single unnamed section.
+    if (!current && line.trim().startsWith('|')) {
+      current = { sessionId: '', title: '全部坑', rows: [] }
+      sections.push(current)
+    }
     if (!current) {
       continue
     }
