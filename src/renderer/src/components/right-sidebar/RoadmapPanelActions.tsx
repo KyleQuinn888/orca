@@ -1,6 +1,7 @@
 // Split from RoadmapPanel (file-size lint): inbox actions + session delete button.
 
 import { useState } from 'react'
+import { useAppStore } from '@/store'
 import { useRoadmapR2 } from '../roadmap-canvas/roadmap-r2-store'
 
 export function InboxActions({
