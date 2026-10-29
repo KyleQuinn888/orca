@@ -318,10 +318,22 @@ export default function RoadmapPanel(): React.JSX.Element {
           <RoadmapPitsView
             sections={pitsData.pitSections}
             onOpenSource={(href) => {
-              if (worktreeId) {
-                useAppStore.getState().openRoadmapCanvas(worktreeId)
+              // href is a relative path like ../001/<sid>/<chapter>.md — open
+              // the source chapter card as a preview tab
+              const rel = href.replace(/^\.\.\//, '.roadmap/')
+              if (worktreePath && worktreeId) {
+                useAppStore.getState().openFile(
+                  {
+                    filePath: `${worktreePath}/${rel}`,
+                    relativePath: rel,
+                    worktreeId,
+                    runtimeEnvironmentId: null,
+                    language: 'markdown',
+                    mode: 'edit'
+                  },
+                  { preview: true, focusEditor: true, suppressActiveRuntimeFallback: true }
+                )
               }
-              void href
             }}
           />
         )}

@@ -64,9 +64,18 @@ export function getSessionTitle(sessionId: string): string {
     return sessionId
   }
   try {
-    const row = db
+    // zcode sessions: agent_session_records is keyed by journal id; the
+    // pipeline passes the native id. Fall back to a LIKE scan on the native id.
+    let row = db
       .query('SELECT record_json FROM agent_session_records WHERE session_id = ?')
       .get(sessionId) as { record_json: string } | null
+    if (!row) {
+      // resolve native -> journal via record chain (records mention the native id)
+      const records = db.query('SELECT record_json FROM agent_session_records').all() as {
+        record_json: string
+      }[]
+      row = records.find((r) => r.record_json.includes(sessionId)) ?? null
+    }
     if (!row) {
       return sessionId
     }
