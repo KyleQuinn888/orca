@@ -232,6 +232,19 @@ export async function processSessionInner(
       delete rest[nativeId]
       state.backfillProgress = rest
     }
+    // Post-backfill aggregation: auto-group chapters into milestones, write
+    // 002 m-cards + INDEX so the sidebar/canvas can render the full biography
+    if (backfill && cuts.length > 0) {
+      try {
+        const { aggregateAfterBackfill } = await import('./session-aggregate')
+        aggregateAfterBackfill(workspace, nativeId)
+        console.warn(
+          `[roadmap] aggregated: ${cuts.length} chapters -> milestones + INDEX for ${nativeId.slice(0, 20)}`
+        )
+      } catch (e) {
+        console.error(`[roadmap] aggregation failed for ${nativeId.slice(0, 20)}:`, e)
+      }
+    }
   } catch (e) {
     // Surface swallowed async exceptions (the service chain's .finally() drops them)
     console.error(`[roadmap] processSessionInner FAILED for ${nativeId.slice(0, 20)}:`, e)
