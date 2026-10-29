@@ -92,137 +92,149 @@ export async function processSessionInner(
     } while (page.length === PAGE)
   }
   if (rows.length === 0) {
+    console.warn(`[roadmap] 0 rows for ${nativeId.slice(0, 20)} (carriers=${journalIds.length})`)
     return
   }
+  console.warn(`[roadmap] ${rows.length} rows read for ${nativeId.slice(0, 20)}`)
+  try {
+    // Cross-carrier replay dedup, chunked with yields for large row sets.
+    // Small sets (<2000) dedup in one pass.
+    if (rows.length > 2000) {
+      const deduped: JournalRowRef[] = []
+      for (let i = 0; i < rows.length; i += 2000) {
+        const chunk = rows.slice(i, i + 2000)
+        deduped.push(...dedupRowsAcrossCarriers(chunk))
+        await new Promise<void>((resolve) => setImmediate(resolve))
+        if (isTerminal(state, nativeId)) {
+          return
+        }
+      }
+      // final pass to dedup across chunk boundaries
+      rows = dedupRowsAcrossCarriers(deduped)
+    } else {
+      rows = dedupRowsAcrossCarriers(rows)
+    }
+    console.warn(`[roadmap] ${rows.length} after dedup`)
 
-  // Cross-carrier replay dedup, chunked with yields for large row sets
-  // (spec nonblocking-backfill §2). The chunk size balances UI responsiveness
-  // against the overhead of yielding (setImmediate is cheap but not free).
-  if (rows.length > 2000) {
-    const deduped: JournalRowRef[] = []
-    for (let i = 0; i < rows.length; i += 2000) {
-      const chunk = rows.slice(i, i + 2000)
-      deduped.push(...dedupRowsAcrossCarriers(chunk))
-      await new Promise<void>((resolve) => setImmediate(resolve))
-      if (isTerminal(state, nativeId)) {
+    // Threshold auto-policy (spec §1 L2): candidates accumulate metrics from the
+    // same rows WITHOUT advancing the cursor; crossing promotes to eligible and
+    // this same trigger then processes from the original cursor.
+    if (!isActive(state, nativeId)) {
+      // Fold each row at most once: candidates never advance cursors, so a
+      // foldedUpTo stamp per carrier prevents re-counting the same range on
+      // every trigger (Codex review #7)
+      const m = metricsOf(state, nativeId)
+      const stamp = sessionState.cursorsByJournal ?? {}
+      const folded = new Set(
+        Object.keys(stamp).map((k) => `${k}:${stamp[k]!.epoch}:${stamp[k]!.seq}`)
+      )
+      for (const row of rows) {
+        const key = `${row.sessionId}:${row.epoch}:${row.seq}`
+        if (folded.has(key)) {
+          continue
+        }
+        const parsed = parseRow(row.rowJson)
+        if (parsed) {
+          foldRowsIntoMetrics(m, [parsed])
+        }
+      }
+      if (crossesThreshold(m)) {
+        setPolicy(state, nativeId, 'eligible')
+        saveStateSafe(deps, state)
+      } else {
+        saveStateSafe(deps, state) // persist metrics incrementally
         return
       }
     }
-    // final pass to dedup across chunk boundaries
-    rows = dedupRowsAcrossCarriers(deduped)
-  } else {
-    rows = dedupRowsAcrossCarriers(rows)
-  }
 
-  // Threshold auto-policy (spec §1 L2): candidates accumulate metrics from the
-  // same rows WITHOUT advancing the cursor; crossing promotes to eligible and
-  // this same trigger then processes from the original cursor.
-  if (!isActive(state, nativeId)) {
-    // Fold each row at most once: candidates never advance cursors, so a
-    // foldedUpTo stamp per carrier prevents re-counting the same range on
-    // every trigger (Codex review #7)
-    const m = metricsOf(state, nativeId)
-    const stamp = sessionState.cursorsByJournal ?? {}
-    const folded = new Set(
-      Object.keys(stamp).map((k) => `${k}:${stamp[k]!.epoch}:${stamp[k]!.seq}`)
+    console.warn('[roadmap] sorting...')
+    // Cross-carrier ordering: (ts, epoch, seq) keeps segmentation stable when a
+    // conversation resumes under a new journal id
+    rows.sort(
+      (a, b) => (a.ts ?? 0) - (b.ts ?? 0) || a.epoch.localeCompare(b.epoch) || a.seq - b.seq
     )
-    for (const row of rows) {
-      const key = `${row.sessionId}:${row.epoch}:${row.seq}`
-      if (folded.has(key)) {
-        continue
-      }
-      const parsed = parseRow(row.rowJson)
-      if (parsed) {
-        foldRowsIntoMetrics(m, [parsed])
-      }
-    }
-    if (crossesThreshold(m)) {
-      setPolicy(state, nativeId, 'eligible')
-      saveStateSafe(deps, state)
-    } else {
-      saveStateSafe(deps, state) // persist metrics incrementally
-      return
-    }
-  }
 
-  // Cross-carrier ordering: (ts, epoch, seq) keeps segmentation stable when a
-  // conversation resumes under a new journal id
-  rows.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0) || a.epoch.localeCompare(b.epoch) || a.seq - b.seq)
-
-  // Segment; artifacts and the open-chapter slot key by the native id
-  const open = openChapters.get(nativeId) ?? null
-  const chapterIndex = countExistingChapters(workspace, nativeId) + 1
-  const { cuts, open: newOpen } = segmentRows(
-    nativeId,
-    rows,
-    open,
-    DEFAULT_SEGMENTATION_CONFIG,
-    chapterIndex
-  )
-  openChapters.set(nativeId, newOpen)
-  if (backfill && cuts.length > 0) {
-    state.backfillProgress = {
-      ...state.backfillProgress,
-      [nativeId]: { done: 0, total: cuts.length }
-    }
-  }
-
-  // Cursor advance: in backfill mode, advance only past chapters that were
-  // actually processed; in incremental mode advance past all rows read
-  const lastProcessedSeq =
-    backfill && cuts.length > 0 ? Math.max(...cuts.map((c) => c.toSeq)) : Infinity
-  for (const jid of journalIds) {
-    const jRows = rows.filter((r) => r.sessionId === jid && r.seq <= lastProcessedSeq)
-    const jLast = jRows.reduce(
-      (acc, r) =>
-        !acc || r.epoch > acc.epoch || (r.epoch === acc.epoch && r.seq > acc.seq) ? r : acc,
-      null as JournalRowRef | null
-    )
-    if (jLast) {
-      setCursorFor(sessionState, jid, { epoch: jLast.epoch, seq: jLast.seq })
-    }
-  }
-  if (journalIds.length === 1 && journalIds[0] === nativeId) {
-    const lastRow = rows.findLast((r) => r.seq <= lastProcessedSeq)
-    if (lastRow) {
-      sessionState.scanCursor = { epoch: lastRow.epoch, seq: lastRow.seq }
-    }
-  }
-
-  // Process cuts (chapter closures)
-  for (const cut of cuts) {
-    // Publish-point recheck: exclusion/deletion requested mid-flight discards
-    // this chapter without writing (spec §2 M4 ruling)
-    if (isTerminal(state, nativeId)) {
-      return
-    }
-    await summarizeAndWrite(
-      deps,
-      state,
-      promptTemplate,
+    // Segment; artifacts and the open-chapter slot key by the native id
+    console.warn('[roadmap] counting chapters...')
+    const open = openChapters.get(nativeId) ?? null
+    console.warn('[roadmap] segmenting...')
+    const chapterIndex = countExistingChapters(workspace, nativeId) + 1
+    const { cuts, open: newOpen } = segmentRows(
       nativeId,
-      workspace,
-      cut,
       rows,
-      sessionState,
-      db,
-      backfill
+      open,
+      DEFAULT_SEGMENTATION_CONFIG,
+      chapterIndex
     )
-    if (backfill) {
-      const prog = state.backfillProgress?.[nativeId]
-      if (prog) {
-        state.backfillProgress = {
-          ...state.backfillProgress,
-          [nativeId]: { done: prog.done + 1, total: prog.total }
+    console.warn()
+    openChapters.set(nativeId, newOpen)
+    if (backfill && cuts.length > 0) {
+      state.backfillProgress = {
+        ...state.backfillProgress,
+        [nativeId]: { done: 0, total: cuts.length }
+      }
+    }
+
+    // Cursor advance: in backfill mode, advance only past chapters that were
+    // actually processed; in incremental mode advance past all rows read
+    const lastProcessedSeq =
+      backfill && cuts.length > 0 ? Math.max(...cuts.map((c) => c.toSeq)) : Infinity
+    for (const jid of journalIds) {
+      const jRows = rows.filter((r) => r.sessionId === jid && r.seq <= lastProcessedSeq)
+      const jLast = jRows.reduce(
+        (acc, r) =>
+          !acc || r.epoch > acc.epoch || (r.epoch === acc.epoch && r.seq > acc.seq) ? r : acc,
+        null as JournalRowRef | null
+      )
+      if (jLast) {
+        setCursorFor(sessionState, jid, { epoch: jLast.epoch, seq: jLast.seq })
+      }
+    }
+    if (journalIds.length === 1 && journalIds[0] === nativeId) {
+      const lastRow = rows.findLast((r) => r.seq <= lastProcessedSeq)
+      if (lastRow) {
+        sessionState.scanCursor = { epoch: lastRow.epoch, seq: lastRow.seq }
+      }
+    }
+
+    // Process cuts (chapter closures)
+    for (const cut of cuts) {
+      // Publish-point recheck: exclusion/deletion requested mid-flight discards
+      // this chapter without writing (spec §2 M4 ruling)
+      if (isTerminal(state, nativeId)) {
+        return
+      }
+      await summarizeAndWrite(
+        deps,
+        state,
+        promptTemplate,
+        nativeId,
+        workspace,
+        cut,
+        rows,
+        sessionState,
+        db,
+        backfill
+      )
+      if (backfill) {
+        const prog = state.backfillProgress?.[nativeId]
+        if (prog) {
+          state.backfillProgress = {
+            ...state.backfillProgress,
+            [nativeId]: { done: prog.done + 1, total: prog.total }
+          }
         }
       }
     }
-  }
-  // Clean up progress when backfill completes or aborts (Codex review #4)
-  if (backfill && state.backfillProgress?.[nativeId]) {
-    const { ...rest } = state.backfillProgress
-    delete rest[nativeId]
-    state.backfillProgress = rest
+    // Clean up progress when backfill completes or aborts (Codex review #4)
+    if (backfill && state.backfillProgress?.[nativeId]) {
+      const { ...rest } = state.backfillProgress
+      delete rest[nativeId]
+      state.backfillProgress = rest
+    }
+  } catch (e) {
+    // Surface swallowed async exceptions (the service chain's .finally() drops them)
+    console.error(`[roadmap] processSessionInner FAILED for ${nativeId.slice(0, 20)}:`, e)
   }
 }
 

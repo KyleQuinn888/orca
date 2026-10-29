@@ -15,7 +15,15 @@ export type ParsedRow = {
 
 export function parseRow(rowJson: string): ParsedRow | null {
   try {
-    return JSON.parse(rowJson) as ParsedRow
+    const raw = JSON.parse(rowJson) as ParsedRow & { kind?: string }
+    // zcode turn completions arrive as lifecycle-batch rows, not updated turn
+    // items (turn items stay 'running'). Synthesize a completed turn so the
+    // segmentation sees the boundary signal — without this, zcode sessions
+    // produce 0 cuts and zero chapters (soak day-1 root cause).
+    if (raw.kind === 'lifecycle-batch') {
+      return { kind: 'item', body: { kind: 'turn', state: 'completed' } } as ParsedRow
+    }
+    return raw
   } catch {
     return null
   }
