@@ -195,6 +195,14 @@ export function createRoadmapService(
       return { ok: false, error: 'session deleted' }
     }
     setPolicy(state, nativeId, 'eligible')
+    // Manual generate = "give me the full biography": reset cursors so the
+    // pipeline re-reads from the beginning. Old cursors from a previous
+    // (pre-fix) run would silently block all re-processing (soak day-2).
+    const sess = getOrCreateSession(state, nativeId)
+    sess.cursorsByJournal = {}
+    sess.scanCursor = { epoch: '', seq: 0 }
+    sess.summarizedCursor = { epoch: '', seq: 0 }
+    sess.pending = []
     saveStateSafe(deps, state)
     await processSession(nativeId, 'manual-generate', scope)
     return { ok: true }

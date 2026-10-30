@@ -180,7 +180,21 @@ if (preflightReady) {
         // (set when the runtime launches, same store registerSettingsHandlers
         // uses) — NOT the SSH persistedStore, which is headless-serve-only and
         // stays null in windowed mode (root cause of soak day-1 silent gate).
-        featureEnabled: () => state.store?.getSettings?.().sessionRoadmap === true
+        featureEnabled: () => {
+          const settings = state.store?.getSettings?.()
+          if (!settings) {
+            console.warn('[roadmap] featureEnabled: state.store not ready, gate CLOSED')
+            return false
+          }
+          if (settings.sessionRoadmap !== true) {
+            console.warn(
+              '[roadmap] featureEnabled: sessionRoadmap setting is',
+              settings.sessionRoadmap
+            )
+            return false
+          }
+          return true
+        }
       })
     })
     .catch((e) => {
