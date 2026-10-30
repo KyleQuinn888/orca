@@ -71,10 +71,22 @@ export function scopeForGeneration(
 ): SessionIdScope {
   const base = scopeFor(userDataDir, sessionId, fallbackWorkspace)
   const exhaustive = journalSessionIdsMentioningNativeId(userDataDir, base.nativeId)
-  // Only merge exhaustive hits that share the workspace with the chain-resolved
-  // carriers — a session id mentioned in another conversation's transcript is
-  // content ABOUT the id, not content OF the session
-  const trustedWorkspace = workspaceOfJournalSession(userDataDir, base.journalIds[0] ?? '')
+  // Chain-resolved carriers provide the trusted workspace anchor. When the chain
+  // resolver returns null (no records mention this native id), the base scope
+  // carries the native id itself as carrier — meaningless for workspace lookup.
+  // In that case anchor on the FIRST exhaustive hit that has a journal_sessions
+  // entry, instead of leaving the anchor null (which excluded ALL exhaustive
+  // hits and killed the pipeline with "no ws" — soak day-3).
+  let trustedWorkspace = workspaceOfJournalSession(userDataDir, base.journalIds[0] ?? '')
+  if (!trustedWorkspace) {
+    for (const jid of exhaustive) {
+      const ws = workspaceOfJournalSession(userDataDir, jid)
+      if (ws) {
+        trustedWorkspace = ws
+        break
+      }
+    }
+  }
   const merged = [...base.journalIds]
   for (const jid of exhaustive) {
     if (merged.includes(jid)) {

@@ -251,6 +251,29 @@ export async function processSessionInner(
         }
       }
     }
+    // Small-session rescue (soak day-3): if backfill produced 0 cuts but rows
+    // were read, the session has fewer turns than the segmentation floor —
+    // force-flush the open chapter so the user gets at least 1 chapter card
+    // instead of silently consuming all data with zero output
+    if (backfill && cuts.length === 0 && rows.length > 0) {
+      const flushed = flushOpenChapter(nativeId, openChapters.get(nativeId) ?? null, 1)
+      if (flushed) {
+        logStop('flush', `small session rescue: ${rows.length} rows → 1 chapter`)
+        await summarizeAndWrite(
+          deps,
+          state,
+          promptTemplate,
+          nativeId,
+          workspace,
+          flushed,
+          rows,
+          sessionState,
+          db,
+          true
+        )
+        cuts.push(flushed)
+      }
+    }
     // Clean up progress when backfill completes or aborts (Codex review #4)
     if (backfill && state.backfillProgress?.[nativeId]) {
       const { ...rest } = state.backfillProgress
