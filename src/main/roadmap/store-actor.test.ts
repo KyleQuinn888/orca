@@ -66,7 +66,7 @@ describe('D5: single-writer store actor', () => {
       })
     ])
 
-    expect(order).toEqual([1, 2, 3, 4])
+    expect(JSON.stringify(order)).toBe(JSON.stringify([1, 2, 3, 4]))
     rmSync(dir, { recursive: true, force: true })
   })
 

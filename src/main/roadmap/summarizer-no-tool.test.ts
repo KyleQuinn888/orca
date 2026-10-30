@@ -13,14 +13,16 @@ import { readFileSync } from 'node:fs'
 
 const PINNED_VERSION = '3.15.3-36'
 
+const SPAWN_RE = /spawn\([^)]*'-p', prompt\]/
+
 describe('D4: summarizer no-tool mode proof', () => {
   it("spawn args carry '-p' (headless prompt mode, no tools)", () => {
     const src = readFileSync(new URL('./summarizer-launch.ts', import.meta.url), 'utf8')
     // the only spawn construction in the launcher: spawn(cmd, [...prefix, '-p', prompt])
-    expect(src).toContain("'-p', prompt]")
+    expect(src.includes("'-p', prompt]")).toBe(true)
     // and nothing else is passed after -p except the prompt itself
     const spawnLine = src.split('\n').find((l) => l.includes('spawn(command.cmd'))
-    expect(spawnLine ?? '').toMatch(/spawn\([^)]*'-p', prompt\]/)
+    expect(SPAWN_RE.test(spawnLine ?? '')).toBe(/spawn\([^)]*'-p', prompt\]/)
   })
 
   it('npm js entry resolves at the packaged-build location', () => {
