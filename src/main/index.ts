@@ -182,15 +182,23 @@ if (preflightReady) {
         // stays null in windowed mode (root cause of soak day-1 silent gate).
         featureEnabled: () => {
           const settings = state.store?.getSettings?.()
+          // Diagnostics go to the boot log file, NOT console.warn (packaged
+          // builds swallow console output — soak day-2 lesson)
+          const logGate = (why: string): void => {
+            try {
+              const bootLog = join(app.getPath('userData'), 'logs', 'roadmap-bootstrap.log')
+              mkdirSync(dirname(bootLog), { recursive: true })
+              appendFileSync(bootLog, `${new Date().toISOString()} gate: ${why}\n`)
+            } catch {
+              /* logging must never block the gate */
+            }
+          }
           if (!settings) {
-            console.warn('[roadmap] featureEnabled: state.store not ready, gate CLOSED')
+            logGate('CLOSED — state.store not ready')
             return false
           }
           if (settings.sessionRoadmap !== true) {
-            console.warn(
-              '[roadmap] featureEnabled: sessionRoadmap setting is',
-              settings.sessionRoadmap
-            )
+            logGate(`CLOSED — sessionRoadmap=${String(settings.sessionRoadmap)}`)
             return false
           }
           return true
