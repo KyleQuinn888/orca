@@ -139,9 +139,10 @@ export function createRoadmapService(
     if (state.ops?.[nativeId] === 'deleting') {
       return
     }
-    if (deps.featureEnabled && !deps.featureEnabled()) {
-      return
-    }
+    // L1 featureEnabled is an ADMISSION gate (generateNow), not a pipeline
+    // gate: processSession must run unconditionally for eligible sessions.
+    // Gating here conflated store-readiness with feature-off, silently
+    // blocking all packaged-build generation (Codex root-cause review).
     if (!deps.zcodeAvailable()) {
       return
     }
@@ -180,6 +181,12 @@ export function createRoadmapService(
   }
 
   async function generateNow(sessionId: string): Promise<{ ok: boolean; error?: string }> {
+    // L1 ADMISSION gate (the ONLY featureEnabled check): refuse to start
+    // new generation when the feature is off. Once admitted, the pipeline
+    // runs unconditionally — per-session policy is the real authorization.
+    if (deps.featureEnabled && !deps.featureEnabled()) {
+      return { ok: false, error: 'Session Roadmap is off (Settings → Experimental)' }
+    }
     // Resolve the native scope FIRST: policy keys live in the native domain
     const scope = scopeForGeneration(
       deps.getUserDataDir(),

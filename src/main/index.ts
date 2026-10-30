@@ -175,34 +175,12 @@ if (preflightReady) {
         // install dir, not the repo, so cwd-anchored reads ENOENT at bootstrap.
         promptTemplatePath: join(app.getAppPath(), 'roadmap', 'prompts', 'task-node.md'),
         onQuit: runtime.onQuit,
-        // L1 switch (spec session-enablement §1): live-read per trigger so
-        // toggling takes effect without a restart. Uses mainProcessState.store
-        // (set when the runtime launches, same store registerSettingsHandlers
-        // uses) — NOT the SSH persistedStore, which is headless-serve-only and
-        // stays null in windowed mode (root cause of soak day-1 silent gate).
-        featureEnabled: () => {
-          const settings = state.store?.getSettings?.()
-          // Diagnostics go to the boot log file, NOT console.warn (packaged
-          // builds swallow console output — soak day-2 lesson)
-          const logGate = (why: string): void => {
-            try {
-              const bootLog = join(app.getPath('userData'), 'logs', 'roadmap-bootstrap.log')
-              mkdirSync(dirname(bootLog), { recursive: true })
-              appendFileSync(bootLog, `${new Date().toISOString()} gate: ${why}\n`)
-            } catch {
-              /* logging must never block the gate */
-            }
-          }
-          if (!settings) {
-            logGate('CLOSED — state.store not ready')
-            return false
-          }
-          if (settings.sessionRoadmap !== true) {
-            logGate(`CLOSED — sessionRoadmap=${String(settings.sessionRoadmap)}`)
-            return false
-          }
-          return true
-        }
+        // L1 ADMISSION gate (Codex root-cause review): checked ONLY when the
+        // user explicitly asks to generate (generateNow), never on pipeline
+        // triggers. If the store isn't ready yet, fail-open — the user's
+        // explicit click IS the authorization; a null store is an
+        // initialization-timing artifact, not a feature-off signal.
+        featureEnabled: () => state.store?.getSettings?.().sessionRoadmap === true
       })
     })
     .catch((e) => {
