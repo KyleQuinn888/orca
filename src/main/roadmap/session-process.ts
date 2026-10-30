@@ -37,22 +37,44 @@ export async function processSessionInner(
   backfill = false
 ): Promise<void> {
   const { deps, state, promptTemplate, openChapters } = ctx
+  // Boot-log-file diagnostics: console.warn/error are black holes in packaged
+  // builds. Every early return writes WHERE the pipeline stopped and WHY.
+  const logStop = (where: string, detail: string): void => {
+    try {
+      const fs = require('node:fs') as {
+        appendFileSync: (p: string, d: string) => void
+        mkdirSync: (p: string, o: { recursive: boolean }) => void
+      }
+      const path = require('node:path') as {
+        join: (...p: string[]) => string
+        dirname: (p: string) => string
+      }
+      const log = path.join(deps.getUserDataDir(), 'logs', 'roadmap-pipeline.log')
+      fs.mkdirSync(path.dirname(log), { recursive: true })
+      fs.appendFileSync(log, `${new Date().toISOString()} ${where}: ${detail}\n`)
+    } catch {
+      /* logging must never block */
+    }
+  }
   // Id bridge: state/artifacts key by the provider-native id; rows live under
   // journal ids. Auto triggers arrive as journal ids and reverse-resolve.
   const scope =
     preScope ?? scopeFor(deps.getUserDataDir(), sessionId, deps.getWorkspacePath(sessionId))
   const { nativeId, journalIds, workspacePath } = scope
-  console.warn(
-    `[roadmap-diag] native=${nativeId.slice(0, 20)} carriers=${journalIds.length} ws=${workspacePath?.slice(-30) ?? 'null'}`
+  logStop(
+    'scope',
+    `native=${nativeId.slice(0, 24)} carriers=${journalIds.length} ws=${workspacePath?.slice(-30) ?? 'null'}`
   )
   const db = deps.getJournalDb(sessionId)
   if (!db) {
+    logStop('STOP', 'no db')
     return
   }
   const firstJournalCarrier =
     journalIds.find((jid) => jid !== nativeId) ?? journalIds[0] ?? sessionId
   const workspace = workspacePath ?? deps.getWorkspacePath(firstJournalCarrier)
   if (!workspace) {
+    logStop('STOP', `no ws (carrier=${firstJournalCarrier.slice(0, 24)})`)
     return
   }
   const sessionState = getOrCreateSession(state, nativeId)
@@ -92,10 +114,13 @@ export async function processSessionInner(
     } while (page.length === PAGE)
   }
   if (rows.length === 0) {
-    console.warn(`[roadmap] 0 rows for ${nativeId.slice(0, 20)} (carriers=${journalIds.length})`)
+    logStop(
+      'STOP',
+      `0 rows (carriers=${journalIds.length}, jids=${journalIds.map((j) => j.slice(0, 16)).join(',')})`
+    )
     return
   }
-  console.warn(`[roadmap] ${rows.length} rows read for ${nativeId.slice(0, 20)}`)
+  logStop('rows', `${rows.length} rows read`)
   try {
     // Cross-carrier replay dedup, chunked with yields for large row sets.
     // Small sets (<2000) dedup in one pass.
@@ -246,8 +271,10 @@ export async function processSessionInner(
       }
     }
   } catch (e) {
-    // Surface swallowed async exceptions (the service chain's .finally() drops them)
-    console.error(`[roadmap] processSessionInner FAILED for ${nativeId.slice(0, 20)}:`, e)
+    logStop(
+      'FAILED',
+      `${e instanceof Error ? e.message : String(e)} — ${e instanceof Error ? ((e.stack ?? '').split('\n')[1] ?? '') : ''}`
+    )
   }
 }
 
