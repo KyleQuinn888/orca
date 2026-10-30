@@ -226,6 +226,7 @@ describe('flush', () => {
       epoch: EPOCH,
       startSeq: 1,
       terminalTurns: 10,
+      lastTerminalSeq: 100,
       projectionChars: 5000,
       candidates: [{ tier: 1, kind: 'git-commit', atSeq: 15 }]
     }
@@ -240,6 +241,7 @@ describe('flush', () => {
       epoch: EPOCH,
       startSeq: 1,
       terminalTurns: 0,
+      lastTerminalSeq: 0,
       projectionChars: 0,
       candidates: []
     }

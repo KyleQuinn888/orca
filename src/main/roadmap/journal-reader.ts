@@ -84,6 +84,8 @@ export type OpenChapter = {
   epoch: JournalEpoch
   startSeq: number
   terminalTurns: number
+  /** Seq of the most recent terminal turn — the backtrack fallback position. */
+  lastTerminalSeq: number
   projectionChars: number
   /** Best boundary candidates found so far, in priority order. */
   candidates: CutCandidate[]
@@ -157,6 +159,7 @@ export function segmentRows(
         epoch: row.epoch,
         startSeq: row.seq,
         terminalTurns: 0,
+        lastTerminalSeq: row.seq,
         projectionChars: 0,
         candidates: []
       }
@@ -166,6 +169,7 @@ export function segmentRows(
     const terminalState = isTerminalTurn(parsed)
     if (terminalState) {
       currentOpen.terminalTurns++
+      currentOpen.lastTerminalSeq = row.seq
     }
 
     // ── Accumulate projection size (rough estimate) ──
@@ -238,6 +242,7 @@ export function segmentRows(
         epoch: row.epoch,
         startSeq: best.atSeq + 1,
         terminalTurns: 0,
+        lastTerminalSeq: best.atSeq + 1,
         projectionChars: 0,
         candidates: []
       }
@@ -261,7 +266,11 @@ function findBestBacktrack(
     const best = inWindow.at(-1)!
     return { atSeq: best.atSeq, kind: best.kind }
   }
-  return { atSeq: open.startSeq + open.terminalTurns, kind: 'forced' }
+  // Fallback: cut at the LAST TERMINAL TURN's actual seq — the old
+  // `startSeq + terminalTurns` was meaningless arithmetic that put cuts at
+  // arbitrary positions (e.g. seq 1+8=9 for a chapter spanning seq 1-5000,
+  // leaving 99% of rows uncovered — soak day-3 root cause)
+  return { atSeq: open.lastTerminalSeq, kind: 'forced' }
 }
 
 // ─── Flush: close the open chapter regardless of signals ───────────────
@@ -275,7 +284,7 @@ export function flushOpenChapter(
     return null
   }
   const best = open.candidates.at(-1)
-  const toSeq = best ? best.atSeq : open.startSeq + open.terminalTurns
+  const toSeq = best ? best.atSeq : open.lastTerminalSeq
   return {
     index: chapterIndex,
     signal: { tier: 2, kind: 'flush', atSeq: toSeq, forced: false },
